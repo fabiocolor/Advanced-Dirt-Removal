@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+
+    <title>Resolve Sample Workflow Integration Plugin (Compatibility Mode)</title>
+
+    <script type="text/javascript" src="./renderer.js"></script>
+
+    <link rel="stylesheet" type="text/css" href="./css/styles.css" />
+</head>
+
+<body>
+    <table>
+        <tr>
+            <td>
+                <img src="img/logo.png" alt="Logo">
+            </td>
+            <td>
+                <h2>Resolve Sample Workflow Integration Plugin (Compatibility Mode)</h2>
+            </td>
+        </tr>
+    </table>
+
+    <p>This sample plugin demonstrates a few basic functions that can be performed in DaVinci Resolve using the scripting APIs.</p>
+
+    <table align="left">
+        <tr>
+            <td>
+                <label class="custom-label">Project name: </label>
+            </td>
+            <td>
+                <input type="text" id="projName" />
+            </td>
+            <td>
+                <input type="button" class="custom-button" value="Create Project" onclick="createProject()" />
+            </td>
+            <td>
+                <input type="button" class="custom-button" value="Open Project" onclick="openProject()" />
+            </td>
+            <td>
+                <input type="button" class="custom-button" value="Save Project" onclick="saveProject()" />
+            </td>
+        </tr>
+        <tr>
+            <td>
+                <label class="custom-label">Bin name: </label>
+            </td>
+            <td>
+                <input type="text" id="binName" />
+            </td>
+            <td>
+                <input type="button" class="custom-button" value="Create Bin" onclick="createBin()" />
+            </td>
+            <td>
+                <input type="button" class="custom-button" value="Select Bin" onclick="selectBin()" />
+            </td>
+            <td>
+                <input type="button" class="custom-button" value="Delete Bin" onclick="deleteBin()" />
+            </td>
+        </tr>
+        <tr>
+            <td>
+                <label class="custom-label">Select clips: </label>
+            </td>
+            <td>
+                <input type="file" id="fileSelectClips" multiple="multiple" accept="video/*,audio/*,image/*" />
+            </td>
+            <td>
+                <input type="button" class="custom-button" value="Add Clips" onclick="addClips()" />
+            </td>
+        </tr>
+        <tr>
+            <td>
+                <label class="custom-label">Timeline name: </label>
+            </td>
+            <td>
+                <input type="text" id="timelineName" />
+            </td>
+            <td>
+                <input type="button" class="custom-button" value="Create Timeline" onclick="createTimeline()" />
+            </td>
+            <td>
+                <input type="button" class="custom-button" value="Select Timeline" onclick="selectTimeline()" />
+            </td>
+        </tr>
+        <tr>
+            <td>
+                <label class="custom-label"><u>Render settings</u></label>
+            </td>
+        </tr>
+        <tr>
+            <td>
+                <label class="custom-label">Target dir path: </label>
+            </td>
+            <td>
+                <input type="text" id="targetDirPath" />
+            </td>
+        </tr>
+        <tr>
+            <td>
+                <label class="custom-label">Target clip name: </label>
+            </td>
+            <td>
+                <input type="text" id="targetClipName" />
+            </td>
+        </tr>
+        <tr>
+            <td>
+                <label class="custom-label">Render preset: </label>
+            </td>
+            <td>
+                <select id="cbRenderPreset" />
+            </td>
+            <td>
+                <input type="button" class="custom-button" value="Render Timeline" onclick="renderTimeline()" />
+            </td>
+        </tr>
+    </table>
+</body>
+
+</html>

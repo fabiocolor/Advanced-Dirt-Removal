@@ -1,0 +1,21 @@
+DEFINE_DCTL_ALPHA_MODE_STRAIGHT
+
+__DEVICE__ float smoothStep(float p_Edge0, float p_Edge1, float p_Val)
+{
+    p_Val = _saturatef((p_Val - p_Edge0) / (p_Edge1 - p_Edge0));
+    return p_Val * p_Val * (3.0f - 2.0f * p_Val);
+}
+
+__DEVICE__ float4 transform(int p_Width, int p_Height, int p_X, int p_Y, float p_R, float p_G, float p_B, float p_A)
+{
+    const float radius = 0.5f;
+    const float smoothAmount = 0.1f;
+
+    const float centerX = 0.5f * p_Width;
+    const float centerY = 0.5f * p_Height;
+    const float dist = _hypotf(p_X - centerX, p_Y - centerY) / min(p_Width, p_Height);
+
+    p_A = smoothStep(smoothAmount, -smoothAmount, dist - radius);
+
+    return make_float4(p_R, p_G, p_B, p_A);
+}

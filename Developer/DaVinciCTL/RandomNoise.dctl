@@ -1,0 +1,8 @@
+__DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p_R, float p_G, float p_B)
+{
+    const int index = p_Y * p_Width + p_X;
+    const uint seed = TIMELINE_FRAME_INDEX * p_Width * p_Height + index;
+    const float randVal = RAND(seed);
+
+    return make_float3(randVal, randVal, randVal);
+}

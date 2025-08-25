@@ -1,0 +1,79 @@
+{
+	Tools = ordered() {
+		RoundedWindow = MacroOperator {
+			Inputs = ordered() {
+				Input1 = InstanceInput {
+					SourceOp = "Rectangle1",
+					Source = "Level",
+					Name = "Brightness",
+					Default = 1,
+				},
+				Input2 = InstanceInput {
+					SourceOp = "Rectangle1",
+					Source = "SoftEdge",
+				},
+				Input3 = InstanceInput {
+					SourceOp = "Rectangle1",
+					Source = "BorderWidth",
+				},
+				Input4 = InstanceInput {
+					SourceOp = "Rectangle1",
+					Source = "Invert",
+				},
+				Input5 = InstanceInput {
+					SourceOp = "Rectangle1",
+					Source = "Solid",
+					Default = 1,
+				},
+				Input6 = InstanceInput {
+					SourceOp = "Rectangle1",
+					Source = "Center",
+				},
+				Input7 = InstanceInput {
+					SourceOp = "Rectangle1",
+					Source = "Width",
+					Default = 0.5,
+				},
+				Input8 = InstanceInput {
+					SourceOp = "Rectangle1",
+					Source = "Height",
+					Default = 0.5,
+				},
+				Input9 = InstanceInput {
+					SourceOp = "Rectangle1",
+					Source = "CornerRadius",
+					Default = 0.25,
+				},
+				Input10 = InstanceInput {
+					SourceOp = "Rectangle1",
+					Source = "Angle",
+					Default = 0,
+				},
+			},
+			Outputs = {
+				MainOutput1 = InstanceOutput {
+					SourceOp = "Rectangle1",
+					Source = "Mask",
+				}
+			},
+			ViewInfo = GroupInfo { Pos = { 0, 0 } },
+			Tools = ordered() {
+				Rectangle1 = RectangleMask {
+					CtrlWZoom = false,
+					Inputs = {
+						Filter = Input { Value = FuID { "Fast Gaussian" }, },
+						OutputSize = Input { Value = FuID { "Custom" }, },
+						MaskWidth = Input { Value = 1920, },
+						MaskHeight = Input { Value = 1080, },
+						PixelAspect = Input { Value = { 1, 1 }, },
+						UseFrameFormatSettings = Input { Value = 1, },
+						ClippingMode = Input { Value = FuID { "None" }, },
+						CornerRadius = Input { Value = 0.25, },
+					},
+					ViewInfo = OperatorInfo { Pos = { 398.271, 88.2481 } },
+				}
+			},
+		}
+	},
+	ActiveTool = "RoundedWindow"
+}

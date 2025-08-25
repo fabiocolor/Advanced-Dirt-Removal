@@ -1,0 +1,19 @@
+body {
+    margin-left: 20px;
+    box-sizing: border-box;
+}
+
+.custom-label {
+    font-weight: bold;
+    display: block;
+}
+
+.custom-button {
+    background-color: #4CAF50;
+    color: white;
+    padding: 5px 5px;
+    width: 130px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}

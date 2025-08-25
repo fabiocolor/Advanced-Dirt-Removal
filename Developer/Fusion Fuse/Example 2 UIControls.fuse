@@ -1,0 +1,477 @@
+--[[--
+Example Fuse 2
+This Fuse does not process images.
+This demos all the controls avalible to manipulate values and onscreen tools.
+Sliders, Check boxes, Dropdown lists, Buttons,  Color Controls, Gradient Controls, 
+Onscreen Crosshairs, Onscreen Rotation widget and Size Rectangle
+
+
+Copyright (c) 2018-2024, BMD, by SR
+This Fuse does not process images.
+This Shows UI controls to use as templates
+
+
+--]]--
+-- A String varible that is used in the Label control
+version = "version 1.0 May 4th 2020"
+
+
+--******************************************************************************************************
+-- This Registers the Fuse into Fusion, gives its Name, and Menu location. Location of Help. Can the Fuse be edited or not
+FuRegisterClass("ExampleUIControls", CT_Tool, {
+	REGS_Name          = "Ex2 UIControls",
+	REGS_Category      = "Fuses\\Examples",
+	REGS_OpIconString  = "E2C",
+	REGS_OpDescription = "Example, showing the various Controls in Fusion",
+	REGS_HelpTopic     = "Example Location of Help", --This can be a URL
+	REGS_URL           = "www.blackmagicdesign.com",
+	--REGS_IconID = "Icons.Tools.Icons.Example",-- This can be inline as an array of color values
+	REG_OpNoMask       = false,   -- Mask Input shows and will mask the output image
+	REG_NoBlendCtrls   = false,   -- Allow blending with the tool's source image
+	REG_NoObjMatCtrls  = false,   -- Allow masking with Object ID & Material ID mattes
+	REG_NoMotionBlurCtrls = true, -- Disable motion blur controls for this tool
+	REG_Fuse_NoEdit    = false,   -- Disallows editing of the Fuse when set to true,
+	REG_Fuse_NoReload  = false,   -- Disallows reloading of the Fuse when set to true
+	REG_Version        = 1,
+}) -- End of RegisterClass
+
+--****************************************************************************************************
+--Create will define all the controls, like sliders, check boxes, onscreen crosshairs etc, that will show in Inspector Tool control area
+
+function Create()
+	self:BeginControlNest("Sliders", "SliderNest", true); -- Control Nests group controls with a togglable collapse/expand function
+		
+		-- Slider Control  return a number
+		InSlider = self:AddInput("Slider", "Slider", {
+			LINKID_DataType = "Number",
+			INPID_InputControl = "SliderControl",
+			INP_MaxScale = 1.0, -- Sets the default Maximum scale of the slider
+			INP_MinScale = -1.0, --Sets the default Minimum  scale for the slider
+			INP_Default = 0.0, -- Sets default value for the slider
+			})
+
+		-- Slider Control  return a number
+		InSliderB = self:AddInput("Slider Non Linear", "SliderN", {  --UI Label, Internal ID
+			LINKID_DataType = "Number", -- returns a number
+			INPID_InputControl = "SliderControl", -- Type of Control
+			INP_MaxScale = 5.0, 	-- Sets the default Maximum scale of the slider
+			INP_MinScale = 0.0,  	--Sets the default Minimum  scale for the slider
+			ICD_Center = 1, 		-- Sets the default value to the center of the slider for Non Linear operation
+			INP_Default = 1.0,     -- Sets default value for the slider
+			INP_MinAllowed = 0, -- Sets the default Minimum value of the slider
+			INP_MaxAllowed =10, -- Sets the default Maximum value of the slider
+			})
+			
+		-- Slider Control  return a number
+		InSliderC = self:AddInput("Slider Integer", "SliderI", {
+			LINKID_DataType = "Number",
+			INPID_InputControl = "SliderControl",
+			INP_MaxScale = 10.0, 	
+			INP_MinScale = 0.0,
+			INP_Integer = true, -- The Slider will ber integer only
+			INP_Default = 1.0,
+			INP_MinAllowed = 0,
+			INP_MiaxAllowed =20,
+			})
+			
+		-- Screw Control is an Infinite slider, used for angle controls, where fine control over values is needed and infinite numbers can be set.
+		InScrewAngle = self:AddInput("Infinite Slider", "ScrewControl", {
+			LINKID_DataType = "Number",
+			INPID_InputControl = "ScrewControl",
+			INP_MinScale = 0.0,
+			INP_MaxScale = 100.0,
+			INP_Default = 0,
+			})
+			
+		--Range controls have 2 number Values on the same slider to define High and Low range
+		InLow = self:AddInput("Low name", "Low", {
+			LINKID_DataType = "Number",
+			INPID_InputControl = "RangeControl",
+			INP_Default = 0.1,
+			IC_ControlGroup = 1, --Control Groups define which sets of controls are grouped together
+			IC_ControlID = 0, -- Control ID  defines the low value of the Range
+			})			
+		InHigh = self:AddInput("High value", "High", {
+			LINKID_DataType = "Number",
+			INPID_InputControl = "RangeControl",
+			INP_Default = 0.9,
+			IC_ControlGroup = 1, --Control Groups define which sets of controls are grouped together
+			IC_ControlID = 1, -- Control ID  defines the low value of the Range
+			})			
+				
+	self:EndControlNest()
+
+	self:BeginControlNest("Check Boxes, Buttons, Dropdown Lists", "CheckNest", true); -- Control Nests group controls with a togglable collapse/expand function
+
+		-- Checkbox Controls tick on or off and will return a number either zero or one
+		InRc = self:AddInput("Red", "Redc", {       -- UI Label, Internal ID
+			LINKID_DataType = "Number",             -- returns a number
+			INPID_InputControl = "CheckboxControl", -- Type of Control
+			INP_Integer = true,
+			INP_Default = 1,
+			ICD_Width = 0.25,                       -- This sets the width of the control
+			})		
+		InGc = self:AddInput("Green", "Greenc", {
+			LINKID_DataType = "Number",
+			INPID_InputControl = "CheckboxControl",
+			INP_Integer = true,
+			INP_Default = 1,
+			ICD_Width = 0.25,                       -- This sets the width of the control
+			})		
+		InBc = self:AddInput("Blue", "Bluec", {
+			LINKID_DataType = "Number",
+			INPID_InputControl = "CheckboxControl",
+			INP_Integer = true,
+			INP_Default = 1,
+			ICD_Width = 0.25,                       -- This sets the width of the control
+			})		
+		InAc = self:AddInput("Alpha", "Alphac", {
+			LINKID_DataType = "Number",
+			INPID_InputControl = "CheckboxControl",
+			INP_Integer = true,
+			INP_Default = 1,
+			ICD_Width = 0.25,                       -- This sets the width of the control
+			})		
+		
+		--Dropdown Lists are Combo Controls that will display and choose a number of items. This one has 17 items, and will return numbers 0 to 16
+		InDropList = self:AddInput("Drop Down List", "DropList", { --UI Label, Internal ID
+			LINKID_DataType = "Number",                            -- returns a number
+			INPID_InputControl = "ComboControl",                   -- Type of control
+			INP_Default = 0.0,
+			INP_Integer = true,
+			--ICD_Width = 0.5, -- Width can be set in the interface
+			CC_LabelPosition = "Horizontal", -- Define where the Label Name is displayed, Horizontal is to the left, Vertical is at the top.
+			INP_DoNotifyChanged = true,
+			{ CCS_AddString = "Normal", },   -- labels for each option in the list
+			{ CCS_AddString = "Screen", },
+			{ CCS_AddString = "Dissolve", },
+			{ CCS_AddString = "Multiply", },
+			{ CCS_AddString = "Overlay", },
+			{ CCS_AddString = "Soft Light", },
+			{ CCS_AddString = "Hard Light", },
+			{ CCS_AddString = "Color Dodge", },
+			{ CCS_AddString = "Color Burn", },
+			{ CCS_AddString = "Darken", },
+			{ CCS_AddString = "Lighten", },
+			{ CCS_AddString = "Difference", },
+			{ CCS_AddString = "Exclusion", },
+			{ CCS_AddString = "Hue", },
+			{ CCS_AddString = "Saturation", },
+			{ CCS_AddString = "Color", },
+			{ CCS_AddString = "Luminosity",  },
+			})
+			
+			-- Multi Buttons is similar to Combo dropdown lists, and only allow one selection.
+		InButton = self:AddInput("Multi Button", "Button", {
+			LINKID_DataType = "Number",
+			INPID_InputControl = "MultiButtonControl",
+			INP_Default = 4.0,
+			{MBTNC_AddButton = "Box", 		MBTNCD_ButtonWidth = 0.2, },
+			{MBTNC_AddButton = "Soften", 	MBTNCD_ButtonWidth = 0.2, },
+			{MBTNC_AddButton = "Bartlett", 	MBTNCD_ButtonWidth = 0.2, },
+			{MBTNC_AddButton = "Multi-box", MBTNCD_ButtonWidth = 0.2, },
+			{MBTNC_AddButton = "Gaussian", 	MBTNCD_ButtonWidth = 0.2, },
+			})
+
+		-- Single Buttons are used to trigger a single action and they will return their default state.
+		InSingleButton1 = self:AddInput("Button 1", "SButton1", {
+			LINKID_DataType     = "Number",
+			INPID_InputControl  = "ButtonControl",
+			INP_External        = false,
+			INP_DoNotifyChanged = true,
+			INP_InitialNotify   = false,
+			ICD_Width           = 0.5,          -- set button width to 50% width of the Inpector 
+			})
+		InSingleButton2 = self:AddInput("Button 2", "SButton2", {
+			LINKID_DataType     = "Number",
+			INPID_InputControl  = "ButtonControl",
+			INP_External        = false,
+			INP_DoNotifyChanged = true,
+			INP_InitialNotify   = false,
+			ICD_Width           = 0.25,         -- set button width to 25% width of the Inpector 
+			})
+		InSingleButton3 = self:AddInput("Button 3", "SButton3", {
+			LINKID_DataType     = "Number",
+			INPID_InputControl  = "ButtonControl",
+			INP_External        = false,
+			INP_DoNotifyChanged = true,
+			INP_InitialNotify   = false,
+			ICD_Width           = 0.25,         -- set button width to 25% width of the Inpector 
+			})
+	
+	self:EndControlNest()
+
+	
+	self:BeginControlNest("OnScreen Controls", "OnScreenNest", true); -- Control Nests group controls with a togglable collapse/expand function
+
+		-- Point controls are 2D used for on screen  manipulation returning 2 values X and Y
+		InCenter = self:AddInput("Center", "Center", { --UI Label, Internal ID
+			LINKID_DataType      = "Point", -- Retrurns 2 values X and Y
+			INPID_InputControl   = "OffsetControl", -- Type of Control
+			INPID_PreviewControl = "CrosshairControl",  -- Display Control Type
+			INP_DefaultX         = 0.5,
+			INP_DefaultY         = 0.5,
+			})
+			
+		InPivot = self:AddInput("Pivot", "Pivot", { --UI Label, Internal ID
+			LINKID_DataType = "Point",
+			INPID_InputControl = "OffsetControl", -- Type of Control
+			INPID_PreviewControl = "CrosshairControl",
+			CHC_Style = "DiagonalCross", -- Change the Crosshair to a X diagonal cross
+			PC_GrabPriority = -1, -- When multiple crosshair are togther in the view, Grab Priority is used to choose which gets picked. The higher the priority is picked first
+			INP_DefaultX         = 0.25,
+			INP_DefaultY         = 0.25,
+			})
+
+		InPoint = self:AddInput("Point", "Point", { --UI Label, Internal ID
+			LINKID_DataType      = "Point",
+			INPID_InputControl   = "OffsetControl", -- Type of Control
+			INPID_PreviewControl = "PointControl",
+			INP_DefaultX         = 0.85,
+			INP_DefaultY         = 0.75,
+			INP_DoNotifyChanged  = true,
+			})
+			
+		-- An Onscreen Angle control  is added to this Screw control and linked to the InCenter Offset control above
+		InAngle = self:AddInput("Angle", "Angle", {
+			LINKID_DataType      = "Number",
+			INPID_InputControl   = "ScrewControl",
+			INPID_PreviewControl = "AngleControl",
+			INP_MinScale         = 0.0,
+			INP_MaxScale         = 360.0,
+			INP_Default          = 0.0,
+			ACP_Center           = InCenter, -- Draw the viewer overlay relative to this input's position
+			ACP_Radius           = InSize, 
+			PC_GrabPriority      = 1,        -- When multiple controls overlap in the viewer, GrabPriority is used to choose which gets picked. The highest priority is picked first
+			})
+			
+		--	The size Control is a slider with a connected onscreen Rectangle control
+		InSize = self:AddInput("Size", "Size", {
+			LINKID_DataType      = "Number",
+			INPID_InputControl   = "SliderControl",
+			INP_Default          = 1.0,
+			})			
+		InSize:SetAttrs({ -- Using Set Attributes to add a On screen recangles connected to the Center controls and Angle control.
+			INPID_PreviewControl = "RectangleControl", -- Display Control Type
+			RCP_Center           = InCenter,           -- Draw the viewer overlay relative to this input's position
+			RCP_Angle            = InAngle,            -- Draw the viewer overlay relative to this input's rotation
+			RCD_LockAspect = 1.0,
+			})
+
+	self:EndControlNest()
+
+
+	self:BeginControlNest("Notify Change Show/Hide", "NotifyNest", true); -- Control Nests group controls with a togglable collapse/expand function
+		-- Notify change is a seperate class function that will be called  when controls are changed, see below for the Notify change function.
+		InNotify = self:AddInput("Notify Change Hidden", "NotifyC", {
+			LINKID_DataType     = "Number",
+			INPID_InputControl  = "CheckboxControl",
+			INP_Integer         = true,
+			INP_Default         = 0.0,
+			INP_DoNotifyChanged = true,       -- We want to hear about changes to this control
+			})
+
+		InSliderH = self:AddInput("Slider Hide/Show", "SliderH", {
+			LINKID_DataType     = "Number",
+			INPID_InputControl  = "SliderControl",
+			IC_Visible          = false,      -- This control is hidden by default
+			INP_MaxScale        = 1.0,
+			INP_MinScale        = -1.0,
+			INP_Default         = 0.0,
+			})
+
+	self:EndControlNest()
+
+-- Control pages are new Tabs across the top of the tool controls in the Inspector tool control area.	
+	self:AddControlPage("Color") -- Name the new Tab Control page
+
+	self:BeginControlNest("Color Picker", "ColorPicker", true); -- Control Nests group controls with a togglable collapse/expand function
+
+-- Color Control/Picker RGB sliders with the Color Wheel/Swatch is hidden
+		InRed = self:AddInput("Red", "Red", {     -- UI Label, Internal ID
+			ICS_Name            = "Color",
+			LINKID_DataType     = "Number",
+			INPID_InputControl  = "ColorControl", -- Type of Control
+			INP_Default         = 0.15,
+			INP_MaxScale        = 1.0,
+			CLRC_ShowWheel      = false,
+			IC_ControlGroup     = 2,              -- Groups Controls together. Make Group number it 2
+			IC_ControlID        = 0,              -- Red
+			})
+		InGreen = self:AddInput("Green", "Green", { --UI Label, Internal ID
+			LINKID_DataType     = "Number",
+			INPID_InputControl  = "ColorControl", -- Type of Control
+			INP_Default         = 0.2,
+			IC_ControlGroup     = 2,              -- Put this into Group number 2
+			IC_ControlID        = 1,              -- Green
+			})
+		InBlue = self:AddInput("Blue", "Blue", {  -- UI Label, Internal ID
+			LINKID_DataType     = "Number",
+			INPID_InputControl  = "ColorControl", -- Type of Control
+			INP_Default         = 0.3,
+			IC_ControlGroup     = 2,              -- Put this into Group number 2
+			IC_ControlID        = 2,              -- Blue
+			})
+	self:EndControlNest()
+
+	self:BeginControlNest("Color Gradient", "ColorGradient", true); -- Control Nests group controls with a togglable collapse/expand function
+	
+		-- Gradient Color control has a 1D color ramp. Default Gradient is 2 colors black to white. Use OnAddToFlow to set default colors
+		InGradient = self:AddInput("Gradient", "Gradient", { -- UI Label, Internal ID
+			LINKID_DataType	     = "Gradient",               -- Returns a Gradient 1D LUT
+			INPID_InputControl	 = "GradientControl",        -- Type of Control
+			INP_DelayDefault     = true,
+			})
+		
+		InInterpolation = self:AddInput("Gradient Method", "GradientMethod", { --UI Label, Internal ID
+			LINKID_DataType     = "FuID",       -- Returns a FuID, not a number
+			INPID_InputControl  = "MultiButtonIDControl",
+			{ MBTNC_AddButton   = "RGB", MBTNCID_AddID = "RGB", },  -- Button label can be different to ID
+			{ MBTNC_AddButton   = "HLS", MBTNCID_AddID = "HLS", },
+			{ MBTNC_AddButton   = "HSV", MBTNCID_AddID = "HSV", },
+			{ MBTNC_AddButton   = "LAB", MBTNCID_AddID = "LAB", },
+			MBTNC_StretchToFit	= true,
+			INP_DoNotifyChanged	= true,
+			INPID_DefaultID     = "HLS",
+			})
+	-- flag will be cleared after default gradient has been created in OnAddToFlow
+		InNewTool = self:AddInput("Gradient not changed yet", "NewTool", {
+			LINKID_DataType    = "Number",
+			INPID_InputControl = "CheckboxControl",
+			IC_Visible	       = false,
+			INP_External       = false,
+			INP_Passive	       = true,
+			INP_Default	       = 1.0,
+			INP_Priority       = 100,
+			})
+			
+	self:EndControlNest()
+
+	self:BeginControlNest("Color Wheel Set", "ColorWheel", true); -- Control Nests group controls with a togglable collapse/expand function
+-- Color Control/Picker RGB sliders withe the Color Wheel/Swatch is showing
+		InWheelR = self:AddInput("Red", "GainR", {
+			ICS_Name            = "Color Wheel",
+			LINKID_DataType     = "Number",
+			INPID_InputControl  = "ColorControl",
+			INP_Default         = 0.75,
+			INP_MaxScale        = 1.0,
+			ICD_Center          = 1.0,
+			INP_DoNotifyChanged = true,
+			CLRC_ShowWheel      = true,
+			IC_ControlGroup     = 7,    -- Put this into Group number 7
+			IC_ControlID        = 0,
+			IC_Visible          = true,
+			})
+		InWheelG = self:AddInput("Green", "GainG", {
+			LINKID_DataType     = "Number",
+			INPID_InputControl  = "ColorControl",
+			INP_Default         = 1.0,
+			INP_DoNotifyChanged = true,
+			IC_ControlGroup     = 7,    -- Put this into Group number 7
+			IC_ControlID        = 1,
+			})
+		InWheelB = self:AddInput("Blue", "GainB", {
+			LINKID_DataType     = "Number",
+			INPID_InputControl  = "ColorControl",
+			INP_Default         = 0.5,
+			INP_DoNotifyChanged = true,
+			IC_ControlGroup     = 7,    -- Put this into Group number 7
+			IC_ControlID        = 2,
+			})
+		InWheelA = self:AddInput("Alpha", "AlphaA", {
+			LINKID_DataType     = "Number",
+			INPID_InputControl  = "ColorControl",
+			INP_Default         = 1.0,
+			IC_ControlGroup     = 7,    -- Put this into Group number 7
+			IC_ControlID        = 3,
+			})
+
+	self:EndControlNest()
+
+InLabel = self:AddInput("Controls "..version, "version", {
+		LINKID_DataType    = "Text",
+		INPID_InputControl = "LabelControl",
+		INP_External       = false,
+		INP_Passive        = true,
+		})
+
+-- End all controls creation
+--Image, Masks Inputs
+	InImage = self:AddInput("Background", "Background", {
+		LINKID_DataType = "Image",
+		LINK_Main       = 1,   -- Primary (orange) node input 
+		})
+ 	InImage2 = self:AddInput("Image2", "Image2", {
+		LINKID_DataType = "Image",
+		LINK_Main       = 2,   -- Secondary (green) node input 
+		INP_Required    = false,
+		})
+ 	InImage3 = self:AddInput("Image3", "Image3", {
+		LINKID_DataType = "Image",
+		LINK_Main       = 3,   -- Tertiary (pink) node input 
+		INP_Required    = false,
+		})
+
+ -- Create an output image
+	OutImage = self:AddOutput("Output", "Output", {
+		LINKID_DataType = "Image",
+		LINK_Main       = 1,   -- Primary node output
+		})	
+ 
+end -- end of Create()
+
+
+--*************************************************************************************************************
+-- OnAddToFlow can be used to set parameters and other processing functions when the tool is added to a comp
+function OnAddToFlow()
+	local grad = Gradient()
+	
+	if InNewTool:GetSource(0).Value >= 0.5 then
+		-- There is no default attribute for gradients. It's always black to white.
+		-- To have a different gradient for new tools, we'll set one up here but
+		-- only once. The "NewTool" flag is cleared immediately afterwards so we
+		-- don't overwrite gradients when the comp is reopened at a later time.
+		grad:AddColor(0.0, Pixel({R = 1, G = 0, B = 0, A = 1}))
+		grad:AddColor(0.5, Pixel({R = 0, G = 1, B = 0, A = 1}))
+		grad:AddColor(1.0, Pixel({R = 0, G = 0, B = 1, A = 1}))
+		InGradient:SetSource(grad, 0, 0)
+		InNewTool:SetSource(Number(0.0), 0, 0)
+	end
+end
+
+--***************************************************************************************************
+-- Notify Changed is used to Hide or Show controls when options are selected in the Tool's control  inspector 
+
+function NotifyChanged(inp, param, time)
+	if inp == InNotify then   -- If Notify Change check box is changed, then rename the Control names and Un/Hide sliders
+		local locked = (param.Value > 0.5)
+		
+		if locked then
+			InSliderH:SetAttrs({ LINKS_Name = "Slider Hide/Show" })
+			InSliderH:SetAttrs({ IC_Visible = true })
+			InNotify:SetAttrs({ LINKS_Name = "Notify Change Showing" })
+		else
+			InSliderH:SetAttrs({ LINKS_Name = "Slider Hide/Show Hidden" })
+			InSliderH:SetAttrs({ IC_Visible = false })
+			InNotify:SetAttrs({ LINKS_Name = "Notify Change Hidden" })
+		end
+	end
+end
+
+
+--*************************************************************************************************************
+-- The Process section is the main section where the image processing rendering occurs
+-- This will only Fill the image with a color from the the Color Controls
+function Process(req)
+	local img = InImage:GetValue(req)
+	local out = Image({IMG_Like = img})  -- Always create a new image for writing into
+
+	local r = InRed:GetValue(req).Value
+	local g = InGreen:GetValue(req).Value
+	local b = InBlue:GetValue(req).Value
+	--local a = InAlpha:GetValue(req).Value
+
+	out:Fill(Pixel({R = r, G = g, B = b, A = a}))
+
+	OutImage:Set(req, out)
+end

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<BlackmagicDesign>
+    <Plugin>
+        <Id>com.blackmagicdesign.resolve.scripttestplugin</Id>
+        <Name>Script Test Plugin</Name>
+        <Version>1.0</Version>
+        <Description>Script Test Plugin</Description>
+        <FilePath>main.js</FilePath>
+    </Plugin>
+</BlackmagicDesign>

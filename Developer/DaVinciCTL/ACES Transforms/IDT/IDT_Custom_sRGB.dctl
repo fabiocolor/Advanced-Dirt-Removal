@@ -1,0 +1,32 @@
+DEFINE_ACES_PARAM(IS_PARAMETRIC_ACES_TRANSFORM: 0)
+
+//-------------  Custom sRGB (Texture) IDT  -------------//
+//
+// Converts sRGB to ACES data with no RRT or tone mapping.
+//
+// Input: sRGB
+// Output: ACES AP0/Linear
+
+__DEVICE__ inline float sRGBDecodeGamma(float p_Input)
+{
+    const float cLinear = 0.04045f;
+    const float offset = 0.055f;
+    const float slope = 12.92f;
+    const float gamma = 2.4f;
+
+    return ((p_Input <= cLinear) ? (p_Input / slope) : (_powf(((p_Input + offset) / (1.0f + offset)), gamma)));
+}
+
+__DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p_R, float p_G, float p_B)
+{
+    const float r = sRGBDecodeGamma(p_R);
+    const float g = sRGBDecodeGamma(p_G);
+    const float b = sRGBDecodeGamma(p_B);
+
+    // sRGB to AP0
+    const float rt = (0.435410f * r) + (0.369344f * g) + (0.192186f * b);
+    const float gt = (0.086569f * r) + (0.814826f * g) + (0.090110f * b);
+    const float bt = (0.022413f * r) + (0.110703f * g) + (0.873335f * b);
+
+    return make_float3(rt ,gt, bt);
+}

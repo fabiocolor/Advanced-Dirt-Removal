@@ -1,0 +1,9 @@
+{
+    "name": "Sample Workflow Integration Plugin (Compatibility Mode)",
+    "version": "1.0.0",
+    "description": "Sample Workflow Integration Plugin (Compatibility Mode)",
+    "main": "main.js",
+    "scripts": {
+        "start": "electron ."
+    }
+}

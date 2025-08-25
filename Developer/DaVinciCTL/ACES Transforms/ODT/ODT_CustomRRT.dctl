@@ -1,0 +1,29 @@
+DEFINE_ACES_PARAM(Y_MIN: 0.0001,
+                  Y_MID: 7.2,
+                  Y_MAX: 108.0,
+                  DISPLAY_PRI: { 0.68000, 0.32000, 0.26500, 0.69000, 0.15000, 0.06000, 0.31270, 0.32900 },
+                  LIMITING_PRI: { 0.68000, 0.32000, 0.26500, 0.69000, 0.15000, 0.06000, 0.31270, 0.32900 },
+                  EOTF: 0  ,
+                  INVERSE_EOTF: bwd_custom,
+                  SURROUND: 0,
+                  STRETCH_BLACK: 1,
+                  D60_SIM: 0,
+                  LEGAL_RANGE: 0,
+                  SKIP_STANDARD_RRT: 1)
+
+// Bypass standard ACES RRT and do clamping negative only
+__DEVICE__ float3 CustomRRT(float p_R, float p_G, float p_B)
+{
+    return to_float3(_fmaxf(p_R, 0.0f),
+                     _fmaxf(p_G, 0.0f),
+                     _fmaxf(p_B, 0.0f));
+}
+
+__DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p_R, float p_G, float p_B)
+{
+    const float3 rrtResult = CustomRRT(p_R, p_G, p_B);
+
+    const float3 result = AcesOutputTransform(rrtResult.x, rrtResult.y, rrtResult.z);
+
+    return result;
+}

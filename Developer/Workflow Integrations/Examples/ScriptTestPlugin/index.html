@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+
+    <title>Resolve Script Test Workflow Integration Plugin</title>
+
+    <script type="text/javascript" src="./renderer.js"></script>
+
+    <link rel="stylesheet" type= "text/css" href="./css/styles.css" />
+</head>
+
+<body>
+    <table>
+        <tr>
+            <td>
+                <img src="img/logo.png" alt="Logo">
+            </td>
+            <td>
+                <h2>Resolve Script Test Workflow Integration Plugin</h2>
+            </td>
+        </tr>
+    </table>
+
+    <p>Enter the test script and press Run to execute it in DaVinci Resolve using the scripting APIs.</p>
+
+    <h3>Test Script</h3>
+    <textarea id="scriptTextArea" rows="37" cols="100"></textarea>
+
+    <table>
+        <tr>
+            <td>
+                <input type="button" class="custom-button" value="Run" onclick="runScript()" />
+                <input type="button" class="custom-button" value="Clear" onclick="clearScript()" />
+            </td>
+        </tr>
+    </table>
+</body>
+
+</html>

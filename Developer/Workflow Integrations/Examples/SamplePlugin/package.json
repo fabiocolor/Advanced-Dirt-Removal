@@ -1,0 +1,9 @@
+{
+  "name": "Sample Workflow Integration Plugin",
+  "version": "1.0.0",
+  "description": "Resolve Sample Workflow Integration Plugin",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  }
+}

@@ -1,0 +1,416 @@
+{
+	Tools = ordered() {
+		AdvancedDirtRemoval11 = MacroOperator {
+			Inputs = ordered() {
+				Input1 = InstanceInput {
+					SourceOp = "OpticalFlow1",
+					Source = "Advanced.NumIters",
+					Name = "Aggressiveness",
+					Default = 2,
+				},
+				MainInput1 = InstanceInput {
+					SourceOp = "CustomFilter1",
+					Source = "Input",
+				},
+				Input2 = InstanceInput {
+					SourceOp = "AutomaticDirtRemoval1",
+					Source = "motionEstType",
+				},
+				Input3 = InstanceInput {
+					SourceOp = "AutomaticDirtRemoval1",
+					Source = "supportLength",
+				},
+				Input4 = InstanceInput {
+					SourceOp = "AutomaticDirtRemoval1",
+					Source = "temporalThreshold",
+					Default = 0.8,
+				},
+				Input5 = InstanceInput {
+					SourceOp = "AutomaticDirtRemoval1",
+					Source = "dirtSize",
+					Default = 0.01,
+				},
+				Input6 = InstanceInput {
+					SourceOp = "AutomaticDirtRemoval1",
+					Source = "showRepairMask",
+					Default = 0,
+				},
+				Input7 = InstanceInput {
+					SourceOp = "AutomaticDirtRemoval1",
+					Source = "motionThreshold",
+					Default = 25.2,
+				},
+				Input8 = InstanceInput {
+					SourceOp = "AutomaticDirtRemoval1",
+					Source = "edgeAttenuation",
+					Default = 0,
+				},
+				Input9 = InstanceInput {
+					SourceOp = "AutomaticDirtRemoval1",
+					Source = "ApplyMaskInverted",
+					Name = "Recovery/Spanish Dirt Removal",
+					Default = 1,
+				},
+				Input10 = InstanceInput {
+					SourceOp = "Switch1_2",
+					Source = "Source",
+					Name = "Recovery type",
+					Default = 0,
+				},
+				MainInput2 = InstanceInput {
+					SourceOp = "ChannelBooleans1",
+					Source = "Background",
+					Name = "Mask Paint/Magic Mask",
+				},
+				Input11 = InstanceInput {
+					SourceOp = "Switch1",
+					Source = "Source",
+					Name = "View Mode",
+					Default = 1,
+				}
+			},
+			Outputs = {
+				MainOutput1 = InstanceOutput {
+					SourceOp = "Switch1",
+					Source = "Output",
+				}
+			},
+			ViewInfo = GroupInfo { Pos = { 0, 0 } },
+			Tools = ordered() {
+				OpticalFlow1 = Dimension.OpticalFlow {
+					CtrlWShown = false,
+					Inputs = {
+						Input = Input {
+							SourceOp = "NoiseReduction1",
+							Source = "Output",
+						},
+						Method = Input { Value = FuID { "Advanced" }, },
+						["Advanced.Advanced"] = Input { Value = 1, },
+						["Advanced.NumWarps"] = Input { Value = 1, },
+						["Advanced.NumIters"] = Input { Value = 2, }
+					},
+					ViewInfo = OperatorInfo { Pos = { 0, -181.5 } },
+				},
+				NoiseReduction1 = ofx.com.blackmagicdesign.resolvefx.NoiseReduction {
+					CtrlWShown = false,
+					Inputs = {
+						Source = Input {
+							SourceOp = "Deflicker1",
+							Source = "Output",
+						},
+						temporalNRGroup = Input { Value = 1, },
+						neighbourhoodWidth = Input { Value = FuID { "NeighbourhoodWidth3" }, },
+						moEstType = Input { Value = FuID { "MoEstModeTVL1" }, },
+						motionRange = Input { Value = FuID { "MotionRangeSmall" }, },
+						temporalThreshGroup = Input { Value = 1, },
+						temporalLumaThresh = Input { Value = 0, },
+						temporalChromaThresh = Input { Value = 0, },
+						temporalGangThreshs = Input { Value = 1, },
+						temporalMotionThresh = Input { Value = 50, },
+						temporalBlend = Input { Value = 0, },
+						spatialNRGroup = Input { Value = 1, },
+						spatialMode = Input { Value = FuID { "SpatialModeEnhanced" }, },
+						spatialRadius = Input { Value = FuID { "SpatialRadiusLarge" }, },
+						spatialThreshGroup = Input { Value = 1, },
+						spatialLumaThresh = Input { Value = 100, },
+						spatialChromaThresh = Input { Value = 0, },
+						spatialGangThreshs = Input { Value = 1, },
+						spatialBlend = Input { Value = 0, },
+						neuralGroup = Input { Value = 1, },
+						neuralAnalysePatch = Input { Value = 0, },
+						neuralIsShowPatch = Input {
+							Value = 0,
+							Disabled = true,
+						},
+						neuralLumaNoise = Input { Value = 0, },
+						neuralChromaNoise = Input { Value = 0, },
+						analysisRectGroup = Input { Value = 1, },
+						analysisIsFromPatch = Input { Value = 0, },
+						analysisXYPos = Input { Value = { 0.5, 0.5 }, },
+						analysisWidth = Input { Value = 0.034000001847744, },
+						analysisHeight = Input { Value = 0.0610000006854534, },
+						legacyIsSpatMatching = Input { Value = 0, },
+						legacyIsTempMatching = Input { Value = 0, },
+						blendGroup = Input { Value = 0, },
+						blendIn = Input { Value = 1, },
+						blend = Input { Value = 0, },
+						ignoreContentShape = Input { Value = 0, },
+						legacyIsProcessRGBOnly = Input { Value = 0, },
+						IsNoTemporalFramesReqd = Input { Value = 0, },
+						refreshTrigger = Input { Value = 1, },
+						srcProcessingAlphaMode = Input { Value = -1, },
+						dstProcessingAlphaMode = Input { Value = -1, },
+						resolvefxVersion = Input { Value = "1.2", }
+					},
+					ViewInfo = OperatorInfo { Pos = { 165, -181.5 } },
+				},
+				CustomTool1 = Custom {
+					CtrlWShown = false,
+					Inputs = {
+						PointIn1 = Input { Value = { 0.503127639358108, 0.5 }, },
+						LUTIn1 = Input {
+							SourceOp = "CustomTool1LUTIn1",
+							Source = "Value",
+						},
+						LUTIn2 = Input {
+							SourceOp = "CustomTool1LUTIn2",
+							Source = "Value",
+						},
+						LUTIn3 = Input {
+							SourceOp = "CustomTool1LUTIn3",
+							Source = "Value",
+						},
+						LUTIn4 = Input {
+							SourceOp = "CustomTool1LUTIn4",
+							Source = "Value",
+						},
+						RedExpression = Input { Value = "min(sqrt((vx1 * vx1) + (vy1 * vy1)), 1)", },
+						GreenExpression = Input { Value = "min(sqrt((vx1 * vx1) + (vy1 * vy1)), 1)", },
+						BlueExpression = Input { Value = "min(sqrt((vx1 * vx1) + (vy1 * vy1)), 1)", },
+						AlphaExpression = Input { Value = "min(sqrt((vx1 * vx1) + (vy1 * vy1)), 1)", },
+						NumberControls = Input { Value = 1, },
+						Image1 = Input {
+							SourceOp = "OpticalFlow1",
+							Source = "Output",
+						}
+					},
+					ViewInfo = OperatorInfo { Pos = { 0, -82.5 } },
+				},
+				CustomTool1LUTIn1 = LUTBezier {
+					KeyColorSplines = {
+						[0] = {
+							[0] = { 0, RH = { 0.333333333333333, 0.333333333333333 }, Flags = { Linear = true } },
+							[1] = { 1, LH = { 0.666666666666667, 0.666666666666667 }, Flags = { Linear = true } }
+						}
+					},
+					SplineColor = { Red = 0, Green = 0, Blue = 0 },
+					CtrlWZoom = false,
+				},
+				CustomTool1LUTIn2 = LUTBezier {
+					KeyColorSplines = {
+						[0] = {
+							[0] = { 0, RH = { 0.333333333333333, 0.333333333333333 }, Flags = { Linear = true } },
+							[1] = { 1, LH = { 0.666666666666667, 0.666666666666667 }, Flags = { Linear = true } }
+						}
+					},
+					SplineColor = { Red = 0, Green = 0, Blue = 0 },
+					CtrlWZoom = false,
+				},
+				CustomTool1LUTIn3 = LUTBezier {
+					KeyColorSplines = {
+						[0] = {
+							[0] = { 0, RH = { 0.333333333333333, 0.333333333333333 }, Flags = { Linear = true } },
+							[1] = { 1, LH = { 0.666666666666667, 0.666666666666667 }, Flags = { Linear = true } }
+						}
+					},
+					SplineColor = { Red = 0, Green = 0, Blue = 0 },
+					CtrlWZoom = false,
+				},
+				CustomTool1LUTIn4 = LUTBezier {
+					KeyColorSplines = {
+						[0] = {
+							[0] = { 0, RH = { 0.333333333333333, 0.333333333333333 }, Flags = { Linear = true } },
+							[1] = { 1, LH = { 0.666666666666667, 0.666666666666667 }, Flags = { Linear = true } }
+						}
+					},
+					SplineColor = { Red = 0, Green = 0, Blue = 0 },
+					CtrlWZoom = false,
+				},
+				ChannelBooleans1_2 = ChannelBoolean {
+					CtrlWShown = false,
+					Inputs = {
+						Operation = Input { Value = 8, },
+						Background = Input {
+							SourceOp = "CustomTool1",
+							Source = "Output",
+						},
+						Foreground = Input {
+							SourceOp = "ChannelBooleans1",
+							Source = "Output",
+						}
+					},
+					ViewInfo = OperatorInfo { Pos = { 0, 16.5 } },
+				},
+				ChannelBooleans1 = ChannelBoolean {
+					CtrlWShown = false,
+					Inputs = {
+						ToRed = Input { Value = 4, },
+						ToGreen = Input { Value = 4, },
+						ToBlue = Input { Value = 4, },
+						ToAlpha = Input { Value = 4, }
+					},
+					ViewInfo = OperatorInfo { Pos = { -165, 16.5 } },
+				},
+				Deflicker1 = ofx.com.blackmagicdesign.resolvefx.Deflicker {
+					CtrlWShown = false,
+					Inputs = {
+						Source = Input {
+							SourceOp = "CustomFilter1",
+							Source = "Output",
+						},
+						deflickerSettings = Input { Value = FuID { "PARAMETER_SETTINGS_ADVANCED" }, },
+						advancedControlsGroup = Input { Value = 1, },
+						neighbourhoodWidth = Input { Value = FuID { "NEIGHBOURHOOD_WIDTH_5" }, },
+						moEstType = Input { Value = FuID { "OF_MODE_CLGTV" }, },
+						motionRange = Input { Value = FuID { "MOTION_RANGE_LARGE" }, },
+						lumaThresh = Input { Value = 100, },
+						chromaThresh = Input { Value = 100, },
+						gangThreshs = Input { Value = 1, },
+						motionThresh = Input { Value = 100, },
+						optimizeGroup = Input { Value = 1, },
+						lowDetailMotion = Input { Value = 1, },
+						limitArea = Input { Value = 0, },
+						targetXPosition = Input { Value = 0.5, },
+						targetYPosition = Input { Value = 0.5, },
+						targetWidth = Input { Value = 0.200000002980232, },
+						targetHeight = Input { Value = 0.25, },
+						restoreDetailGroup = Input { Value = 0, },
+						detailRestored = Input { Value = 0.349999994039536, },
+						isShowRestoredDetail = Input { Value = 0, },
+						pluginOutput = Input { Value = FuID { "PLUGIN_OUTPUT_DEFLICKERED" }, },
+						isSkipColorInfo = Input { Value = 0, },
+						blendGroup = Input { Value = 0, },
+						blendIn = Input { Value = 1, },
+						blend = Input { Value = 0, },
+						ignoreContentShape = Input { Value = 0, },
+						legacyIsProcessRGBOnly = Input { Value = 0, },
+						IsNoTemporalFramesReqd = Input { Value = 0, },
+						refreshTrigger = Input { Value = 1, },
+						srcProcessingAlphaMode = Input { Value = -1, },
+						dstProcessingAlphaMode = Input { Value = -1, },
+						resolvefxVersion = Input { Value = "1.2", }
+					},
+					ViewInfo = OperatorInfo { Pos = { 330, -181.5 } },
+				},
+				AutomaticDirtRemoval1 = ofx.com.blackmagicdesign.resolvefx.VideoRestoration {
+					CtrlWZoom = false,
+					CtrlWShown = false,
+					Inputs = {
+						EffectMask = Input {
+							SourceOp = "Switch1_2",
+							Source = "Output",
+						},
+						ApplyMaskInverted = Input { Value = 1, },
+						Source = Input {
+							SourceOp = "CustomFilter1",
+							Source = "Output",
+						},
+						motionEstType = Input { Value = FuID { "OF_MODE_HS_BETTER" }, },
+						supportLength = Input { Value = FuID { "SUPPORT_LENGTH_4" }, },
+						temporalThreshold = Input { Value = 0.8, },
+						dirtSize = Input { Value = 0.01, },
+						showRepairMask = Input { Value = 0, },
+						fineControlGroup = Input { Value = 1, },
+						motionThreshold = Input { Value = 25.2, },
+						edgeAttenuation = Input { Value = 0, },
+						blendGroup = Input { Value = 0, },
+						blendIn = Input { Value = 1, },
+						blend = Input { Value = 0, },
+						ignoreContentShape = Input { Value = 0, },
+						legacyIsProcessRGBOnly = Input { Value = 0, },
+						IsNoTemporalFramesReqd = Input { Value = 0, },
+						refreshTrigger = Input { Value = 1, },
+						srcProcessingAlphaMode = Input { Value = -1, },
+						dstProcessingAlphaMode = Input { Value = -1, },
+						resolvefxVersion = Input { Value = "1.0", }
+					},
+					ViewInfo = OperatorInfo { Pos = { 165, 115.5 } },
+				},
+				Switch1_2 = Switch {
+					CtrlWShown = false,
+					Inputs = {
+						Name0 = Input { Value = "Recovery Brush", },
+						Input0 = Input {
+							SourceOp = "ChannelBooleans1",
+							Source = "Output",
+						},
+						Name1 = Input { Value = "Motion Mask", },
+						Input1 = Input {
+							SourceOp = "ChannelBooleans1_2",
+							Source = "Output",
+						}
+					},
+					ViewInfo = OperatorInfo { Pos = { 0, 115.5 } },
+					Colors = { TileColor = { R = 0.572549019607843, G = 0.572549019607843, B = 0.572549019607843 }, }
+				},
+				Merge1 = Merge {
+					CtrlWShown = false,
+					Inputs = {
+						Background = Input {
+							SourceOp = "CustomFilter1",
+							Source = "Output",
+						},
+						Foreground = Input {
+							SourceOp = "AutomaticDirtRemoval1",
+							Source = "Output",
+						},
+						PerformDepthMerge = Input { Value = 0, }
+					},
+					ViewInfo = OperatorInfo { Pos = { 495, 115.5 } },
+				},
+				CustomFilter1 = CustomFilter {
+					CtrlWShown = false,
+					Inputs = {
+						Red = Input { Value = 0, },
+						Green = Input { Value = 0, },
+						Blue = Input { Value = 0, },
+						Alpha = Input { Value = 0, },
+						Matrix = Input {
+							Value = FilterTable {
+								NumEntries = 54,
+								Type = 6,
+								Offset = 0,
+								Minimum = 0,
+								Maximum = 1,
+								MinimumValue = 0,
+								MaximumValue = 1,
+								StartSlope = 1,
+								EndSlope = 1,
+								StartIn = 0,
+								EndIn = 1,
+								Table = { 0, 0, 9, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 }
+							},
+						}
+					},
+					ViewInfo = OperatorInfo { Pos = { 495, -280.5 } },
+				},
+				Merge2 = Merge {
+					CtrlWShown = false,
+					Inputs = {
+						Blend = Input { Value = 0.6, },
+						Background = Input {
+							SourceOp = "CustomFilter1",
+							Source = "Output",
+						},
+						Foreground = Input {
+							SourceOp = "AutomaticDirtRemoval1",
+							Source = "Output",
+						},
+						ApplyMode = Input { Value = FuID { "Difference" }, },
+						PerformDepthMerge = Input { Value = 0, }
+					},
+					ViewInfo = OperatorInfo { Pos = { 330, 214.5 } },
+				},
+				Switch1 = Switch {
+					CtrlWShown = false,
+					Inputs = {
+						Source = Input { Value = 1, },
+						Name0 = Input { Value = "RGB View", },
+						Input0 = Input {
+							SourceOp = "Merge1",
+							Source = "Output",
+						},
+						Name1 = Input { Value = "Difference View", },
+						Input1 = Input {
+							SourceOp = "Merge2",
+							Source = "Output",
+						}
+					},
+					ViewInfo = OperatorInfo { Pos = { 495, 214.5 } },
+					Colors = { TileColor = { R = 0.572549019607843, G = 0.572549019607843, B = 0.572549019607843 }, }
+				}
+			},
+		}
+	},
+	ActiveTool = "AdvancedDirtRemoval11"
+}

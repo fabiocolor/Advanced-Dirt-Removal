@@ -1,0 +1,12 @@
+DEFINE_LUT(FilmToVideo, ../LUT/Blackmagic Design/Blackmagic_46K_Film_to_Video.cube)
+
+__DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p_R, float p_G, float p_B)
+{
+    float r = p_R;
+    float g = p_G;
+    float b = p_B;
+
+    const float3 res = APPLY_LUT(r, g, b, FilmToVideo);
+
+    return res;
+}

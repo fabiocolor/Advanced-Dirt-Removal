@@ -1,0 +1,17 @@
+DEFINE_UI_PARAMS(gainR, Red Gain, DCTLUI_SLIDER_FLOAT, 2.0, 0.0, 10.0, 0.1)
+DEFINE_UI_PARAMS(gainG, Green Gain, DCTLUI_SLIDER_FLOAT, 2.0, 0.0, 10.0, 0.1)
+DEFINE_UI_PARAMS(gainB, Blue Gain, DCTLUI_SLIDER_FLOAT, 2.0, 0.0, 10.0, 0.1)
+DEFINE_UI_PARAMS(apply, Apply, DCTLUI_CHECK_BOX, 1)
+DEFINE_UI_PARAMS(opt, Channel Option, DCTLUI_COMBO_BOX, 1, { ALL, RED, GREEN, BLUE }, { All Channels, Channel Red, Channel Green, Channel Blue })
+
+__DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p_R, float p_G, float p_B)
+{
+    if (apply)
+    {
+        p_R = p_R * (((opt == ALL) || (opt == RED))   ? gainR : 1.0f);
+        p_G = p_G * (((opt == ALL) || (opt == GREEN)) ? gainG : 1.0f);
+        p_B = p_B * (((opt == ALL) || (opt == BLUE))  ? gainB : 1.0f);
+    }
+
+    return make_float3(p_R, p_G, p_B);
+}

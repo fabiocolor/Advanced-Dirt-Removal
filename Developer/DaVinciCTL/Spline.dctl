@@ -1,0 +1,42 @@
+__CONSTANT__ float2 TABLE[6] =
+{
+    { 0.1f,  0.00759836f},
+    { 0.2f,  1.00186000f},
+    { 0.35f,  0.00533002f},
+    { 0.6f,  0.00759836f},
+    { 0.92f,  1.00186000f},
+    { 1.0f,  0.00533002f}
+};
+
+__DEVICE__ float interpolate1D(__CONSTANTREF__ float2* p_Table, int p_Size, float p_Val)
+{
+    if (p_Val < p_Table[0].x)
+    {
+        return p_Table[0].y;
+    }
+
+    if (p_Val >= p_Table[p_Size - 1].x)
+    {
+        return p_Table[p_Size - 1].y;
+    }
+
+    for (int i = 0; i < p_Size; ++i)
+    {
+        if (p_Val >= p_Table[i].x && p_Val < p_Table[i + 1].x)
+        {
+            float t = (p_Val - p_Table[i].x) / (p_Table[i + 1].x - p_Table[i].x);
+            return (1 - t) * p_Table[i].y + t * p_Table[i + 1].y;
+        }
+    }
+
+    return 0.0f; // won't reach here
+}
+
+__DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p_R, float p_G, float p_B)
+{
+    const float r = interpolate1D(&TABLE[0], 6, p_R);
+    const float g = interpolate1D(&TABLE[0], 6, p_G);
+    const float b = (r >= g) ? r : g;
+
+    return make_float3(r, g, b);
+}

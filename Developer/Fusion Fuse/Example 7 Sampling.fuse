@@ -1,0 +1,213 @@
+--[[--
+This shows Getting and Setting Pixels ina an image.
+Also demonstrates Sampling which is will give a filtered result.
+
+
+Written By : Steve Roberts
+Written On : September 2020
+
+--]]--
+
+
+--******************************************************************************************************
+-- This Registers the Fuse into Fusion, gives its Name, and Menu location. Location of Help. Can Fuse be edited.
+FuRegisterClass("PixelSampling", CT_Tool, {
+	REGS_Name          = "Ex7 Sampling",
+	REGS_Category      = "Fuses\\Examples",
+	REGS_OpIconString  = "E7Sp",
+	REGS_OpDescription = "Example showing Pixels and Sampling operations",
+	REGS_HelpTopic     = "Example Location of Help", --This can be a URL
+	REGS_URL           = "www.blackmagicdesign.com",
+	--REGS_IconID = "Icons.Tools.Icons.Example",-- This can be Inline as an array of Values
+	REG_OpNoMask       = false,
+	REG_NoBlendCtrls   = false,
+	REG_NoObjMatCtrls  = false,
+	REG_NoMotionBlurCtrls = true,
+	REG_Fuse_NoEdit    = false,
+	REG_Fuse_NoReload  = false,
+	REG_Version = 1, 
+}) -- End of RegisterClass
+
+--****************************************************************************************************
+function Create()
+	
+
+	InMethod = self:AddInput("Method", "Method", {
+		LINKID_DataType    = "Number",
+		INPID_InputControl = "MultiButtonControl",
+		INP_Integer        = true,
+		INP_Default        = 1.0,
+		MBTNC_StretchToFit = true,
+		{ MBTNC_AddButton  = "Get Set", },
+		{ MBTNC_AddButton  = "Sample",  },
+		{ MBTNC_AddButton  = "color",   },
+		INP_DoNotifyChanged = true, -- We want to hear about changes on this control
+		})
+
+	InXF = self:AddInput("X Frequency", "XF", {
+		LINKID_DataType    = "Number",
+		INPID_InputControl = "SliderControl",
+		INP_MaxScale       = 40.0,
+		INP_MinScale       = 0.0,
+		INP_Default        = 10.0,
+		})
+	InYF = self:AddInput("Y Frequency", "YF", {
+		LINKID_DataType    = "Number",
+		INPID_InputControl = "SliderControl",
+		INP_MaxScale       = 40.0,
+		INP_MinScale       = 0.0,
+		INP_Default        = 20.0,
+		})
+	InOffset = self:AddInput("Offset", "Off", {
+		LINKID_DataType    = "Number",
+		INPID_InputControl = "ScrewControl",
+		INP_MaxScale       = 100.0,
+		INP_MinScale       = 0.0,
+		INP_Default        = 0.0,
+		})
+	InAmp = self:AddInput("Amplitude", "Am", {
+		LINKID_DataType    = "Number",
+		INPID_InputControl = "SliderControl",
+		INP_MaxScale       = 40.0,
+		INP_MinScale       = 0.0,
+		INP_Default        = 20.0,
+		})
+
+
+	
+	InImage = self:AddInput("Input", "Input", {
+		LINKID_DataType = "Image",
+		LINK_Main = 1,
+		})
+
+	OutImage = self:AddOutput("Output", "Output", {
+		LINKID_DataType = "Image",
+		LINK_Main = 1,
+		})	
+ 
+end
+ 
+--***************************************************************************************************
+-- Notify Changed is used to Hide or Show controls when options are selected in the Tool's control  inspector 
+
+function NotifyChanged(inp, param, time)
+	if inp == InMethod then   -- If Notify Change check box is changed, then rename the Control names and Un/Hide sliders
+		local locked = (param.Value > 0.5)
+		
+		if locked then
+			InXF:SetAttrs({ IC_Visible = true })
+			InYF:SetAttrs({ IC_Visible = true })
+			InOffset:SetAttrs({ IC_Visible = true })
+		else
+			InXF:SetAttrs({ IC_Visible = false })
+			InYF:SetAttrs({ IC_Visible = false })
+			InOffset:SetAttrs({ IC_Visible = false })
+		end
+	end
+end
+
+--***************************************************************************************************
+-- Process the image
+ 
+function Process(req)
+	local img = InImage:GetValue(req)
+	local avg = img:CopyOf()
+	local XF = InXF:GetValue(req).Value * 0.001
+	local YF = InYF:GetValue(req).Value * 0.001
+	local Amp = InAmp:GetValue(req).Value
+	local OffS = InOffset:GetValue(req).Value * 0.1
+	local Method = InMethod:GetValue(req).Value
+		
+	local y = 0
+	local x = 0
+	local yt = 0
+	local xt = 0
+	local sp = Pixel(img)
+	local dp = Pixel(avg)
+
+	if Method == 0 then
+		print ("Scatter")
+
+		for y = 0, img.Height - 1 do
+			for x = 0, img.Width - 1 do
+				img:GetPixel(x,y, sp)
+				xt = x - Amp * 5 * ( sp.R - 0.5)
+				yt = y - Amp * 5 * ( sp.B - 0.5)
+				if xt < 0 then
+					xt = 0
+				end
+				if xt > img.Width - 1 then
+					xt = img.Width - 1
+				end
+				if yt < 0 then
+					yt = 0
+				end
+				if yt > img.Height - 1 then
+					yt = img.Height - 1
+				end
+					
+				img:GetPixel(xt,yt, sp)
+				dp.R = sp.R
+				dp.G = sp.G
+				dp.B = sp.B
+				dp.A = sp.A
+				avg:SetPixel(x,y, dp)
+			end
+		end
+	end
+	
+	if Method == 1 then
+		print ("Sample")
+
+		for y=0,img.Height-1 do
+			for x=0,img.Width-1 do
+				xt = x - ( Amp * math.sin((y * XF) + OffS))
+				yt = y - ( Amp * math.sin((x * YF) + OffS))
+				if xt < 0 then
+					xt = 0
+				end
+				if xt > img.Width - 1 then
+					xt = img.Width - 1
+				end
+				if yt < 0 then
+					yt = 0
+				end
+				if yt > img.Height - 1 then
+					yt = img.Height - 1
+				end
+					
+				img:SamplePixelB(xt,yt, sp)
+				dp.R = sp.R
+				dp.G = sp.G
+				dp.B = sp.B
+				dp.A = sp.A
+				avg:SetPixel(x,y, dp)
+			end
+		end
+	end
+	
+	if Method == 2 then
+		print("color")
+
+		for y = 0, img.Height - 1 do
+			for x = 0, img.Width - 1 do
+				
+				if y < 10 and x < 10 then
+					dp.R = 1
+					dp.G = 0
+					dp.B = 0
+					dp.A = 1
+				else
+					dp.R = 0
+					dp.G = 1
+					dp.B = 0
+					dp.A = 0
+				end
+				
+				avg:SetPixel(x,y, dp)
+			end
+		end
+	end
+	
+	OutImage:Set(req, avg)
+end

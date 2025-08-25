@@ -1,0 +1,11 @@
+DEFINE_UI_PARAMS(tgtColor, Target Color, DCTLUI_COLOR_PICKER, 1.0f, 1.0f, 1.0f)
+DEFINE_UI_TOOLTIP(Target Color, "Choose target color")
+
+__DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p_R, float p_G, float p_B)
+{
+    const float r = tgtColor.r;
+    const float g = tgtColor.g;
+    const float b = tgtColor.b;
+
+    return make_float3(r, g, b);
+}

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<BlackmagicDesign>
+    <Plugin>
+        <Id>com.blackmagicdesign.resolve.compatiblesampleplugin</Id>
+        <Name>Sample Plugin (Compatibility Mode)</Name>
+        <Version>1.0</Version>
+        <Description>Sample Plugin (Compatibility Mode)</Description>
+        <FilePath>main.js</FilePath>
+    </Plugin>
+</BlackmagicDesign>

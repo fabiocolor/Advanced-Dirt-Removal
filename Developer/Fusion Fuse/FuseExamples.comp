@@ -1,0 +1,1554 @@
+Composition {
+	CurrentTime = 0,
+	RenderRange = { 0, 100 },
+	GlobalRange = { 0, 100 },
+	CurrentID = 411,
+	HiQ = true,
+	PlaybackUpdateMode = 0,
+	StereoMode = false,
+	Version = "Fusion Studio 19.0 build 36",
+	SavedOutputs = 2,
+	HeldTools = 0,
+	DisabledTools = 0,
+	LockedTools = 0,
+	AudioOffset = 0,
+	Resumable = true,
+	OutputClips = {
+	},
+	Tools = {
+		CustomTool1LUTIn2 = LUTBezier {
+			KeyColorSplines = {
+				[0] = {
+					[0] = { 0, RH = { 0.333333333333333, 0.333333333333333 }, Flags = { Linear = true } },
+					[1] = { 1, LH = { 0.666666666666667, 0.666666666666667 }, Flags = { Linear = true } }
+				}
+			},
+			SplineColor = { Red = 0, Green = 204, Blue = 0 },
+			CtrlWZoom = false,
+		},
+		LightWrapMerge1 = Fuse.LightWrapMerge {
+			CtrlWZoom = false,
+			Inputs = {
+				FringeBlend = Input {
+					Value = Number {
+						Value = 1
+					},
+				},
+				ChromaBlend = Input { Value = 0.5, },
+				Background = Input {
+					SourceOp = "HS18_1",
+					Source = "Output",
+				},
+				Foreground = Input {
+					SourceOp = "Text1",
+					Source = "Output",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { 110, -49.5 } },
+			Version = 1
+		},
+		BrightnessContrast1 = BrightnessContrast {
+			ViewInfo = OperatorInfo { Pos = { 715, -49.5 } },
+		},
+		Ex5_Shapes1 = Fuse.Ex5_Shapes {
+			Inputs = {
+				Input = Input {
+					SourceOp = "LightWrapMerge1",
+					Source = "Output",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { 275, 82.5 } },
+		},
+		Merge1 = Merge {
+			Inputs = {
+				PerformDepthMerge = Input { Value = 0, }
+			},
+			ViewInfo = OperatorInfo { Pos = { 715, 181.5 } },
+		},
+		Ex9_MTB1 = Fuse.MetaTimeBurn {
+			Inputs = {
+				TextNest = Input { Value = 1, },
+				Font = Input { Value = "Open Sans", },
+				Style = Input { Value = "Regular", },
+				Input = Input {
+					SourceOp = "LightWrapMerge1",
+					Source = "Output",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { 275, 148.5 } },
+		},
+		GPUSampleFuse1 = Fuse.GPUSampleFuse {
+			Inputs = {
+				GlobalOut = Input { Value = 100, },
+				Width = Input { Value = 1920, },
+				Height = Input { Value = 1080, },
+				["Gamut.SLogVersion"] = Input { Value = FuID { "SLog2" }, }
+			},
+			ViewInfo = OperatorInfo { Pos = { 275, 214.5 } },
+		},
+		Text1 = TextPlus {
+			Inputs = {
+				GlobalOut = Input { Value = 100, },
+				Width = Input { Value = 1920, },
+				Height = Input { Value = 1080, },
+				Depth = Input { Value = 3, },
+				["Gamut.SLogVersion"] = Input { Value = FuID { "SLog2" }, },
+				TransformRotation = Input { Value = 1, },
+				CharacterAngleY = Input {
+					SourceOp = "Text1CharacterAngleY",
+					Source = "Value",
+				},
+				SelectElement = Input { Value = 2, },
+				Select = Input { Value = 2, },
+				Enabled2 = Input { Value = 1, },
+				Enabled3 = Input { Value = 1, },
+				Type1 = Input { Value = 2, },
+				Red1 = Input { Value = 0.435294117647059, },
+				Green1 = Input { Value = 0.650980392156863, },
+				ShadingGradient1 = Input {
+					Value = Gradient {
+						Colors = {
+							[0] = { 0, 0, 0, 1 },
+							[0.467924528301887] = { 1, 1, 1, 1 },
+							[1] = { 0, 0, 0, 1 }
+						}
+					},
+				},
+				ShadingMappingAngle1 = Input { Value = -10.9, },
+				StyledText = Input { Value = "FUSE SDK", },
+				Font = Input { Value = "Open Sans", },
+				Style = Input { Value = "Semibold", },
+				Size = Input { Value = 0.28, },
+				VerticalJustificationNew = Input { Value = 3, },
+				HorizontalJustificationNew = Input { Value = 3, },
+				Type2 = Input { Value = 2, },
+				ShadingMappingAngle2 = Input { Value = 36.4, },
+				Alpha3 = Input { Value = 0.5, }
+			},
+			ViewInfo = OperatorInfo { Pos = { -55, 49.5 } },
+		},
+		Text2 = TextPlus {
+			Inputs = {
+				GlobalOut = Input { Value = 100, },
+				Width = Input { Value = 1920, },
+				Height = Input { Value = 1080, },
+				["Gamut.SLogVersion"] = Input { Value = FuID { "SLog2" }, },
+				Font = Input { Value = "Open Sans", },
+				Style = Input { Value = "Bold", },
+				VerticalJustificationNew = Input { Value = 3, },
+				HorizontalJustificationNew = Input { Value = 3, }
+			},
+			ViewInfo = OperatorInfo { Pos = { 715, 148.5 } },
+		},
+		CustomTool1LUTIn4 = LUTBezier {
+			KeyColorSplines = {
+				[0] = {
+					[0] = { 0, RH = { 0.333333333333333, 0.333333333333333 }, Flags = { Linear = true } },
+					[1] = { 1, LH = { 0.666666666666667, 0.666666666666667 }, Flags = { Linear = true } }
+				}
+			},
+			SplineColor = { Red = 204, Green = 204, Blue = 204 },
+			CtrlWZoom = false,
+		},
+		CustomTool1 = Custom {
+			Inputs = {
+				LUTIn1 = Input {
+					SourceOp = "CustomTool1LUTIn1",
+					Source = "Value",
+				},
+				LUTIn2 = Input {
+					SourceOp = "CustomTool1LUTIn2",
+					Source = "Value",
+				},
+				LUTIn3 = Input {
+					SourceOp = "CustomTool1LUTIn3",
+					Source = "Value",
+				},
+				LUTIn4 = Input {
+					SourceOp = "CustomTool1LUTIn4",
+					Source = "Value",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { 715, 49.5 } },
+		},
+		Ex2_UI_Controls1 = Fuse.ExampleUIControls {
+			Inputs = {
+				Gradient = Input {
+					Value = Gradient {
+						Colors = {
+							[0] = { 1, 0, 0, 1 },
+							[0.5] = { 0, 1, 0, 1 },
+							[1] = { 0, 0, 1, 1 }
+						}
+					},
+				},
+				NewTool = Input { Value = 0, },
+				Background = Input {
+					SourceOp = "LightWrapMerge1",
+					Source = "Output",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { 275, -16.5 } },
+			Version = 1
+		},
+		Ex1_BrightContrast1 = Fuse.ExampleBrightContrast {
+			Inputs = {
+				Input = Input {
+					SourceOp = "LightWrapMerge1",
+					Source = "Output",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { 275, -49.5 } },
+			Version = 1
+		},
+		ColorSpace1 = ColorSpace {
+			ViewInfo = OperatorInfo { Pos = { 715, 16.5 } },
+		},
+		SetTimeCode1 = Fuse.SetMetaDataTC {
+			ViewInfo = OperatorInfo { Pos = { 715, 247.5 } },
+		},
+		BlurMerge1 = Fuse.ExampleBlurMerge {
+			Inputs = {
+				XBlurFg = Input { Value = 10, },
+				Background = Input {
+					SourceOp = "HS18_1",
+					Source = "Output",
+				},
+				Foreground = Input {
+					SourceOp = "Text1",
+					Source = "Output",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { 110, 181.5 } },
+			Version = 1
+		},
+		CustomTool1LUTIn1 = LUTBezier {
+			KeyColorSplines = {
+				[0] = {
+					[0] = { 0, RH = { 0.333333333333333, 0.333333333333333 }, Flags = { Linear = true } },
+					[1] = { 1, LH = { 0.666666666666667, 0.666666666666667 }, Flags = { Linear = true } }
+				}
+			},
+			SplineColor = { Red = 204, Green = 0, Blue = 0 },
+			CtrlWZoom = false,
+		},
+		ChannelBooleans1 = ChannelBoolean {
+			ViewInfo = OperatorInfo { Pos = { 715, -16.5 } },
+		},
+		Ex7_Sampling1 = Fuse.PixelSampling {
+			Inputs = {
+				Method = Input { Value = 0, },
+				Off = Input { Value = 8.1, },
+				Input = Input {
+					SourceOp = "BlurMerge1",
+					Source = "Output",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { 275, 181.5 } },
+			Version = 1
+		},
+		Glow1 = Glow {
+			Inputs = {
+				Blend = Input { Value = 0.2, },
+				Filter = Input { Value = FuID { "Fast Gaussian" }, }
+			},
+			ViewInfo = OperatorInfo { Pos = { 715, -82.5 } },
+		},
+		MatteControl1 = MatteControl {
+			Inputs = {
+				Filter = Input { Value = FuID { "Fast Gaussian" }, }
+			},
+			ViewInfo = OperatorInfo { Pos = { 715, 82.5 } },
+		},
+		Background = GroupOperator {
+			NameSet = true,
+			Outputs = {
+				Output1 = InstanceOutput {
+					SourceOp = "Lens_Flare_V18",
+					Source = "MainOutput1",
+				}
+			},
+			ViewInfo = GroupInfo {
+				Pos = { -55, -16.5 },
+				Flags = {
+					AllowPan = false,
+					AutoSnap = true,
+					RemoveRouters = true
+				},
+				Size = { 588.667, 106.364, 294.333, 24.2424 },
+				Direction = "Horizontal",
+				PipeStyle = "Direct",
+				Scale = 1,
+				Offset = { -463.333, -4.78788 }
+			},
+			Tools = ordered() {
+				Lens_Flare_V18 = GroupOperator {
+					CtrlWShown = false,
+					CustomData = {
+						Path = {
+							Map = {
+								["Setting:"] = "UserPaths:\\Templates.drfx\\"
+							}
+						}
+					},
+					Inputs = ordered() {
+						MainInput1 = InstanceInput {
+							SourceOp = "HS18_3",
+							Source = "Input",
+						},
+						Input1 = InstanceInput {
+							SourceOp = "HS18_1",
+							Source = "PrimaryCenter",
+						}
+					},
+					Outputs = {
+						MainOutput1 = InstanceOutput {
+							SourceOp = "HS18_1",
+							Source = "Output",
+						}
+					},
+					ViewInfo = GroupInfo {
+						Pos = { 694.667, 53.4242 },
+						Flags = {
+							AllowPan = false,
+							AutoSnap = true,
+							RemoveRouters = true
+						},
+						Size = { 339.89, 64.986, 169.945, 24.2424 },
+						Direction = "Horizontal",
+						PipeStyle = "Direct",
+						Scale = 1,
+						Offset = { -1.30134, 0 }
+					},
+					Tools = ordered() {
+						HS18_3 = HotSpot {
+							CtrlWShown = false,
+							NameSet = true,
+							Inputs = {
+								PrimaryCenter = Input {
+									Value = { 0.25451491826187, 0.624431631821856 },
+									Expression = "HS18_1.PrimaryCenter",
+								},
+								PrimaryStrength = Input { Value = 0.157, },
+								HotSpotSize = Input { Value = 0.3903655389261, },
+								AspectAngle = Input { Value = -1.724772, },
+								SecondaryStrength = Input { Value = 0.094, },
+								SecondarySize = Input { Value = 0.2617801, },
+								LensAberration = Input { Value = 5, },
+								Aberration = Input { Value = 2.528796, },
+								AmbientLight = Input { Disabled = true, },
+								ShowRed = Input { Value = 0, },
+								ShowGreen = Input { Value = 0, },
+								ShowBlue = Input { Value = 0, },
+								ShowAlpha = Input { Value = 0, },
+								Red = Input {
+									SourceOp = "HS18_3Red",
+									Source = "Value",
+								},
+								Green = Input {
+									SourceOp = "HS18_3Green",
+									Source = "Value",
+								},
+								Blue = Input {
+									SourceOp = "HS18_3Blue",
+									Source = "Value",
+								},
+								Alpha = Input {
+									SourceOp = "HS18_3Alpha",
+									Source = "Value",
+								},
+								Mix = Input {
+									SourceOp = "HS18_3Mix",
+									Source = "Value",
+								},
+								RadialOn = Input { Value = 1, },
+								Radial = Input {
+									SourceOp = "HS18_3Radial",
+									Source = "Value",
+								},
+								Length = Input {
+									SourceOp = "HS18_3Length",
+									Source = "Value",
+								},
+								Element1Reflection1 = Input { Value = 1, },
+								Element1Reflection2 = Input { Value = 1, },
+								Element1Reflection3 = Input { Value = 1, },
+								ElementStrength1 = Input { Value = 0.157, },
+								ElementSize1 = Input { Value = 0.104712, },
+								ElementPosition1 = Input { Value = 0.7670157, },
+								Element2Reflection1 = Input { Value = 1, },
+								Element2Reflection2 = Input { Value = 1, },
+								Element2Reflection3 = Input { Value = 1, },
+								ElementStrength2 = Input { Value = 0.047, },
+								ElementSize2 = Input { Value = 0.1780105, },
+								ElementType2 = Input { Value = 5, },
+								NGonSides2 = Input { Value = 10, },
+								NGonStarryness2 = Input { Value = -0.4894737, },
+								LensRed2 = Input { Value = 1, },
+								Element3Reflection1 = Input { Value = 1, },
+								Element3Reflection2 = Input { Value = 1, },
+								Element3Reflection3 = Input { Value = 1, },
+								ElementStrength3 = Input { Value = 0.094, },
+								ElementSize3 = Input { Value = 0.0942408, },
+								ElementPosition3 = Input { Value = 0.5, },
+								ElementType3 = Input { Value = 5, },
+								NGonSides3 = Input { Value = 12, },
+								LensRed3 = Input { Value = 0.825, },
+								LensGreen3 = Input { Value = 0.7583333333333, },
+								Input = Input {
+									SourceOp = "Merge2",
+									Source = "Output",
+								}
+							},
+							ViewInfo = OperatorInfo { Pos = { -106.945, 10.836 } },
+						},
+						HS18_3Red = LUTBezier {
+							KeyColorSplines = {
+								[0] = {
+									[0.0157480314960631] = { 0, RH = { 0.0613383251932691, 0 } },
+									[0.158951961563691] = { 0.417420226885306, LH = { 0.0977292553849845, 0.421452148326966 }, RH = { 0.315764088622672, 0.4070931078005 } },
+									[0.5271872248567] = { 0.0170704777851967, LH = { 0.359449535318657, 0.0139882491601917 }, RH = { 0.721364190503227, 0.020638535765968 } },
+									[0.988188976377953] = { 0.00806451612903213, LH = { 0.789511190515388, 0.00806451612903213 } }
+								}
+							},
+							SplineColor = { Red = 255, Green = 52, Blue = 52 },
+							CtrlWZoom = false,
+							Inputs = {
+								TimeCurve = Input {
+									SourceOp = "HS18_3ColorChange",
+									Source = "Value",
+								}
+							},
+						},
+						HS18_3ColorChange = BezierSpline {
+							SplineColor = { Red = 0, Green = 255, Blue = 255 },
+							CtrlWZoom = false,
+							KeyFrames = {
+								[0] = { 0, Flags = { LockedY = true } }
+							}
+						},
+						HS18_3Green = LUTBezier {
+							KeyColorSplines = {
+								[0] = {
+									[0.0157480314960631] = { 0, RH = { 0.0967666057589598, 0 } },
+									[0.270235934084225] = { 0.413387962196382, LH = { 0.171787843445602, 0.419871420760037 }, RH = { 0.385108664942597, 0.405822832331671 } },
+									[0.5271872248567] = { 0.0170704803087805, LH = { 0.427508850628735, 0.0192548961181747 }, RH = { 0.721350997600256, 0.0128154508896347 } },
+									[0.988188976377953] = { 0.00806451612903213, LH = { 0.789511190515388, 0.00806451612903213 } }
+								}
+							},
+							SplineColor = { Red = 0, Green = 255, Blue = 0 },
+							CtrlWZoom = false,
+							Inputs = {
+								TimeCurve = Input {
+									SourceOp = "HS18_3ColorChange",
+									Source = "Value",
+								}
+							},
+						},
+						HS18_3Blue = LUTBezier {
+							KeyColorSplines = {
+								[0] = {
+									[0.0157480314960631] = { 0, RH = { 0.129748768192063, 0 } },
+									[0.373836391347103] = { 0.425484736262249, LH = { 0.241493108244282, 0.434200417659512 }, RH = { 0.450305329526654, 0.420448750405362 } },
+									[0.5271872248567] = { 0.0170704803087805, LH = { 0.469210882138864, 0.0173282409399199 }, RH = { 0.722082398929185, 0.0162039837220692 } },
+									[0.988188976377953] = { 0.00806451612903213, LH = { 0.789511190515388, 0.00806451612903213 } }
+								}
+							},
+							SplineColor = { Red = 68, Green = 68, Blue = 255 },
+							CtrlWZoom = false,
+							Inputs = {
+								TimeCurve = Input {
+									SourceOp = "HS18_3ColorChange",
+									Source = "Value",
+								}
+							},
+						},
+						HS18_3Alpha = LUTBezier {
+							KeyColorSplines = {
+								[0] = {
+									[0.0157480314960631] = { 0, RH = { 0.193874309631611, 0 } },
+									[0.5271872248567] = { 0.0170704803087805, LH = { 0.360643171876677, 0.0151382890418583 }, RH = { 0.712862720535752, 0.019224628504486 } },
+									[0.988188976377953] = { 0.00806451612903213, LH = { 0.789511190515388, 0.00806451612903213 } }
+								}
+							},
+							SplineColor = { Red = 255, Green = 255, Blue = 255 },
+							CtrlWZoom = false,
+							Inputs = {
+								TimeCurve = Input {
+									SourceOp = "HS18_3ColorChange",
+									Source = "Value",
+								}
+							},
+						},
+						HS18_3Mix = LUTBezier {
+							KeyColorSplines = {
+								[0] = {
+									[-0.122047244094488] = { 0.00403225806451607, RH = { -0.0776924053848107, 0.00403225806451607 } },
+									[0.0110172720345439] = { 0.00403225806451607, LH = { -0.0333375666751334, 0.00403225806451607 }, RH = { 0.0826136652273303, 0.00268817208306757 }, Flags = { Linear = true } },
+									[0.225806451612903] = { 1.20170566206279e-10, LH = { 0.154210058420117, 0.00134408610161907 }, RH = { 0.482948529008855, 2.59294500583859e-11 }, Flags = { Linear = true } },
+									[0.769553603550324] = { 1, LH = { 0.73692839695042, 0.0456989246210263 }, RH = { 0.845024983012044, 1 } },
+									[0.995967741935484] = { 1, LH = { 0.920496362473764, 1 }, RH = { 1.01209677415349, 0.666666666666667 }, Flags = { Linear = true } },
+									[1.04435483858951] = { 0, LH = { 1.0282258063715, 0.333333333333333 }, Flags = { Linear = true } }
+								}
+							},
+							SplineColor = { Red = 0, Green = 255, Blue = 255 },
+							CtrlWZoom = false,
+							Inputs = {
+								TimeCurve = Input {
+									SourceOp = "HS18_3ColorChange1",
+									Source = "Value",
+								}
+							},
+						},
+						HS18_3ColorChange1 = BezierSpline {
+							SplineColor = { Red = 255, Green = 0, Blue = 255 },
+							CtrlWZoom = false,
+							NameSet = true,
+							KeyFrames = {
+								[0] = { 0, Flags = { LockedY = true } }
+							}
+						},
+						HS18_3Radial = LUTBezier {
+							KeyColorSplines = {
+								[0] = {
+									[0] = { 1, RH = { 0.0813859961053253, 0.668010752688172 } },
+									[0.244157988315976] = { 0.00403225806451604, LH = { 0.162771992210651, 0.336021505376344 }, RH = { 0.32951046675578, 0.336021505376344 }, Flags = { Linear = true } },
+									[0.500215423635388] = { 1, LH = { 0.414862945195584, 0.668010752688172 }, RH = { 0.583664914378409, 0.671581802624328 }, Flags = { Linear = true } },
+									[0.75056389586445] = { 0.0147454078729831, LH = { 0.667114405121429, 0.343163605248655 }, RH = { 0.833709263909633, 0.343163605248655 }, Flags = { Linear = true } },
+									[1] = { 1, LH = { 0.916854631954817, 0.671581802624328 }, Flags = { Linear = true } }
+								}
+							},
+							SplineColor = { Red = 255, Green = 170, Blue = 48 },
+							CtrlWZoom = false,
+							Inputs = {
+								TimeCurve = Input {
+									SourceOp = "HS18_3ColorChange2",
+									Source = "Value",
+								}
+							},
+						},
+						HS18_3ColorChange2 = BezierSpline {
+							SplineColor = { Red = 255, Green = 180, Blue = 0 },
+							CtrlWZoom = false,
+							NameSet = true,
+							KeyFrames = {
+								[0] = { 0, Flags = { LockedY = true } }
+							}
+						},
+						HS18_3Length = LUTBezier {
+							KeyColorSplines = {
+								[0] = {
+									[0] = { 1, RH = { 0.165354330708661, 0.743279569892473 } },
+									[0.496062992125984] = { 0.229838709677419, LH = { 0.330708661417323, 0.486559139784946 }, RH = { 0.664041994750656, 0.486559139784946 }, Flags = { Linear = true } },
+									[1] = { 1, LH = { 0.832020997375328, 0.743279569892473 }, Flags = { Linear = true } }
+								}
+							},
+							SplineColor = { Red = 170, Green = 128, Blue = 255 },
+							CtrlWZoom = false,
+							Inputs = {
+								TimeCurve = Input {
+									SourceOp = "HS18_3ColorChange3",
+									Source = "Value",
+								}
+							},
+						},
+						HS18_3ColorChange3 = BezierSpline {
+							SplineColor = { Red = 0, Green = 255, Blue = 180 },
+							CtrlWZoom = false,
+							NameSet = true,
+							KeyFrames = {
+								[0] = { 0, Flags = { LockedY = true } }
+							}
+						},
+						HS18_2 = HotSpot {
+							CtrlWShown = false,
+							NameSet = true,
+							Inputs = {
+								PrimaryCenter = Input {
+									Value = { 0.25451491826187, 0.624431631821856 },
+									Expression = "HS18_1.PrimaryCenter",
+								},
+								PrimaryStrength = Input { Value = 0.079, },
+								HotSpotSize = Input { Value = 0.3, },
+								Aspect = Input { Value = 3.75, },
+								SecondaryStrength = Input { Value = 0.031, },
+								SecondarySize = Input { Value = 0.3, },
+								LensAberration = Input { Value = 3, },
+								Aberration = Input { Value = 4.120419, },
+								AmbientLight = Input { Disabled = true, },
+								ShowRed = Input { Value = 0, },
+								ShowGreen = Input { Value = 0, },
+								ShowBlue = Input { Value = 0, },
+								ShowAlpha = Input { Value = 0, },
+								Red = Input {
+									SourceOp = "HS18_2Red",
+									Source = "Value",
+								},
+								Green = Input {
+									SourceOp = "HS18_2Green",
+									Source = "Value",
+								},
+								Blue = Input {
+									SourceOp = "HS18_2Blue",
+									Source = "Value",
+								},
+								Alpha = Input {
+									SourceOp = "HS18_2Alpha",
+									Source = "Value",
+								},
+								Mix = Input {
+									SourceOp = "HS18_2Mix",
+									Source = "Value",
+								},
+								RadialOn = Input { Value = 1, },
+								RadialDensity = Input { Value = 0, },
+								Radial = Input {
+									SourceOp = "HS18_2Radial",
+									Source = "Value",
+								},
+								Length = Input {
+									SourceOp = "HS18_2Length",
+									Source = "Value",
+								},
+								RadialRepeat = Input { Value = 100, },
+								RadialAngle = Input { Value = -156.1905, },
+								LengthAngle = Input { Value = 363.8095, },
+								ElementStrength1 = Input { Value = 0.1884817, },
+								ElementSize1 = Input { Value = 0.104712, },
+								ElementPosition1 = Input { Value = 0.7670157, },
+								ElementStrength2 = Input { Value = 0.104712, },
+								ElementSize2 = Input { Value = 0.1780105, },
+								ElementType2 = Input { Value = 2, },
+								NGonSides2 = Input { Value = 5, },
+								LensRed2 = Input { Value = 1, },
+								ElementSize3 = Input { Value = 0.1989529, },
+								Input = Input {
+									SourceOp = "HS18_3",
+									Source = "Output",
+								}
+							},
+							ViewInfo = OperatorInfo { Pos = { 0.607025, 10.486 } },
+						},
+						HS18_2Red = LUTBezier {
+							KeyColorSplines = {
+								[0] = {
+									[0] = { 0, RH = { 0.0343098483447744, 0 } },
+									[0.107770859201486] = { 0.244033130111113, LH = { 0.0616965395623295, 0.247067429782884 }, RH = { 0.192490665013417, 0.238453768744932 } },
+									[0.306714783911818] = { 0.017070477785197, LH = { 0.216092299850621, 0.0154052633947296 }, RH = { 0.454459529452792, 0.0197853302739526 } },
+									[0.65748031496063] = { 0.979838709677419, LH = { 0.506310999799206, 0.979838709677419 } }
+								}
+							},
+							SplineColor = { Red = 255, Green = 52, Blue = 52 },
+							CtrlWZoom = false,
+							Inputs = {
+								TimeCurve = Input {
+									SourceOp = "HS18_2ColorChange",
+									Source = "Value",
+								}
+							},
+						},
+						HS18_2ColorChange = BezierSpline {
+							SplineColor = { Red = 0, Green = 255, Blue = 255 },
+							CtrlWZoom = false,
+							KeyFrames = {
+								[0] = { 0, Flags = { LockedY = true } }
+							}
+						},
+						HS18_2Green = LUTBezier {
+							KeyColorSplines = {
+								[0] = {
+									[0] = { 0, RH = { 0.0484306209620306, 0 } },
+									[0.152125697863753] = { 0.248065381551221, LH = { 0.0932762030962507, 0.251941010406408 }, RH = { 0.221236346897096, 0.243513987751623 } },
+									[0.306714783911818] = { 0.0170704803087808, LH = { 0.24674548496674, 0.0183846859798556 }, RH = { 0.593736687407759, 0.0107804982690957 } },
+									[0.988188976377953] = { 0.00806451612903213, LH = { 0.694494249113106, 0.00806451612903213 } }
+								}
+							},
+							SplineColor = { Red = 0, Green = 255, Blue = 0 },
+							CtrlWZoom = false,
+							Inputs = {
+								TimeCurve = Input {
+									SourceOp = "HS18_2ColorChange",
+									Source = "Value",
+								}
+							},
+						},
+						HS18_2Blue = LUTBezier {
+							KeyColorSplines = {
+								[0] = {
+									[0] = { 0, RH = { 0.0651188067447005, 0 } },
+									[0.204545052764426] = { 0.256129897552572, LH = { 0.128948728336163, 0.261108416016625 }, RH = { 0.255492352339699, 0.252774680568844 } },
+									[0.306714783911818] = { 0.0170704803087808, LH = { 0.268088144507086, 0.0172422128894337 }, RH = { 0.594817878809648, 0.0157895848246417 } },
+									[0.988188976377953] = { 0.00806451612903213, LH = { 0.694494249113106, 0.00806451612903213 } }
+								}
+							},
+							SplineColor = { Red = 68, Green = 68, Blue = 255 },
+							CtrlWZoom = false,
+							Inputs = {
+								TimeCurve = Input {
+									SourceOp = "HS18_2ColorChange",
+									Source = "Value",
+								}
+							},
+						},
+						HS18_2Alpha = LUTBezier {
+							KeyColorSplines = {
+								[0] = {
+									[0] = { 0, RH = { 0.106823965813735, 0 } },
+									[0.306714783911818] = { 0.0170704803087808, LH = { 0.206836784953794, 0.0159117274509557 }, RH = { 0.581188922157685, 0.0202548421843627 } },
+									[0.988188976377953] = { 0.00806451612903213, LH = { 0.694494249113106, 0.00806451612903213 } }
+								}
+							},
+							SplineColor = { Red = 255, Green = 255, Blue = 255 },
+							CtrlWZoom = false,
+							Inputs = {
+								TimeCurve = Input {
+									SourceOp = "HS18_2ColorChange",
+									Source = "Value",
+								}
+							},
+						},
+						HS18_2Mix = LUTBezier {
+							KeyColorSplines = {
+								[0] = {
+									[-0.122047244094488] = { 0.00403225806451607, RH = { -0.0776924053848107, 0.00403225806451607 } },
+									[0.0110172720345439] = { 0.00403225806451607, LH = { -0.0333375666751334, 0.00403225806451607 }, RH = { 0.0826136652273303, 0.00268817208306757 }, Flags = { Linear = true } },
+									[0.225806451612903] = { 1.20170566206279e-10, LH = { 0.154210058420117, 0.00134408610161907 }, RH = { 0.425231478399789, 4.70824224744376e-11 }, Flags = { Linear = true } },
+									[0.647506359455836] = { 0.995967741935484, LH = { 0.441101710025303, 0.435719899117899 }, RH = { 0.763660153615719, 0.997311827956989 } },
+									[0.995967741935484] = { 1, LH = { 0.879813947775601, 0.998655913978495 }, RH = { 1.01209677415349, 0.666666666666667 }, Flags = { Linear = true } },
+									[1.04435483858951] = { 0, LH = { 1.0282258063715, 0.333333333333333 }, Flags = { Linear = true } }
+								}
+							},
+							SplineColor = { Red = 0, Green = 255, Blue = 255 },
+							CtrlWZoom = false,
+							Inputs = {
+								TimeCurve = Input {
+									SourceOp = "HS18_2ColorChange1",
+									Source = "Value",
+								}
+							},
+						},
+						HS18_2ColorChange1 = BezierSpline {
+							SplineColor = { Red = 255, Green = 0, Blue = 255 },
+							CtrlWZoom = false,
+							NameSet = true,
+							KeyFrames = {
+								[0] = { 0, Flags = { LockedY = true } }
+							}
+						},
+						HS18_2Radial = LUTBezier {
+							KeyColorSplines = {
+								[0] = {
+									[0] = { 1, RH = { 0.0564516129032257, 0.666666666666667 } },
+									[0.169354838709677] = { 0, LH = { 0.112903225806451, 0.333333333333333 }, RH = { 0.282266372267591, 0.333333333333333 }, Flags = { Linear = true } },
+									[0.508089439383419] = { 1, LH = { 0.395177905825505, 0.666666666666667 }, RH = { 0.621722657160561, 0.667549544559812 }, Flags = { Linear = true } },
+									[0.848989092714844] = { 0.00264863367943496, LH = { 0.735355874937702, 0.335099089119623 }, RH = { 0.899326061809896, 0.335099089119623 }, Flags = { Linear = true } },
+									[1] = { 1, LH = { 0.949663030904948, 0.667549544559812 }, Flags = { Linear = true } }
+								}
+							},
+							SplineColor = { Red = 255, Green = 170, Blue = 48 },
+							CtrlWZoom = false,
+							Inputs = {
+								TimeCurve = Input {
+									SourceOp = "HS18_2ColorChange2",
+									Source = "Value",
+								}
+							},
+						},
+						HS18_2ColorChange2 = BezierSpline {
+							SplineColor = { Red = 255, Green = 180, Blue = 0 },
+							CtrlWZoom = false,
+							NameSet = true,
+							KeyFrames = {
+								[0] = { 0, Flags = { LockedY = true } }
+							}
+						},
+						HS18_2Length = LUTBezier {
+							KeyColorSplines = {
+								[0] = {
+									[0] = { 1, RH = { 0.057742782152231, 0.923387096774194 } },
+									[0.173228346456693] = { 0.770161290322581, LH = { 0.115485564304462, 0.846774193548387 }, RH = { 0.448818897637795, 0.846774193548387 }, Flags = { Linear = true } },
+									[1] = { 1, LH = { 0.724409448818898, 0.923387096774194 }, Flags = { Linear = true } }
+								}
+							},
+							SplineColor = { Red = 170, Green = 128, Blue = 255 },
+							CtrlWZoom = false,
+							Inputs = {
+								TimeCurve = Input {
+									SourceOp = "HS18_2ColorChange3",
+									Source = "Value",
+								}
+							},
+						},
+						HS18_2ColorChange3 = BezierSpline {
+							SplineColor = { Red = 0, Green = 255, Blue = 180 },
+							CtrlWZoom = false,
+							NameSet = true,
+							KeyFrames = {
+								[0] = { 0, Flags = { LockedY = true } }
+							}
+						},
+						HS18_1 = HotSpot {
+							CtrlWShown = false,
+							NameSet = true,
+							Inputs = {
+								PrimaryCenter = Input { Value = { 0.25451491826187, 0.624431631821856 }, },
+								PrimaryStrength = Input { Value = 0.409, },
+								HotSpotSize = Input { Value = 0.1789474, },
+								Aspect = Input { Value = 0.2, },
+								AspectAngle = Input { Value = 90, },
+								SecondaryStrength = Input { Value = 0.1675393, },
+								LensAberration = Input { Value = 3, },
+								Aberration = Input { Value = 3.010471, },
+								AmbientLight = Input { Disabled = true, },
+								ShowRed = Input { Value = 0, },
+								ShowGreen = Input { Value = 0, },
+								ShowBlue = Input { Value = 0, },
+								ShowAlpha = Input { Value = 0, },
+								Red = Input {
+									SourceOp = "HS18_1Red",
+									Source = "Value",
+								},
+								Green = Input {
+									SourceOp = "HS18_1Green",
+									Source = "Value",
+								},
+								Blue = Input {
+									SourceOp = "HS18_1Blue",
+									Source = "Value",
+								},
+								Alpha = Input {
+									SourceOp = "HS18_1Alpha",
+									Source = "Value",
+								},
+								Mix = Input {
+									SourceOp = "HS18_1Mix",
+									Source = "Value",
+								},
+								RadialOn = Input { Value = 1, },
+								RadialLength = Input { Value = 0, },
+								Radial = Input {
+									SourceOp = "HS18_1Radial",
+									Source = "Value",
+								},
+								Length = Input {
+									SourceOp = "HS18_1Length",
+									Source = "Value",
+								},
+								RadialRepeat = Input { Value = 4, },
+								RadialAngle = Input { Value = 180, },
+								ElementStrength2 = Input { Value = 0.378, },
+								Element3Reflection1 = Input { Value = 1, },
+								Element3Reflection2 = Input { Value = 1, },
+								Element3Reflection3 = Input { Value = 1, },
+								ElementStrength3 = Input { Value = 0.346, },
+								ElementSize3 = Input { Value = 0.0942408, },
+								ElementPosition3 = Input { Value = 2, },
+								Input = Input {
+									SourceOp = "HS18_2",
+									Source = "Output",
+								}
+							},
+							ViewInfo = OperatorInfo { Pos = { 106.945, 10.15 } },
+						},
+						HS18_1Red = LUTBezier {
+							KeyColorSplines = {
+								[0] = {
+									[0] = { 0, RH = { 0.0837955769172059, 0.00161145340524099 } },
+									[0.411971862449681] = { 0.541434169389231, LH = { 0.223887576879881, 0.302186992104005 }, RH = { 0.441759885793103, 0.579325163207401 } },
+									[0.508262317089173] = { 0.560868942995971, LH = { 0.473898636006158, 0.520115424347992 }, RH = { 0.601081515460202, 0.670947631089923 } },
+									[0.836045528830026] = { 0.776863219126338, LH = { 0.711290975289627, 0.764973887224304 }, RH = { 0.914842112068123, 0.784372674326712 } },
+									[0.979838709557249] = { 0.991935483179986, LH = { 0.930823703945189, 0.991935483179986 } }
+								}
+							},
+							SplineColor = { Red = 255, Green = 52, Blue = 52 },
+							CtrlWZoom = false,
+							Inputs = {
+								TimeCurve = Input {
+									SourceOp = "HS18_1ColorChange",
+									Source = "Value",
+								}
+							},
+						},
+						HS18_1ColorChange = BezierSpline {
+							SplineColor = { Red = 255, Green = 0, Blue = 180 },
+							CtrlWZoom = false,
+							KeyFrames = {
+								[0] = { 0, Flags = { LockedY = true } }
+							}
+						},
+						HS18_1Green = LUTBezier {
+							KeyColorSplines = {
+								[0] = {
+									[0] = { 0, RH = { 0.0669603893008527, 0.00128769979663408 } },
+									[0.345646528808331] = { 0.492681007126312, LH = { 0.184537811958099, 0.332603587923102 }, RH = { 0.408291259203771, 0.554924732757276 } },
+									[0.557202864656149] = { 0.442496654079692, LH = { 0.479019494723105, 0.393909437161234 }, RH = { 0.639968225343428, 0.493931358627362 } },
+									[0.827090430053747] = { 0.591190267444378, LH = { 0.730125253754156, 0.580070274688264 }, RH = { 0.902010890900562, 0.599782166244461 } },
+									[1] = { 0.903225807037445, LH = { 0.941239116348497, 0.903225807037445 } }
+								}
+							},
+							SplineColor = { Red = 0, Green = 255, Blue = 0 },
+							CtrlWZoom = false,
+							Inputs = {
+								TimeCurve = Input {
+									SourceOp = "HS18_1ColorChange",
+									Source = "Value",
+								}
+							},
+						},
+						HS18_1Blue = LUTBezier {
+							KeyColorSplines = {
+								[0] = {
+									[0] = { 0, RH = { 0.0361457706059726, 0.000695110974480255 } },
+									[0.201977844646429] = { 0.446461834598826, LH = { 0.105670394412301, 0.343988242800711 }, RH = { 0.293036813477482, 0.543350907862057 } },
+									[0.486072838530392] = { 0.401692512158327, LH = { 0.387779126273674, 0.318455313289718 }, RH = { 0.559296671034595, 0.463700005497832 } },
+									[0.721395086269295] = { 0.0917474827763346, LH = { 0.637871451425885, 0.00886840156722729 }, RH = { 0.803697777127849, 0.173415042050812 } },
+									[0.980314960629921] = { 0.806451612903226, LH = { 0.890097632525002, 0.806451612903226 } }
+								}
+							},
+							SplineColor = { Red = 68, Green = 68, Blue = 255 },
+							CtrlWZoom = false,
+							Inputs = {
+								TimeCurve = Input {
+									SourceOp = "HS18_1ColorChange",
+									Source = "Value",
+								}
+							},
+						},
+						HS18_1Alpha = LUTBezier {
+							KeyColorSplines = {
+								[0] = {
+									[0] = { 0, RH = { 0.138200348152401, 0.00265769900785716 } },
+									[0.995967741815313] = { 0.608870967621765, LH = { 0.495306538607479, 0.608870967621765 } }
+								}
+							},
+							SplineColor = { Red = 255, Green = 255, Blue = 255 },
+							CtrlWZoom = false,
+							Inputs = {
+								TimeCurve = Input {
+									SourceOp = "HS18_1ColorChange",
+									Source = "Value",
+								}
+							},
+						},
+						HS18_1Mix = LUTBezier {
+							KeyColorSplines = {
+								[0] = {
+									[0.00246439585621551] = { 0.0060890849986248, RH = { 0.190820392178953, 0.00674756204209396 }, Flags = { Linear = true } },
+									[0.567532384824428] = { 0.00806451612903229, LH = { 0.37917638850169, 0.00740603908556313 }, RH = { 0.690182880205533, 0.334677419434953 }, Flags = { Linear = true } },
+									[0.935483870967742] = { 0.987903226046793, LH = { 0.812833375586637, 0.661290322740873 }, Flags = { Linear = true } }
+								}
+							},
+							SplineColor = { Red = 0, Green = 255, Blue = 255 },
+							CtrlWZoom = false,
+							Inputs = {
+								TimeCurve = Input {
+									SourceOp = "HS18_1ColorChange1",
+									Source = "Value",
+								}
+							},
+						},
+						HS18_1ColorChange1 = BezierSpline {
+							SplineColor = { Red = 255, Green = 255, Blue = 64 },
+							CtrlWZoom = false,
+							NameSet = true,
+							KeyFrames = {
+								[0] = { 0, Flags = { LockedY = true } }
+							}
+						},
+						HS18_1Radial = LUTBezier {
+							KeyColorSplines = {
+								[0] = {
+									[0] = { 0, RH = { 0.163333333333333, 0 } },
+									[0.49] = { 0, LH = { 0.326666666666667, 0 }, RH = { 0.493333333333333, 0.333333333333333 }, Flags = { Linear = true } },
+									[0.5] = { 1, LH = { 0.496666666666667, 0.666666666666667 }, RH = { 0.503333333333333, 0.666666666666667 }, Flags = { Linear = true } },
+									[0.51] = { 0, LH = { 0.506666666666667, 0.333333333333333 }, RH = { 0.673333333333333, 0 }, Flags = { Linear = true } },
+									[1] = { 0, LH = { 0.836666666666667, 0 }, Flags = { Linear = true } }
+								}
+							},
+							SplineColor = { Red = 255, Green = 170, Blue = 48 },
+							CtrlWZoom = false,
+							Inputs = {
+								TimeCurve = Input {
+									SourceOp = "HS18_1ColorChange2",
+									Source = "Value",
+								}
+							},
+						},
+						HS18_1ColorChange2 = BezierSpline {
+							SplineColor = { Red = 0, Green = 127, Blue = 255 },
+							CtrlWZoom = false,
+							NameSet = true,
+							KeyFrames = {
+								[0] = { 0, Flags = { LockedY = true } }
+							}
+						},
+						HS18_1Length = LUTBezier {
+							KeyColorSplines = {
+								[0] = {
+									[0] = { 1, RH = { 0.333333333333333, 1 } },
+									[1] = { 1, LH = { 0.666666666666667, 1 }, Flags = { Linear = true } }
+								}
+							},
+							SplineColor = { Red = 170, Green = 128, Blue = 255 },
+							CtrlWZoom = false,
+							Inputs = {
+								TimeCurve = Input {
+									SourceOp = "HS18_1ColorChange3",
+									Source = "Value",
+								}
+							},
+						},
+						HS18_1ColorChange3 = BezierSpline {
+							SplineColor = { Red = 255, Green = 127, Blue = 0 },
+							CtrlWZoom = false,
+							NameSet = true,
+							KeyFrames = {
+								[0] = { 0, Flags = { LockedY = true } }
+							}
+						}
+					},
+				},
+				Merge2 = Merge {
+					CtrlWShown = false,
+					Inputs = {
+						Blend = Input { Value = 0.528, },
+						Background = Input {
+							SourceOp = "Merge1_1",
+							Source = "Output",
+						},
+						Foreground = Input {
+							SourceOp = "DaySky1",
+							Source = "Output",
+						},
+						Center = Input { Value = { 0.5, 0.25 }, },
+						FlipVert = Input { Value = 1, },
+						FilterMethod = Input { Value = 0, },
+						PerformDepthMerge = Input { Value = 0, }
+					},
+					ViewInfo = OperatorInfo { Pos = { 567.333, 51 } },
+				},
+				Merge1_1 = Merge {
+					CtrlWShown = false,
+					Inputs = {
+						Background = Input {
+							SourceOp = "CornerPositioner1",
+							Source = "Output",
+						},
+						Foreground = Input {
+							SourceOp = "DaySky1",
+							Source = "Output",
+						},
+						Center = Input { Value = { 0.5, 0.75 }, },
+						FilterMethod = Input { Value = 0, },
+						PerformDepthMerge = Input { Value = 0, }
+					},
+					ViewInfo = OperatorInfo { Pos = { 463.333, 51 } },
+				},
+				FastNoise1_1 = FastNoise {
+					CtrlWShown = false,
+					Inputs = {
+						GlobalOut = Input { Value = 100, },
+						Width = Input { Value = 1920, },
+						Height = Input { Value = 1080, },
+						["Gamut.SLogVersion"] = Input { Value = FuID { "SLog2" }, },
+						Detail = Input { Value = 3, },
+						XScale = Input { Value = 14.17, },
+						Type = Input { Value = 1, },
+						GradientType = Input { Value = 1, },
+						Start = Input { Value = { 0.983556012332991, 1.47074954296161 }, },
+						End = Input { Value = { 0.383350462487153, -0.361060329067642 }, }
+					},
+					ViewInfo = OperatorInfo { Pos = { 232, 51.6061 } },
+				},
+				CornerPositioner1 = CornerPositioner {
+					CtrlWShown = false,
+					Inputs = {
+						TopLeft = Input { Value = { 0, 0.5 }, },
+						TopRight = Input { Value = { 1, 0.5 }, },
+						BottomLeft = Input { Value = { -1, 0 }, },
+						BottomRight = Input { Value = { 2, 0 }, },
+						Input = Input {
+							SourceOp = "FastNoise1_1",
+							Source = "Output",
+						}
+					},
+					ViewInfo = OperatorInfo { Pos = { 351.333, 50.3939 } },
+				},
+				DaySky1 = DaySky {
+					CtrlWShown = false,
+					Inputs = {
+						GlobalOut = Input { Value = 100, },
+						Width = Input { Value = 1920, },
+						Height = Input { Value = 540, },
+						["Gamut.SLogVersion"] = Input { Value = FuID { "SLog2" }, },
+						Longitude = Input { Value = 72.3, },
+						Month = Input { Value = FuID { "June" }, },
+						Time = Input { Value = 7.94, }
+					},
+					ViewInfo = OperatorInfo { Pos = { 232, 13.4242 } },
+				}
+			},
+		},
+		Text1CharacterAngleY = BezierSpline {
+			SplineColor = { Red = 28, Green = 216, Blue = 243 },
+			CtrlWZoom = false,
+			KeyFrames = {
+				[0] = { -30, RH = { 33.3333333333333, -10 }, Flags = { Linear = true } },
+				[100] = { 30, LH = { 66.6666666666667, 10 }, Flags = { Linear = true } }
+			}
+		},
+		Blur1 = Blur {
+			Inputs = {
+				Filter = Input { Value = FuID { "Fast Gaussian" }, }
+			},
+			ViewInfo = OperatorInfo { Pos = { 715, -115.5 } },
+		},
+		Background1 = Background {
+			Inputs = {
+				GlobalOut = Input { Value = 100, },
+				Width = Input { Value = 1920, },
+				Height = Input { Value = 1080, },
+				["Gamut.SLogVersion"] = Input { Value = FuID { "SLog2" }, }
+			},
+			ViewInfo = OperatorInfo { Pos = { 715, 115.5 } },
+		},
+		Ex6_Text1 = Fuse.TextAnnotate {
+			CtrlWZoom = false,
+			Inputs = {
+				StyledText = Input { Value = "Slate_001", },
+				Font = Input { Value = "Open Sans", },
+				Style = Input { Value = "Regular", },
+				Position = Input { Value = { 0.114210985178727, 0.109302325581395 }, },
+				Input = Input {
+					SourceOp = "LightWrapMerge1",
+					Source = "Output",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { 275, 115.5 } },
+			Version = 1
+		},
+		Ex3_InternalProcess1 = Fuse.ExampleImageProcess {
+			Inputs = {
+				DropList = Input { Value = 2, },
+				Input = Input {
+					SourceOp = "LightWrapMerge1",
+					Source = "Output",
+				},
+				Foreground = Input {
+					SourceOp = "Text1",
+					Source = "Output",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { 275, 16.5 } },
+			Version = 1
+		},
+		Arrow1 = Fuse.Arrow {
+			Inputs = {
+				Input = Input {
+					SourceOp = "GPUSampleFuse1",
+					Source = "Output",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { 275, 247.5 } },
+		},
+		Transform1 = Transform {
+			ViewInfo = OperatorInfo { Pos = { 715, 214.5 } },
+		},
+		Ex4_MultiPixel1 = Fuse.Ex4MultiPxl {
+			Inputs = {
+				Input1 = Input {
+					SourceOp = "LightWrapMerge1",
+					Source = "Output",
+				},
+				Input2 = Input {
+					SourceOp = "Text1",
+					Source = "Output",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { 275, 49.5 } },
+		},
+		CustomTool1LUTIn3 = LUTBezier {
+			KeyColorSplines = {
+				[0] = {
+					[0] = { 0, RH = { 0.333333333333333, 0.333333333333333 }, Flags = { Linear = true } },
+					[1] = { 1, LH = { 0.666666666666667, 0.666666666666667 }, Flags = { Linear = true } }
+				}
+			},
+			SplineColor = { Red = 0, Green = 0, Blue = 204 },
+			CtrlWZoom = false,
+		},
+		Note2 = Note {
+			CtrlWZoom = false,
+			Inputs = {
+				Comments = Input { Value = "This list of tools represents the core Image processing functions that can be easily accessed in Fuses.\n\nColor manipulation like brightness & contrast, channel operations, and color space conversion can be done in Fuses.\n\n2D transforms, blurs, glows and merges as well as metadata handling are also possible.", }
+			},
+			ViewInfo = StickyNoteInfo {
+				Pos = { 825, -82.5 },
+				Flags = {
+					Expanded = true
+				},
+				Size = { 196, 181.364 }
+			},
+		},
+		Note1 = Note {
+			Inputs = {
+				Comments = Input { Value = "The Examples 1-7 demonstrate features and capabilities of the Fuse plugin system. These are not production tools per se, and act as templates to be a starting point  for development.\n\n\n\nView the tool to see the result and access the controls in the Tool Control Inspector.\n\n\n\nPress Edit to view and edit the code, press Reload and the new code will be loaded and compiled and executed.\n\n\n\nLightWrapMerge and BlurMerge are examples of tools that can be used in production.\n\n\n", }
+			},
+			ViewInfo = StickyNoteInfo {
+				Pos = { 385, -49.5 },
+				Flags = {
+					Expanded = true
+				},
+				Size = { 178.667, 216.515 }
+			},
+		}
+	},
+	Frames = {
+		{
+			FrameTypeID = "ChildFrame",
+			Mode = 3,
+			LayoutPreset = 0,
+			PresetName = "Default",
+			Left = 0,
+			Top = 27,
+			Width = 2048,
+			Height = 1144,
+			ZoneInfo = {
+				AuxRight = { Expanded = true },
+				["!Left"] = {
+				},
+				AuxLeft = { Expanded = true },
+				Right = { Expanded = true, },
+				Left = { Expanded = false, },
+				["!Right"] = {
+				}
+			},
+			ViewInfo = {
+				Viewer1 = { Show = true, RatioY = 0.01, RatioX = 1, },
+				InnerLeft = {
+				},
+				MainSplit = {
+					RatioX = 100,
+					RatioY = 1.46723646723647,
+				},
+				CenterSplit = {
+					RatioX = 0.911902530459232,
+					RatioY = 100,
+				},
+				Viewer2 = { Show = false, RatioX = 1, RatioY = 0.01, MRU = 0, Adjust = true, },
+				Comments = { Show = false },
+				Time = { Show = true, RatioX = 1, PixelY = 83, },
+				InnerColumns = {
+					RatioX = 100,
+					RatioY = 1.53276353276354,
+				},
+				Keyframes = { Show = false, },
+				LayoutStrip = { Show = true, RatioX = 100, },
+				Inspector = { Show = true, RatioY = 1, RatioX = 100.212202394221, },
+				InnerRight = {
+				},
+				MediaPool = { Show = false, },
+				OuterColumns = {
+					RatioX = 100,
+					RatioY = 1,
+				},
+				Effects = { Show = false, },
+				Clips = { Show = false, },
+				Metadata = { Show = false, },
+				ActionStrip = { Show = true, RatioX = 100, },
+				ViewerSplit = {
+					RatioX = 1,
+					RatioY = 1,
+				},
+				Nodes = { Show = true, RatioY = 100, RatioX = 1, },
+				OuterRight = {
+					PixelX = 514,
+					RatioY = 100,
+				},
+				OuterLeft = {
+				},
+				Spline = { Show = false, }
+			},
+			Views = ordered() {
+				Effects = MultiView {
+					Active = "EffectView",
+					ViewList = ordered() {
+						EffectView = "EffectView"
+					},
+				},
+				Nodes = MultiView {
+					Active = "FlowView",
+					ViewList = ordered() {
+						FlowView = "FlowView"
+					},
+					FlowView = FlowView {
+						Flags = {
+							Navigator = true,
+							AutoHideNavigator = true,
+							GridSnap = true,
+							AutoSnap = true,
+							RemoveRouters = true
+						},
+						NavigatorSize = { 200, 140 },
+						Direction = "Horizontal",
+						PipeStyle = "Direct",
+						RootScale = 1,
+						RootOffset = { 75.3333, 62.3335 }
+					}
+				},
+				Keyframes = MultiView {
+					Active = "TimelineView",
+					ViewList = ordered() {
+						TimelineView = "TimelineView"
+					},
+					TimelineView = TimelineView {
+						TreeControlState = {
+						},
+						DisplayMode = "All Tools",
+						ShowCurrentTimeTools = false,
+						Filter = "Show All",
+						ShowSelectedTools = false,
+						ShowAnimatedToolsOnly = false,
+						ShowEditBoxes = false,
+						KeyFrameView = {
+							Position = { Left = 232, Bottom = 320 },
+							ScaleX = 0.214424951267057,
+							OffsetX = -5.14619883040936,
+							OffsetY = 0,
+							AutoScaling = "scroll",
+							AutoSnapTo = "frame",
+							AutoSnapToGuidelines = false,
+							GuidelinesGrabEnabled = true,
+							GuidelinesSnapTo = "none"
+						},
+						Spreadsheet = { LeftPos = 232, Visible = false }
+					}
+				},
+				Spline = MultiView {
+					Active = "SplineView",
+					ViewList = ordered() {
+						SplineView = "SplineEditorView"
+					},
+					SplineView = SplineEditorView {
+						LeftPos = 264,
+						ScaleX = 0.2,
+						ScaleY = 0.00338983050847458,
+						OffsetX = -3.4,
+						OffsetY = 0,
+						AutoScaling = "scroll",
+						AutoSnapTo = "frame",
+						AutoSnapToGuidelines = false,
+						GuidelinesSnapTo = "frame",
+						ShowKeyMarkers = false,
+						IndependentHandles = false,
+						ShowNonSplineModifiers = false,
+						GuidelinesGrabEnabled = true,
+						ShowOneToolOnly = false,
+						ShowSelectedTools = false,
+						ShowAllInputs = false,
+						Filter = "Show All"
+					}
+				},
+				Inspector = MultiView {
+					Active = "Tools",
+					ViewList = ordered() {
+						Tools = "ControlView",
+						Modifiers = "ModifierView"
+					},
+				},
+				Viewer1 = MultiView {
+					Active = "LeftView",
+					ViewList = ordered() {
+						LeftView = "PreviewContainer"
+					},
+				},
+				Viewer2 = MultiView {
+					Active = "RightView",
+					ViewList = ordered() {
+						RightView = "PreviewContainer"
+					},
+				},
+				Time = "TimeView",
+				ActionStrip = "ActionStripView",
+				LayoutStrip = "LayoutStripView"
+			},
+			Layout = {
+				{ ID = "LayoutStrip", FixedY = 36, Resolve = false, Flat = true },
+				{
+					{
+						{ ID = "MediaPool", Fusion = false, RatioX = 1 },
+						{ ID = "Effects", RatioX = 1 },
+						Zone = "Left",
+						Rows = 2,
+						PaneID = "OuterLeft",
+						PixelX = 420
+					},
+					{
+						{
+							{
+								{ ID = "MediaPool", Fusion = false, RatioX = 1 },
+								{ ID = "Effects", RatioX = 1 },
+								PaneID = "InnerLeft",
+								MaxViews = 1,
+								PixelX = 420,
+								Rows = 2,
+								Zone = "!Left"
+							},
+							{
+								{
+									{ ID = "Viewer1", RatioY = 0.01, RatioX = 1 },
+									{ ID = "Viewer2", RatioX = 1 },
+									RatioY = 1,
+									Columns = 2,
+									PaneID = "ViewerSplit"
+								},
+								{ ID = "Time", FixedY = 83, Flat = true },
+								RatioX = 1,
+								Rows = 2
+							},
+							{
+								{ ID = "Inspector", RatioY = 1 },
+								{ ID = "Metadata", RatioY = 1, Fusion = false },
+								PaneID = "InnerRight",
+								MaxViews = 1,
+								PixelX = 420,
+								Rows = 2,
+								Zone = "!Right"
+							},
+							RatioY = 2,
+							Columns = 3,
+							PaneID = "InnerColumns"
+						},
+						{ ID = "ActionStrip", FixedY = 50, Flat = true },
+						{
+							{ ID = "Nodes", RatioX = 1 },
+							{ ID = "Spline", RatioX = 1 },
+							{ ID = "Keyframes", RatioX = 1 },
+							RatioY = 1,
+							Columns = 3,
+							PaneID = "MainSplit"
+						},
+						{ Fusion = false, ID = "Clips", LARGE_FixedY = 160, MEDIUM_FixedY = 138, SMALL_FixedY = 110 },
+						RatioX = 1,
+						Rows = 4,
+						PaneID = "CenterSplit"
+					},
+					{
+						{ ID = "Inspector", RatioY = 1 },
+						{ ID = "Metadata", RatioY = 1, Fusion = false },
+						Zone = "Right",
+						Rows = 2,
+						PaneID = "OuterRight",
+						PixelX = 420
+					},
+					RatioY = 1,
+					Columns = 3,
+					PaneID = "OuterColumns"
+				},
+				RatioX = 1,
+				Rows = 2,
+				RatioY = 1
+			},
+			TopBar = {
+				Left = { "Left", "MediaPool", "Effects", "Clips", "Nodes", "Console" },
+				Right = { "Spline", "Keyframes", "Metadata", "Inspector", "Right" }
+			}
+		}
+	},
+	Prefs = {
+		Comp = {
+			Views = {
+				RightView = {
+					SideB = {
+						PrevCtrlInactiveColor = 4278255360,
+						PickW = 1,
+						PickH = 1,
+						PrevCtrlActiveColor = 4278190335,
+						Viewer = {
+							EnableLUTs = false,
+							LUTPlugin = "FusionViewLUT",
+							FitMarginY = 0,
+							FitMarginX = 0,
+							FitMarginType = 0,
+							FarZ = -1000,
+							NearZ = 0
+						}
+					},
+				},
+				LeftView = {
+					Viewer = {
+						ScaleMode = 1,
+						CheckerUnderlay = false,
+					},
+					SideB = {
+						PrevCtrlInactiveColor = 4278255360,
+						PickW = 1,
+						PickH = 1,
+						PrevCtrlActiveColor = 4278190335,
+						Viewer = {
+							EnableLUTs = false,
+							LUTPlugin = "FusionViewLUT",
+							FitMarginY = 0,
+							FitMarginX = 0,
+							FitMarginType = 0,
+							FarZ = -1000,
+							NearZ = 0
+						}
+					},
+				},
+				View1 = {
+					PrevCtrlInactiveColor = 4278255360,
+					PickW = 1,
+					PickH = 1,
+					PrevCtrlActiveColor = 4278190335,
+					SideB = {
+						PrevCtrlInactiveColor = 4278255360,
+						PickW = 1,
+						PickH = 1,
+						PrevCtrlActiveColor = 4278190335,
+						Viewer = {
+							EnableLUTs = false,
+							LUTPlugin = "FusionViewLUT",
+							FitMarginY = 0,
+							FitMarginX = 0,
+							FitMarginType = 0,
+							FarZ = -1000,
+							NearZ = 0
+						}
+					}
+				},
+				Defaults = {
+					OpToolbar = {
+						Size = 1
+					},
+				},
+			},
+			Preview = {
+				HiQ = false,
+			},
+			Paths = {
+				Map = {
+				},
+			},
+			FrameFormat = {
+				GuideRatio = 1.77777777777778,
+			},
+			LastFile = "C:\\Shots\\Rony\\image.png",
+			Unsorted = {
+				GlobalEnd = 100
+			},
+			Tweaks = {
+				OpenCL = {
+					Enable = 2,
+					Caching = 2
+				}
+			},
+			ActionStrip = {
+				ToolbarName = "Fu"
+			},
+			QuickTime = {
+			},
+		}
+	},
+}
+

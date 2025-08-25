@@ -1,0 +1,16 @@
+DEFINE_UI_PARAMS(useAlpha, Dissolve Alpha Channel, DCTLUI_CHECK_BOX, 1)
+
+__DEVICE__ float4 transition(int p_Width, int p_Height, int p_X, int p_Y, __TEXTURE__ p_FromTexR, __TEXTURE__ p_FromTexG, __TEXTURE__ p_FromTexB, __TEXTURE__ p_FromTexA, __TEXTURE__ p_ToTexR, __TEXTURE__ p_ToTexG, __TEXTURE__ p_ToTexB, __TEXTURE__ p_ToTexA)
+{
+    const float alphaWeightFrom = _tex2D(p_FromTexA, p_X, p_Y) * (1.0f - TRANSITION_PROGRESS);
+    const float alphaWeightTo   = _tex2D(p_ToTexA, p_X, p_Y) * TRANSITION_PROGRESS;
+
+    // Dissolve RGB channels
+    const float r = alphaWeightFrom * _tex2D(p_FromTexR, p_X, p_Y) + alphaWeightTo * _tex2D(p_ToTexR, p_X, p_Y);
+    const float g = alphaWeightFrom * _tex2D(p_FromTexG, p_X, p_Y) + alphaWeightTo * _tex2D(p_ToTexG, p_X, p_Y);
+    const float b = alphaWeightFrom * _tex2D(p_FromTexB, p_X, p_Y) + alphaWeightTo * _tex2D(p_ToTexB, p_X, p_Y);
+
+    // Dissolve alpha channel
+    const float a = useAlpha ? (alphaWeightFrom + alphaWeightTo) : 1.0f;
+    return make_float4(r, g, b, a);
+}
