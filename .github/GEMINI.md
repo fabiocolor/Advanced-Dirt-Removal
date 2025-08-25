@@ -23,7 +23,8 @@ The script places the file in `Fusion/Templates/Edit/Effects` inside the Resolve
 ## Functionality Notes
 
 *   The effect works on the Edit, Color, and Fusion pages.
-*   However, for full functionality, specifically the use of the "Mask Paint" input for a history brush effect, the user must be on the **Fusion page**. The other pages do not support this input.
+*   However, for full functionality, specifically the use of the "Mask Paint" input for the **Recovery Brush**, the user must be on the **Fusion page**. The other pages do not support this input.
+*   A **Magic Mask** can also be used with or instead of the paint mask for feature recovery.
 
 ## For Developers
 
