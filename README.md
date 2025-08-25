@@ -4,7 +4,7 @@ This project provides "Advanced Dirt Removal", a Fusion macro for DaVinci Resolv
 
 ## Installation
 
-1.  **Download the `Advanced Dirt Removal.setting` file** from the latest [release](https://github.com/octimot/Advanced-Dirt-Removal-Recovery/releases) or the root of this repository.
+1.  **Download the `Advanced Dirt Removal.setting` file** from the latest [release](https://github.com/fabiocolor/Dirt-Removal-Recovery/releases) or the root of this repository.
 2.  **Copy the `.setting` file** to the DaVinci Resolve Effects folder on your system:
     *   **macOS:** `~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Templates/Edit/Effects`
     *   **Windows:** `%APPDATA%\Blackmagic Design\DaVinci Resolve\Support\Fusion\Templates\Edit\Effects`
