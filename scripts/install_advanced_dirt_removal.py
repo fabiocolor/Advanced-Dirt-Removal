@@ -7,18 +7,32 @@ import platform
 import argparse
 from pathlib import Path
 
-def get_fusion_macros_path():
-    """Get the Fusion Macros directory path for the current OS"""
+def get_fusion_templates_path():
+    """Get the Fusion Templates directory path for the current OS."""
     system = platform.system()
-    
+    base_path = ""
+
     if system == "Darwin":  # macOS
-        return Path.home() / "Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Macros"
+        base_path = Path.home() / "Library/Application Support/Blackmagic Design/DaVinci Resolve"
     elif system == "Windows":
-        return Path(os.environ["APPDATA"]) / "Blackmagic Design/DaVinci Resolve/Support/Fusion/Macros"
+        base_path = Path(os.environ.get("APPDATA")) / "Blackmagic Design/DaVinci Resolve/Support"
     elif system == "Linux":
-        return Path.home() / ".local/share/DaVinciResolve/Fusion/Macros"
+        # Standard path for user-installed Resolve
+        user_path = Path.home() / ".local/share/DaVinciResolve"
+        # Path for Resolve installed in /opt (common for some packages)
+        opt_path = Path("/opt/resolve")
+        if user_path.exists():
+            base_path = user_path
+        elif opt_path.exists():
+            base_path = opt_path
+        else:
+            # Default to the user path if neither exists, allowing mkdir to create it later
+            base_path = user_path
     else:
         raise OSError(f"Unsupported operating system: {system}")
+
+    return base_path / "Fusion/Templates/Edit/Effects"
+
 
 def cleanup_old_macros(target_dir, dry_run=False):
     """Removes old, deprecated, or test macros."""
@@ -56,7 +70,7 @@ def main():
     
     # Get target directory
     try:
-        target_dir = get_fusion_macros_path()
+        target_dir = get_fusion_templates_path()
     except OSError as e:
         print(f"Error: {e}")
         return 1
@@ -64,77 +78,64 @@ def main():
     # Get script directory and project root
     script_dir = Path(__file__).parent
     project_root = script_dir.parent
-    fusion_dir = project_root / "Fusion"
-    
+    source_file_path = project_root / "Advanced Dirt Removal.setting"
+
     print(f"Advanced Dirt Removal Installer")
-    print(f"================================")
+    print(f"=================================")
     print(f"Target directory: {target_dir}")
-    print(f"Source directory: {fusion_dir}")
+    print(f"Source file: {source_file_path}")
     print()
-    
+
     if args.dry_run:
         print("DRY RUN - No files will be copied or removed.")
         print()
 
-    # 1. Cleanup
-    cleanup_old_macros(target_dir, args.dry_run)
+    # 1. Cleanup (Optional, can be removed if not needed for templates)
+    # cleanup_old_macros(target_dir, args.dry_run)
 
     # 2. Installation
-    files_to_install = [
-        ("Advanced Dirt Removal.setting", "Advanced Dirt Removal - Professional macro with enhanced UI"),
-    ]
-    
-    print("Installing new macros...")
+    print("Installing new setting...")
     print("-------------------------")
 
-    # Check if source files exist
-    missing_files = []
-    for filename, description in files_to_install:
-        source_file = fusion_dir / filename
-        if not source_file.exists():
-            missing_files.append(f"{filename} ({description})")
-    
-    if missing_files:
-        print("Error: Missing source files:")
-        for file in missing_files:
-            print(f"  - {file}")
+    # Check if source file exists
+    if not source_file_path.exists():
+        print(f"Error: Source file not found at {source_file_path}")
         return 1
-    
+
     # Create target directory if it doesn't exist
     if not args.dry_run:
         target_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Install files
+
+    # Install file
     installed_count = 0
-    for filename, description in files_to_install:
-        source_file = fusion_dir / filename
-        target_file = target_dir / filename
-        
-        if args.dry_run:
-            print(f"Would install: {description}")
-            print(f"  From: {source_file}")
-            print(f"  To:   {target_file}")
-        else:
-            try:
-                shutil.copy2(source_file, target_file)
-                print(f"✓ Installed: {description}")
-                installed_count += 1
-            except Exception as e:
-                print(f"✗ Failed to install {description}: {e}")
-    print()
-    
+    filename = "Advanced Dirt Removal.setting"
+    description = "Advanced Dirt Removal - Professional macro with enhanced UI"
+    target_file = target_dir / filename
+
     if args.dry_run:
-        print(f"Dry run complete. Would remove up to 6 old files and install {len(files_to_install)} file.")
+        print(f"Would install: {description}")
+        print(f"  From: {source_file_path}")
+        print(f"  To:   {target_file}")
     else:
-        print(f"Installation complete! Installed {installed_count}/{len(files_to_install)} files.")
-        print()
-        print("Next steps:")
-        print("1. Restart DaVinci Resolve/Fusion to see the new macro.")
-        print("2. The new tool is called 'Advanced Dirt Removal'.")
-        print("3. Connect your source to the main input (auto-connects).")
-        print("4. Optionally connect Paint Mask or Magic Mask to the second input.")
-        print("5. Choose Recovery Method: Paint Brush (manual) or Motion Mask (auto).")
-        print("6. Use View Mode to switch between RGB (final) and Difference (diagnostic).")
+        try:
+            shutil.copy2(source_file_path, target_file)
+            print(f"✓ Installed: {description}")
+            installed_count = 1
+        except Exception as e:
+            print(f"✗ Failed to install {description}: {e}")
+    print()
+
+    if args.dry_run:
+        print(f"Dry run complete. Would install 1 file.")
+    else:
+        if installed_count > 0:
+            print(f"Installation complete! Installed {installed_count}/1 file.")
+            print()
+            print("Next steps:")
+            print("1. Restart DaVinci Resolve to see the new effect.")
+            print("2. Find the effect in the Effects panel under Templates > Edit > Effects.")
+        else:
+            print("Installation failed.")
     
     return 0
 

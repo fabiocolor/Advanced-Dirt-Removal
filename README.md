@@ -1,45 +1,39 @@
 # Advanced Dirt Removal for DaVinci Resolve
 
-Professional dirt removal macro for DaVinci Resolve that combines automatic detection with dual recovery modes.
-
-## Features
-
-- **ResolveFX VideoRestoration** - Professional dirt removal engine
-- **Pre-processing Chain** - Deflicker + NoiseReduction for enhanced quality
-- **Motion Analysis** - Optical flow for automatic motion masking
-- **Dual Recovery Modes** - Manual Paint Brush OR automatic Motion Mask
-- **Diagnostic Views** - RGB and Difference modes for verification
-- **Magic Mask Compatible** - External mask input for advanced workflows
+This project provides a powerful "Advanced Dirt Removal" Fusion composition for DaVinci Resolve, designed to help with video restoration tasks. It also includes a variety of developer resources for creating custom plugins and scripts for Resolve.
 
 ## Installation
 
-**One-click install (macOS):**
-```bash
-./scripts/install_one_click_mac.command
-```
+The primary tool can be installed by running one of the provided scripts.
 
-**Manual install:**
-```bash
-python3 scripts/install_advanced_dirt_removal.py
-```
+1.  **Download the `Advanced Dirt Removal.setting` file** from the root of this repository.
+2.  **Run the installer:**
+    *   **macOS:** Double-click `install_one_click_mac.command`.
+    *   **Windows:** Double-click `install_one_click_win.bat`.
+    *   **Linux:** Run `install_one_click_linux.sh` in your terminal.
+    *   **Manual (Python):** If you have Python installed, you can run `python scripts/install_advanced_dirt_removal.py` from the terminal.
 
-**Cross-platform scripts available for Windows and Linux.**
+The script will place the `.setting` file in the correct DaVinci Resolve directory for your operating system.
 
 ## Usage
 
-1. Add "Advanced Dirt Removal" macro to your Fusion flow
-2. Connect source to main input (auto-connects)
-3. Optional: Connect Paint Mask or Magic Mask to second input
-4. Choose Recovery Method: Paint Brush (manual) or Motion Mask (auto)
-5. Use View Mode to switch between RGB (final) and Difference (diagnostic)
+Once installed, the "Advanced Dirt Removal" effect is available in DaVinci Resolve:
 
-## Documentation
+1.  Open DaVinci Resolve and go to the **Edit** or **Cut** page.
+2.  Open the **Effects** library.
+3.  Under **Toolbox > Effects > Templates**, you will find "Advanced Dirt Removal".
+4.  Drag the effect onto a clip in your timeline.
+5.  Use the **Inspector** to adjust the effect's parameters.
 
-- [Installation Guide](docs/INSTALLATION.md) - Setup instructions
-- [Usage Guide](docs/USAGE.md) - Complete workflow
-- [Technical Specification](docs/TECH_SPEC.md) - Implementation details
+## Technical Specifications
 
-## Requirements
+For more detailed information on the tool's inner workings, see the [Technical Specifications](docs/TECH_SPEC.md).
 
-- DaVinci Resolve 18+ (Studio recommended for advanced motion estimation)
-- ResolveFX plugins (VideoRestoration, Deflicker, NoiseReduction)
+## For Developers
+
+This repository also includes a `Developer` folder (ignored by git) containing a wealth of resources for building your own DaVinci Resolve tools, including:
+
+*   DaVinci CTL (Color Transformation Language) examples.
+*   Fusion Fuse (Lua-based plugins) examples and SDK.
+*   OpenFX (C++ video effects) plugin examples.
+*   Python and Lua scripting examples.
