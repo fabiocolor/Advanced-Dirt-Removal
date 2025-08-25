@@ -20,6 +20,11 @@ The installation process is handled by scripts that copy the `Advanced Dirt Remo
 
 The script places the file in `Fusion/Templates/Edit/Effects` inside the Resolve support directory for the user's OS.
 
+## Functionality Notes
+
+*   The effect works on the Edit, Color, and Fusion pages.
+*   However, for full functionality, specifically the use of the "Mask Paint" input for a history brush effect, the user must be on the **Fusion page**. The other pages do not support this input.
+
 ## For Developers
 
 A `Developer` directory exists locally (and is ignored by git) which contains resources for building custom DaVinci Resolve tools, including:

@@ -25,6 +25,8 @@ Once installed, the "Advanced Dirt Removal" effect is available in DaVinci Resol
 4.  Drag the effect onto a clip in your timeline.
 5.  Use the **Inspector** to adjust the effect's parameters.
 
+**Note on advanced features:** For full functionality, such as using a custom paint mask for the history brush, you must use this effect directly on the **Fusion page**. The standard Edit/Color pages do not support the "Mask Paint" input required for these features.
+
 ## Technical Specifications
 
 For more detailed information on the tool's inner workings, see the [Technical Specifications](docs/TECH_SPEC.md).
