@@ -123,6 +123,50 @@
 
 ---
 
+## 🎛️ Controls Reference
+
+### Core Settings
+
+| Control | Purpose | Default | Notes |
+|---------|---------|---------|-------|
+| **Recovery type** | Choose between automatic or manual recovery | Recovery Brush (0) | 0 = Recovery Brush, 1 = Motion Mask |
+| **View Mode** | Toggle output between final result and diagnostic | RGB (1) | 0 = Difference View, 1 = RGB Output |
+
+### Motion Analysis
+
+| Control | Purpose | Default | Notes |
+|---------|---------|---------|-------|
+| **Aggressiveness** | Optical flow motion detection intensity | 2 | Higher = more detailed motion analysis |
+| **motionThreshold** | Sensitivity for motion-based masking | 25.2 | Lower = more areas treated as motion |
+
+### Dirt Detection
+
+| Control | Purpose | Default | Notes |
+|---------|---------|---------|-------|
+| **temporalThreshold** | How aggressive the dirt detection is | 0.8 | Lower = more sensitive, detects smaller defects |
+| **dirtSize** | Minimum size of defects to detect | 0.01 | Smaller = detects tinier dirt particles |
+| **motionEstType** | Motion estimation algorithm | (varies) | Different methods for motion calculation |
+| **supportLength** | Temporal window for analysis | (varies) | How many frames to analyze together |
+
+### Advanced Options
+
+| Control | Purpose | Default | Notes |
+|---------|---------|---------|-------|
+| **Recovery/Spanish Dirt Removal** | Toggle brush polarity behavior | Recovery (1) | 1 = Paint protects, 0 = Paint targets |
+| **edgeAttenuation** | Reduce processing near edges | 0 | Helps avoid edge artifacts |
+| **showRepairMask** | Display the repair mask | 0 | For diagnostic purposes |
+
+### Input Connections
+
+| Input | Purpose | Required |
+|-------|---------|----------|
+| **Main Input** | Source footage to process | ✅ Yes |
+| **Mask Paint/Magic Mask** | External mask for Recovery Brush | Only for paint features |
+
+> **💡 Learning Tip**: Start with default settings and adjust **temporalThreshold** and **dirtSize** first. Use **View Mode** to switch to Difference view to see exactly what's being detected and changed.
+
+---
+
 ## ⚙️ Requirements
 
 - **DaVinci Resolve 18+** (Studio recommended)
