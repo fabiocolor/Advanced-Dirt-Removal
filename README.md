@@ -74,7 +74,7 @@
 
 3. **Choose Recovery Mode**
    - **Motion Mask**: Automatic motion-based protection
-   - **Recovery Brush**: Manual painting control
+   - **Recovery Brush**: Manual painting control (requires mask connection - see below)
 
 <!-- Screenshot placeholder: inspector-controls.jpg -->
 <!-- *Intuitive parameter interface* -->
@@ -90,8 +90,11 @@
 <!-- Screenshot placeholder: spanish-mode-comparison.jpg -->
 <!-- *Recovery vs Spanish polarity on the same area* -->
 
-- **Recovery Polarity**: Paint to protect original details
+> **📝 Note**: Requires Mask Paint tool connection (see Recovery Brush Workflow below)
+
+- **Recovery Polarity** (Default): Paint to protect original details
 - **Spanish Polarity**: Paint to target specific repairs
+- Toggle the "Spanish Dirt Removal" checkbox to switch modes
 
 **🔍 Difference View**
 <!-- Screenshot placeholder: difference-view.jpg -->
@@ -104,7 +107,17 @@
 <!-- Screenshot placeholder: paint-workflow.jpg -->
 <!-- *Manual refinement with visible paint strokes* -->
 
+> **⚡ Required Setup**: To use Recovery Brush or Spanish Dirt Removal, you must connect a **Mask Paint** tool to the **labeled corrector input** on the Advanced Dirt Removal macro.
+
+**Connection Steps:**
+1. Add a **Mask Paint** tool to your Fusion composition
+2. Connect the **Mask Paint output** to the **"Mask Paint/Magic Mask" input** on Advanced Dirt Removal
+3. Set Recovery type to "Recovery Brush"
+4. Paint your mask and see results in real-time
+
+**Usage:**
 - Paint to recover specific details
+- Toggle Spanish Dirt Removal for different brush behavior
 - Combine with automatic motion detection
 - Real-time feedback with difference view
 
@@ -115,7 +128,9 @@
 - **DaVinci Resolve 18+** (Studio recommended)
 - **ResolveFX Plugins**: VideoRestoration, Deflicker, NoiseReduction
 - **Adequate GPU memory** for complex processing chain
-- **Fusion page access** for full feature set
+- **Fusion page access** for full feature set (especially Recovery Brush)
+
+> **💡 Note**: Recovery Brush and Spanish Dirt Removal features require the **Fusion page** and a **Mask Paint tool connection**. Edit/Cut pages support basic automatic dirt removal only.
 
 ---
 
