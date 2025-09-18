@@ -9,30 +9,30 @@
 
 ---
 
-**Advanced Dirt Removal** is a professional Fusion macro for DaVinci Resolve that revolutionizes film restoration workflows. It extends the built-in Automatic Dirt Removal with intelligent motion-masking, manual recovery tools, and real-time diagnostic views.
+**Advanced Dirt Removal** is a Fusion macro that improves DaVinci Resolve's restoration capabilities, making it a viable low-cost platform for archival and educational film restoration projects. It extends the built-in Automatic Dirt Removal with motion-masking, manual recovery tools, and diagnostic views to handle challenging restoration work without expensive specialized software.
 
 <!-- Screenshot placeholder: before-after-hero.jpg -->
-<!-- *Professional dirt removal results on archival footage* -->
+<!-- *Accessible film restoration results using DaVinci Resolve* -->
 
-> 🎯 **Perfect for**: Film restoration, archival work, cleaning vintage footage, and preserving historical content
+> 🎯 **Perfect for**: Educational institutions, archives, non-commercial restoration projects, and making film preservation more accessible
 
 ---
 
 ## ✨ Key Features
 
-**🔄 Dual Recovery Modes**
+**🔄 Accessible Recovery Options**
 - **Motion Mask**: Automatically restricts repairs to low/no-motion areas
-- **Recovery Brush**: Manual painting to restore original details
+- **Recovery Brush**: Manual painting to restore original details when automatic fails
 
-**🎨 Smart Processing Pipeline**
-- Advanced optical flow analysis
-- Temporal noise reduction and deflicker
-- ResolveFX VideoRestoration engine integration
+**🎨 Enhanced Processing**
+- Leverages existing DaVinci Resolve tools (optical flow, noise reduction, deflicker)
+- Uses built-in ResolveFX VideoRestoration engine
+- No additional software purchases required
 
-**👁️ Real-time Diagnostics**
-- **Difference View**: Live comparison between original and processed
-- **Spanish Dirt Removal**: Toggle brush polarity (protect vs repair)
-- **Hybrid Workflow**: Combine automatic and manual techniques
+**👁️ Educational Diagnostics**
+- **Difference View**: See exactly what's being changed
+- **Spanish Dirt Removal**: Learn different brush techniques
+- **Iterative Workflow**: Understand and refine restoration decisions
 
 ---
 
@@ -151,5 +151,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 <div align="center">
-  <sub>Built with ❤️ for the film restoration community</sub>
+  <sub>Making film restoration accessible to archives, educators, and preservation enthusiasts</sub>
 </div>
