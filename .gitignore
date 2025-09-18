@@ -1,0 +1,49 @@
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+
+# IDE/Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs and temp files
+*.log
+*.tmp
+*.temp
+.crush/
+
+# Private/sensitive folders
+.claude/
+.github/
+Developer/
+scripts/
+docs/
+
+# Build artifacts
+*.o
+*.obj
+*.exe
+*.dll
+*.dylib
+*.so
+
+# Project specific
+# Keep only essential project files

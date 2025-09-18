@@ -1,41 +1,140 @@
 # Advanced Dirt Removal for DaVinci Resolve
 
-This project provides "Advanced Dirt Removal", a Fusion macro for DaVinci Resolve that extends the built-in Automatic Dirt Removal with motion-masking, a manual Recovery Brush, and a paint-driven "Spanish Dirt Removal" mode. It lets you restrict automatic repairs to low- or no-motion areas, paint to recover original source detail where the automatic pass removed wanted information, and preview a realtime difference view so you can iterate quickly during film-restoration workflows.
+[![Version](https://img.shields.io/badge/version-v1.0-blue?style=flat-square)](https://github.com/fabiocolor/Dirt-Removal-Recovery/releases)
+[![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
+[![DaVinci Resolve](https://img.shields.io/badge/DaVinci%20Resolve-18%2B-red?style=flat-square)](https://www.blackmagicdesign.com/products/davinciresolve)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat-square)](#installation)
 
-## Installation
+[![Download](https://img.shields.io/badge/Download-Latest%20Release-brightgreen?style=for-the-badge&logo=download)](https://github.com/fabiocolor/Dirt-Removal-Recovery/releases/latest)
 
-1.  **Download the `Advanced Dirt Removal.setting` file** from the latest [release](https://github.com/fabiocolor/Dirt-Removal-Recovery/releases) or the root of this repository.
-2.  **Copy the `.setting` file** to the DaVinci Resolve Effects folder on your system:
-    *   **macOS:** `~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Templates/Edit/Effects`
-    *   **Windows:** `%APPDATA%\Blackmagic Design\DaVinci Resolve\Support\Fusion\Templates\Edit\Effects`
-    *   **Linux:** `~/.local/share/DaVinciResolve/Fusion/Templates/Edit/Effects` (path may vary)
+---
 
-## Usage
+**Advanced Dirt Removal** is a professional Fusion macro for DaVinci Resolve that revolutionizes film restoration workflows. It extends the built-in Automatic Dirt Removal with intelligent motion-masking, manual recovery tools, and real-time diagnostic views.
 
-Once installed, the "Advanced Dirt Removal" effect is available in DaVinci Resolve:
+<!-- Screenshot placeholder: before-after-hero.jpg -->
+<!-- *Professional dirt removal results on archival footage* -->
 
-1.  Open DaVinci Resolve and go to the **Fusion** page (recommended for full feature access). You can also use the **Edit**, **Cut**, or **Color** pages if you only need the automatic dirt removal and do not plan to use the Recovery Brush.
-2.  On Edit/Cut pages, open the **Effects** library. In Fusion, add the macro using the Add Tool menu or the Tools browser: Add Tool > Macros > Advanced Dirt Removal. You can also open the Tools browser and navigate to Toolbox > Macros > Advanced Dirt Removal.
-3.  On Edit/Cut pages the macro appears under **Toolbox > Effects > Templates**; in Fusion it appears under **Toolbox > Macros**.
-4.  Drag the effect onto a clip in your timeline (Edit/Cut) or add it to your Fusion composition (right-click in the node area or use Add Tool > Macros).
-5.  Use the **Inspector** (Edit/Cut) or the macro controls in Fusion to adjust parameters.
+> 🎯 **Perfect for**: Film restoration, archival work, cleaning vintage footage, and preserving historical content
 
-## Features
+---
 
-This macro augments Resolve's built-in Automatic Dirt Removal by combining an automatic repair pass with flexible masking and manual recovery tools.
+## ✨ Key Features
 
-- Recovery modes: switch between "Recovery Brush" and "Motion Mask".
-- Motion-restricted auto repair: the Motion Mask mode limits the automatic dirt removal to low- or no-motion areas so moving content is preserved while stationary dirt is repaired.
-- Manual recovery brush: the "Recovery Brush" mode lets you paint a mask to bring original source details back where the automatic repair removed wanted features.
-- Hybrid workflow: even when using the Motion Mask you can complement it with manual paints to tweak which areas are repaired or recovered.
- - "Spanish Dirt Removal" toggle (`Recovery/Spanish Dirt Removal` → maps to `ApplyMaskInverted`): controls the brush polarity and changes how painted pixels are interpreted by the automatic repair.
-     - Recovery polarity (paint protects source): painted areas act as a recovery mask — the macro will favour the original Source in painted regions and prevent the automatic dirt removal from replacing those details.
-     - Spanish (paint-to-repair) polarity: painted areas instead tell the automatic dirt-removal engine where to apply the repair at full strength — effectively you are painting the repair rather than painting a protection mask.
-     - Practical notes: this toggle works with the published `Mask Paint/Magic Mask` input and applies in both Recovery Brush and Motion Mask workflows. Use the `Recovery type` switch to choose between Recovery Brush and Motion Mask, then paint to protect or to target repairs depending on the Spanish Dirt Removal setting. Use the Difference View to verify paint results in real time.
-- Difference view: a realtime comparison mode shows the difference between the source and processed output so you can quickly see what has changed and decide what to recover or mask further.
+**🔄 Dual Recovery Modes**
+- **Motion Mask**: Automatically restricts repairs to low/no-motion areas
+- **Recovery Brush**: Manual painting to restore original details
 
-Note: For full functionality use the macro on the **Fusion** page. The Edit and Color pages support basic automatic dirt removal but do not expose the Fusion paint input; however, you can still use Magic Mask or other node-based masks as alternatives on those pages.
+**🎨 Smart Processing Pipeline**
+- Advanced optical flow analysis
+- Temporal noise reduction and deflicker
+- ResolveFX VideoRestoration engine integration
 
-## Technical Specifications
+**👁️ Real-time Diagnostics**
+- **Difference View**: Live comparison between original and processed
+- **Spanish Dirt Removal**: Toggle brush polarity (protect vs repair)
+- **Hybrid Workflow**: Combine automatic and manual techniques
 
-For more detailed information on the tool's inner workings, see the [Technical Specifications](docs/TECH_SPEC.md).
+---
+
+## 📦 Installation
+
+### Quick & Easy Setup
+
+1. **📥 Download** the `Advanced Dirt Removal.setting` file from the [latest release](https://github.com/fabiocolor/Dirt-Removal-Recovery/releases)
+
+2. **📂 Locate** your DaVinci Resolve Effects folder:
+
+| Platform | Installation Path |
+|----------|-------------------|
+| **🍎 macOS** | `~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Templates/Edit/Effects` |
+| **🪟 Windows** | `%APPDATA%\Blackmagic Design\DaVinci Resolve\Support\Fusion\Templates\Edit\Effects` |
+| **🐧 Linux** | `~/.local/share/DaVinciResolve/Fusion/Templates/Edit/Effects` |
+
+3. **📋 Copy** the `.setting` file to the Effects folder
+
+4. **🔄 Restart** DaVinci Resolve
+
+> 💡 **Tip**: On macOS, press `Cmd+Shift+G` in Finder and paste the path. On Windows, paste the path in Explorer's address bar.
+
+---
+
+## 🚀 Usage
+
+### Basic Workflow
+
+<!-- Screenshot placeholder: fusion-node-graph.jpg -->
+<!-- *Clean integration in Fusion workflow* -->
+
+1. **Add the Effect**
+   - **Fusion Page**: `Add Tool > Macros > Advanced Dirt Removal`
+   - **Edit/Cut Pages**: `Effects > Templates > Advanced Dirt Removal`
+
+2. **Connect Your Source**
+   - Drag from MediaIn to Advanced Dirt Removal input
+
+3. **Choose Recovery Mode**
+   - **Motion Mask**: Automatic motion-based protection
+   - **Recovery Brush**: Manual painting control
+
+<!-- Screenshot placeholder: inspector-controls.jpg -->
+<!-- *Intuitive parameter interface* -->
+
+4. **Fine-tune Parameters**
+   - Adjust dirt detection sensitivity
+   - Control motion threshold
+   - Set temporal processing strength
+
+### Advanced Techniques
+
+**🎭 Spanish Dirt Removal Mode**
+<!-- Screenshot placeholder: spanish-mode-comparison.jpg -->
+<!-- *Recovery vs Spanish polarity on the same area* -->
+
+- **Recovery Polarity**: Paint to protect original details
+- **Spanish Polarity**: Paint to target specific repairs
+
+**🔍 Difference View**
+<!-- Screenshot placeholder: difference-view.jpg -->
+<!-- *Real-time diagnostic showing modifications in red/green overlay* -->
+
+- Toggle to see exactly what's being changed
+- Perfect for iterative refinement
+
+**🎨 Recovery Brush Workflow**
+<!-- Screenshot placeholder: paint-workflow.jpg -->
+<!-- *Manual refinement with visible paint strokes* -->
+
+- Paint to recover specific details
+- Combine with automatic motion detection
+- Real-time feedback with difference view
+
+---
+
+## ⚙️ Requirements
+
+- **DaVinci Resolve 18+** (Studio recommended)
+- **ResolveFX Plugins**: VideoRestoration, Deflicker, NoiseReduction
+- **Adequate GPU memory** for complex processing chain
+- **Fusion page access** for full feature set
+
+---
+
+
+---
+
+## 🤝 Community & Support
+
+- **Issues**: [GitHub Issues](https://github.com/fabiocolor/Dirt-Removal-Recovery/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/fabiocolor/Dirt-Removal-Recovery/discussions)
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+<div align="center">
+  <sub>Built with ❤️ for the film restoration community</sub>
+</div>
