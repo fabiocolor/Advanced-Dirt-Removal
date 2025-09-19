@@ -11,7 +11,7 @@
 
 **Advanced Dirt Removal** is a Fusion macro that improves DaVinci Resolve's restoration capabilities, making it a viable low-cost platform for archival and educational film restoration projects. It extends the built-in Automatic Dirt Removal with motion-masking, manual recovery tools, and diagnostic views to handle challenging restoration work without expensive specialized software.
 
-![Recovery Brush Workflow](docs/images/Recovery%20brush.png)
+![Recovery Brush Workflow](assets/images/Recovery%20brush.png)
 *Manual recovery brush workflow for precise restoration control*
 
 > 🎯 **Perfect for**: Educational institutions, archives, non-commercial restoration projects, and making film preservation more accessible
@@ -62,7 +62,7 @@
 
 ### Basic Workflow
 
-![Motion Mask Mode](docs/images/Motion%20Mask.png)
+![Motion Mask Mode](assets/images/Motion%20Mask.png)
 *Automatic motion-based dirt removal restricting repairs to stationary areas*
 
 1. **Add the Effect**
@@ -76,7 +76,7 @@
    - **Motion Mask**: Automatic motion-based protection
    - **Recovery Brush**: Manual painting control (requires mask connection - see below)
 
-![Spanish Dirt Removal](docs/images/Spanish%20Dirt%20Removal.png)
+![Spanish Dirt Removal](assets/images/Spanish%20Dirt%20Removal.png)
 *Spanish Dirt Removal mode - paint to target specific repairs*
 
 4. **Fine-tune Parameters**
