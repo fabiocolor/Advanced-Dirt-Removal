@@ -5,7 +5,7 @@
 [![DaVinci Resolve](https://img.shields.io/badge/DaVinci%20Resolve-18%2B-red?style=flat-square)](https://www.blackmagicdesign.com/products/davinciresolve)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat-square)](#installation)
 
-[![Download](https://img.shields.io/badge/Download-Latest%20Release-brightgreen?style=for-the-badge&logo=download)](https://github.com/fabiocolor/Dirt-Removal-Recovery/releases/latest)
+[![Download](https://img.shields.io/badge/Download-Latest%20Release-brightgreen?style=for-the-badge&logo=download)](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases/latest)
 
 ---
 
@@ -46,7 +46,7 @@ Both versions are professional Fusion macros for DaVinci Resolve that improve fi
 
 ### Quick & Easy Setup
 
-1. **📥 Download** both macro files from the [latest release](https://github.com/fabiocolor/Dirt-Removal-Recovery/releases):
+1. **📥 Download** both macro files from the [latest release](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases):
    - `Advanced Dirt Removal.setting` (for linear footage)
    - `Advanced Dirt Removal Cineon.setting` (for Cineon film scans)
 
