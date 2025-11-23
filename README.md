@@ -9,7 +9,12 @@
 
 ---
 
-**Advanced Dirt Removal** is a Fusion macro that improves DaVinci Resolve's restoration capabilities, making it a viable low-cost platform for archival and educational film restoration projects. It extends the built-in Automatic Dirt Removal with motion-masking, manual recovery tools, and diagnostic views to handle challenging restoration work without expensive specialized software.
+**Advanced Dirt Removal** provides professional dirt removal capabilities with two specialized versions for different workflows:
+
+- **Linear Version**: Optimized for standard footage (Rec.709, sRGB, etc.)
+- **Cineon Version**: Optimized for film scans with built-in Cineon→Linear→Cineon conversion
+
+Both versions are professional Fusion macros for DaVinci Resolve that improve film restoration capabilities, making it a viable low-cost platform for archival and educational restoration projects. Designed primarily for use in Fusion page workflows, they extend the built-in Automatic Dirt Removal with motion-masking, manual recovery tools, and diagnostic views to handle challenging restoration work without expensive specialized software.
 
 ![Recovery Brush Workflow](assets/images/Recovery%20brush.png)
 *Manual recovery brush workflow for precise restoration control*
@@ -41,49 +46,91 @@
 
 ### Quick & Easy Setup
 
-1. **📥 Download** the `Advanced Dirt Removal.setting` file from the [latest release](https://github.com/fabiocolor/Dirt-Removal-Recovery/releases)
+1. **📥 Download** both macro files from the [latest release](https://github.com/fabiocolor/Dirt-Removal-Recovery/releases):
+   - `Advanced Dirt Removal.setting` (for linear footage)
+   - `Advanced Dirt Removal Cineon.setting` (for Cineon film scans)
 
-2. **📂 Locate** your DaVinci Resolve Effects folder:
+2. **📂 Install** to your DaVinci Resolve Fusion directory:
 
-| Platform | Installation Path |
+**Primary Installation (Fusion Page):**
+
+| Platform | Path for Fusion Page |
 |----------|-------------------|
-| **🍎 macOS** | `~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Templates/Edit/Effects` |
-| **🪟 Windows** | `%APPDATA%\Blackmagic Design\DaVinci Resolve\Support\Fusion\Templates\Edit\Effects` |
-| **🐧 Linux** | `~/.local/share/DaVinciResolve/Fusion/Templates/Edit/Effects` |
+| **🍎 macOS** | `~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Macros/` |
+| **🪟 Windows** | `%APPDATA%\Blackmagic Design\DaVinci Resolve\Support\Fusion\Macros\` |
+| **🐧 Linux** | `~/.local/share/DaVinciResolve/Fusion/Macros/` |
 
-3. **📋 Copy** the `.setting` file to the Effects folder
+**Optional (Edit/Cut Pages):**
+
+| Platform | Path for Edit/Cut Pages |
+|----------|-------------------|
+| **🍎 macOS** | `~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Templates/Edit/Effects/` |
+| **🪟 Windows** | `%APPDATA%\Blackmagic Design\DaVinci Resolve\Support\Fusion\Templates\Edit\Effects\` |
+| **🐧 Linux** | `~/.local/share/DaVinciResolve/Fusion/Templates/Edit/Effects/` |
+
+3. **📋 Copy** both `.setting` files to the chosen location
 
 4. **🔄 Restart** DaVinci Resolve
 
 > 💡 **Tip**: On macOS, press `Cmd+Shift+G` in Finder and paste the path. On Windows, paste the path in Explorer's address bar.
+>
+> ⚡ **Best Practice**: Install to the Macros folder for full Fusion page functionality including manual recovery workflows
+>
+> 🎯 **Version Choice**: Use the Linear version for standard footage, Cineon version for film scans. Both macros will appear in your Effects panel after restart.
 
 ---
 
 ## 🚀 Usage
 
-### Basic Workflow
+### Fusion Page Workflow (Recommended)
 
 ![Motion Mask Mode](assets/images/Motion%20Mask.png)
 *Automatic motion-based dirt removal restricting repairs to stationary areas*
 
-1. **Add the Effect**
-   - **Fusion Page**: `Add Tool > Macros > Advanced Dirt Removal`
-   - **Edit/Cut Pages**: `Effects > Templates > Advanced Dirt Removal`
+1. **Open Fusion Page**
+   - Navigate to your DaVinci Resolve project
+   - Switch to the Fusion page (bottom toolbar)
 
-2. **Connect Your Source**
-   - Drag from MediaIn to Advanced Dirt Removal input
+2. **Add the Macro**
+   - Press `Shift+Space` (tool selector)
+   - Type "Advanced Dirt Removal" (for linear footage)
+   - Or: `Advanced Dirt Removal Cineon` (for film scans)
+   - Or: `Add Tool > Templates > Macros > [choose appropriate version]`
 
-3. **Choose Recovery Mode**
-   - **Motion Mask**: Automatic motion-based protection
-   - **Recovery Brush**: Manual painting control (requires mask connection - see below)
+3. **Connect Your Flow**
+   - Create flow: `MediaIn → Advanced Dirt Removal → MediaOut`
+   - Drag connections between nodes
+
+4. **Choose Recovery Mode**
+   - **Motion Mask** (default): Automatic motion-based protection
+   - **Recovery Brush**: Manual painting control (requires Mask Paint tool connection)
+
+5. **Process Cineon Log Footage (if needed)**
+   - For Cineon log film scans: Use "Advanced Dirt Removal Cineon" macro
+   - For standard footage: Use "Advanced Dirt Removal" macro
 
 ![Spanish Dirt Removal](assets/images/Spanish%20Dirt%20Removal.png)
 *Spanish Dirt Removal mode - paint to target specific repairs*
 
-4. **Fine-tune Parameters**
+6. **Fine-tune Parameters**
    - Adjust dirt detection sensitivity
    - Control motion threshold
    - Set temporal processing strength
+   - Use Difference View for diagnostic feedback
+
+### Edit/Cut Page Usage (Optional)
+
+While primarily a Fusion macro, Advanced Dirt Removal can also be applied as an effect on the Edit/Cut pages:
+
+1. **Apply to Clip**
+   - Select clip in timeline
+   - Effects Library → Toolbox → Video Effects → Fusion Effects
+   - Drag "Advanced Dirt Removal" onto clip
+
+2. **Limitations on Edit/Cut Pages**
+   - Recovery Brush mode requires Fusion page workflow
+   - Manual mask painting not available
+   - Motion Mask mode works normally
 
 ### Advanced Techniques
 
@@ -122,6 +169,62 @@
 - Combine with automatic motion detection
 - Real-time feedback with difference view
 
+**🎨 Cineon Log Workflow**
+
+> **📝 Note**: For archival film scans with Cineon log encoding
+
+Use the **Advanced Dirt Removal Cineon** macro which includes built-in Cineon→Linear→Cineon conversion, making film restoration workflows seamless.
+
+**When to Use Cineon Version:**
+- Archival film scans (Cineon, DPX with Cineon log encoding)
+- Film transfer workflows using standard Cineon log
+- Any footage requiring Cineon log to linear processing
+- Professional film preservation projects
+
+**Simple Workflow:**
+
+```
+MediaIn → Advanced Dirt Removal Cineon → MediaOut
+```
+
+**Step-by-Step Instructions:**
+
+1. **Add MediaIn and MediaOut** nodes to your composition
+
+2. **Add Advanced Dirt Removal Cineon**:
+   - Press `Shift+Space` and type "Advanced Dirt Removal Cineon"
+   - Connect: `MediaIn` → `Advanced Dirt Removal Cineon` → `MediaOut`
+
+3. **Configure Settings** (optimized for film scans):
+   - **Repair Strength**: 0.5 (optimized for linear space)
+   - **Motion Threshold**: 55 (higher threshold for film material)
+   - **Difference Intensity**: 0.9 (better visibility for diagnostics)
+
+4. **For Recovery Brush with Cineon Log**:
+   - Add a **Mask Paint** tool
+   - Connect to the macro's "Mask Paint/Magic Mask" input
+   - Set Recovery type to "Recovery Brush"
+   - Paint to restore specific film details
+
+**Benefits of Integrated Cineon Processing:**
+- **Automatic Conversion**: Built-in Cineon→Linear→Cineon pipeline
+- **Optimized Processing**: All dirt removal happens in linear color space
+- **Preserves Film Characteristics**: Output maintains original Cineon log encoding
+- **Professional Workflow**: Designed specifically for film restoration work
+- **Better Results**: Optical flow and motion analysis work optimally in linear space
+
+**Technical Details:**
+- **Input**: Accepts Cineon log footage
+- **Processing**: Converts to linear, performs dirt removal, converts back to Cineon
+- **Output**: Maintains original Cineon log for archival compatibility
+- **No Manual Setup**: All conversions handled automatically
+
+**Standard Footage:**
+For Rec.709, sRGB, or other standard footage, use the normal "Advanced Dirt Removal" macro:
+```
+MediaIn → Advanced Dirt Removal → MediaOut
+```
+
 ---
 
 ## 🎛️ Controls Reference
@@ -132,23 +235,23 @@
 |---------|---------|---------|-------|
 | **Recovery type** | Choose between automatic or manual recovery | Recovery Brush (0) | 0 = Recovery Brush, 1 = Motion Mask |
 | **View Mode** | Toggle output between final result and diagnostic | RGB (1) | 0 = Difference View, 1 = RGB Output |
-| **Difference Intensity** | Adjust visibility of difference view | 0.6 | Higher = more visible difference (0.0-1.0) |
+| **Difference Intensity** | Adjust visibility of difference view | 0.6 (Linear) / 0.9 (Cineon) | Higher = more visible difference (0.0-1.0) |
 
 ### Motion Analysis
 
 | Control | Purpose | Default | Notes |
 |---------|---------|---------|-------|
-| **Aggressiveness** | Optical flow motion detection intensity | 2 | Higher = more detailed motion analysis |
-| **motionThreshold** | Sensitivity for motion-based masking | 25.2 | Lower = more areas treated as motion |
+| **Motion Mask Safety** | Optical flow motion detection intensity (renamed from "Aggressiveness") | 2 | Controls motion mask precision |
+| **motionThreshold** | Sensitivity for motion-based masking | 25 (Linear) / 55 (Cineon) | Lower = more areas treated as motion |
 
 ### Dirt Detection
 
 | Control | Purpose | Default | Notes |
 |---------|---------|---------|-------|
-| **temporalThreshold** | How aggressive the dirt detection is | 0.8 | Lower = more sensitive, detects smaller defects |
+| **temporalThreshold** | How aggressive the dirt detection is | 0.45 (Linear) / 0.5 (Cineon) | Lower = more sensitive, detects smaller defects |
 | **dirtSize** | Minimum size of defects to detect | 0.01 | Smaller = detects tinier dirt particles |
-| **motionEstType** | Motion estimation algorithm | (varies) | Different methods for motion calculation |
-| **supportLength** | Temporal window for analysis | (varies) | How many frames to analyze together |
+| **motionEstType** | Motion estimation algorithm | HS_Better | Different methods for motion calculation |
+| **supportLength** | Temporal window for analysis | SUPPORT_LENGTH_4 | How many frames to analyze together |
 
 ### Advanced Options
 

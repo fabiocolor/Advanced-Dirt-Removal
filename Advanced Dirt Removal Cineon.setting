@@ -1,9 +1,9 @@
 {
 	Tools = ordered() {
-		AdvancedDirtRemoval11 = MacroOperator {
+		AdvancedDirtRemovalCineon = MacroOperator {
 			Inputs = ordered() {
 				MainInput1 = InstanceInput {
-					SourceOp = "CustomFilter1",
+					SourceOp = "CineonLog1",
 					Source = "Input",
 				},
 				Input2 = InstanceInput {
@@ -17,7 +17,7 @@
 				Input4 = InstanceInput {
 					SourceOp = "AutomaticDirtRemoval1",
 					Source = "temporalThreshold",
-					Default = 0.45,
+					Default = 0.5,
 				},
 				Input5 = InstanceInput {
 					SourceOp = "AutomaticDirtRemoval1",
@@ -32,7 +32,7 @@
 				Input7 = InstanceInput {
 					SourceOp = "AutomaticDirtRemoval1",
 					Source = "motionThreshold",
-					Default = 25,
+					Default = 55,
 				},
 				Input8 = InstanceInput {
 					SourceOp = "AutomaticDirtRemoval1",
@@ -72,30 +72,95 @@
 					SourceOp = "Merge2",
 					Source = "Blend",
 					Name = "Difference Intensity",
-					Default = 0.6,
+					Default = 0.9,
 				}
 			},
 			Outputs = {
 				MainOutput1 = InstanceOutput {
-					SourceOp = "Switch1",
+					SourceOp = "CineonLog1_1",
 					Source = "Output",
 				}
 			},
 			ViewInfo = GroupInfo { Pos = { 0, 0 } },
 			Tools = ordered() {
-				OpticalFlow1 = Dimension.OpticalFlow {
+				CineonLog1 = CineonLog {
+					Inputs = {
+						Depth = Input { Value = 0, },
+						Mode = Input { Value = 0, },
+						LogType = Input { Value = FuID { "Cineon" }, }
+					},
+					ViewInfo = OperatorInfo { Pos = { 495, -373.5 } },
+				},
+				CustomFilter1 = CustomFilter {
 					CtrlWShown = false,
 					Inputs = {
+						Red = Input { Value = 0, },
+						Green = Input { Value = 0, },
+						Blue = Input { Value = 0, },
+						Alpha = Input { Value = 0, },
+						Matrix = Input {
+							Value = FilterTable {
+								NumEntries = 54,
+								Type = 6,
+								Offset = 0,
+								Minimum = 0,
+								Maximum = 1,
+								MinimumValue = 0,
+								MaximumValue = 1,
+								StartSlope = 1,
+								EndSlope = 1,
+								StartIn = 0,
+								EndIn = 1,
+								Table = { 0, 0, 9, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 }
+							},
+						},
 						Input = Input {
-							SourceOp = "NoiseReduction1",
+							SourceOp = "CineonLog1",
+							Source = "Output",
+						}
+					},
+					ViewInfo = OperatorInfo { Pos = { 495, -274.5 } },
+				},
+				Deflicker1 = ofx.com.blackmagicdesign.resolvefx.Deflicker {
+					CtrlWShown = false,
+					Inputs = {
+						Source = Input {
+							SourceOp = "CustomFilter1",
 							Source = "Output",
 						},
-						Method = Input { Value = FuID { "Advanced" }, },
-						["Advanced.Advanced"] = Input { Value = 1, },
-						["Advanced.NumWarps"] = Input { Value = 1, },
-						["Advanced.NumIters"] = Input { Value = 2, }
+						deflickerSettings = Input { Value = FuID { "PARAMETER_SETTINGS_ADVANCED" }, },
+						advancedControlsGroup = Input { Value = 1, },
+						neighbourhoodWidth = Input { Value = FuID { "NEIGHBOURHOOD_WIDTH_5" }, },
+						moEstType = Input { Value = FuID { "OF_MODE_CLGTV" }, },
+						motionRange = Input { Value = FuID { "MOTION_RANGE_LARGE" }, },
+						lumaThresh = Input { Value = 100, },
+						chromaThresh = Input { Value = 100, },
+						gangThreshs = Input { Value = 1, },
+						motionThresh = Input { Value = 100, },
+						optimizeGroup = Input { Value = 1, },
+						lowDetailMotion = Input { Value = 1, },
+						limitArea = Input { Value = 0, },
+						targetXPosition = Input { Value = 0.5, },
+						targetYPosition = Input { Value = 0.5, },
+						targetWidth = Input { Value = 0.200000002980232, },
+						targetHeight = Input { Value = 0.25, },
+						restoreDetailGroup = Input { Value = 0, },
+						detailRestored = Input { Value = 0.349999994039536, },
+						isShowRestoredDetail = Input { Value = 0, },
+						pluginOutput = Input { Value = FuID { "PLUGIN_OUTPUT_DEFLICKERED" }, },
+						isSkipColorInfo = Input { Value = 0, },
+						blendGroup = Input { Value = 0, },
+						blendIn = Input { Value = 1, },
+						blend = Input { Value = 0, },
+						ignoreContentShape = Input { Value = 0, },
+						legacyIsProcessRGBOnly = Input { Value = 0, },
+						IsNoTemporalFramesReqd = Input { Value = 0, },
+						refreshTrigger = Input { Value = 1, },
+						srcProcessingAlphaMode = Input { Value = -1, },
+						dstProcessingAlphaMode = Input { Value = -1, },
+						resolvefxVersion = Input { Value = "1.3", }
 					},
-					ViewInfo = OperatorInfo { Pos = { 0, -181.5 } },
+					ViewInfo = OperatorInfo { Pos = { 330, -175.5 } },
 				},
 				NoiseReduction1 = ofx.com.blackmagicdesign.resolvefx.NoiseReduction {
 					CtrlWShown = false,
@@ -146,9 +211,23 @@
 						refreshTrigger = Input { Value = 1, },
 						srcProcessingAlphaMode = Input { Value = -1, },
 						dstProcessingAlphaMode = Input { Value = -1, },
-						resolvefxVersion = Input { Value = "1.2", }
+						resolvefxVersion = Input { Value = "1.3", }
 					},
-					ViewInfo = OperatorInfo { Pos = { 165, -181.5 } },
+					ViewInfo = OperatorInfo { Pos = { 165, -175.5 } },
+				},
+				OpticalFlow1 = Dimension.OpticalFlow {
+					CtrlWShown = false,
+					Inputs = {
+						Input = Input {
+							SourceOp = "NoiseReduction1",
+							Source = "Output",
+						},
+						Method = Input { Value = FuID { "Advanced" }, },
+						["Advanced.Advanced"] = Input { Value = 1, },
+						["Advanced.NumWarps"] = Input { Value = 1, },
+						["Advanced.NumIters"] = Input { Value = 2, }
+					},
+					ViewInfo = OperatorInfo { Pos = { 0, -175.5 } },
 				},
 				CustomTool1 = Custom {
 					CtrlWShown = false,
@@ -180,7 +259,7 @@
 							Source = "Output",
 						}
 					},
-					ViewInfo = OperatorInfo { Pos = { 0, -82.5 } },
+					ViewInfo = OperatorInfo { Pos = { 0, -76.5 } },
 				},
 				CustomTool1LUTIn1 = LUTBezier {
 					KeyColorSplines = {
@@ -222,6 +301,16 @@
 					SplineColor = { Red = 0, Green = 0, Blue = 0 },
 					CtrlWZoom = false,
 				},
+				ChannelBooleans1 = ChannelBoolean {
+					CtrlWShown = false,
+					Inputs = {
+						ToRed = Input { Value = 4, },
+						ToGreen = Input { Value = 4, },
+						ToBlue = Input { Value = 4, },
+						ToAlpha = Input { Value = 4, }
+					},
+					ViewInfo = OperatorInfo { Pos = { -165, 22.5 } },
+				},
 				ChannelBooleans1_2 = ChannelBoolean {
 					CtrlWShown = false,
 					Inputs = {
@@ -235,58 +324,24 @@
 							Source = "Output",
 						}
 					},
-					ViewInfo = OperatorInfo { Pos = { 0, 16.5 } },
+					ViewInfo = OperatorInfo { Pos = { 0, 22.5 } },
 				},
-				ChannelBooleans1 = ChannelBoolean {
+				Switch1_2 = Switch {
 					CtrlWShown = false,
 					Inputs = {
-						ToRed = Input { Value = 4, },
-						ToGreen = Input { Value = 4, },
-						ToBlue = Input { Value = 4, },
-						ToAlpha = Input { Value = 4, }
-					},
-					ViewInfo = OperatorInfo { Pos = { -165, 16.5 } },
-				},
-				Deflicker1 = ofx.com.blackmagicdesign.resolvefx.Deflicker {
-					CtrlWShown = false,
-					Inputs = {
-						Source = Input {
-							SourceOp = "CustomFilter1",
+						Name0 = Input { Value = "Recovery Brush", },
+						Input0 = Input {
+							SourceOp = "ChannelBooleans1",
 							Source = "Output",
 						},
-						deflickerSettings = Input { Value = FuID { "PARAMETER_SETTINGS_ADVANCED" }, },
-						advancedControlsGroup = Input { Value = 1, },
-						neighbourhoodWidth = Input { Value = FuID { "NEIGHBOURHOOD_WIDTH_5" }, },
-						moEstType = Input { Value = FuID { "OF_MODE_CLGTV" }, },
-						motionRange = Input { Value = FuID { "MOTION_RANGE_LARGE" }, },
-						lumaThresh = Input { Value = 100, },
-						chromaThresh = Input { Value = 100, },
-						gangThreshs = Input { Value = 1, },
-						motionThresh = Input { Value = 100, },
-						optimizeGroup = Input { Value = 1, },
-						lowDetailMotion = Input { Value = 1, },
-						limitArea = Input { Value = 0, },
-						targetXPosition = Input { Value = 0.5, },
-						targetYPosition = Input { Value = 0.5, },
-						targetWidth = Input { Value = 0.200000002980232, },
-						targetHeight = Input { Value = 0.25, },
-						restoreDetailGroup = Input { Value = 0, },
-						detailRestored = Input { Value = 0.349999994039536, },
-						isShowRestoredDetail = Input { Value = 0, },
-						pluginOutput = Input { Value = FuID { "PLUGIN_OUTPUT_DEFLICKERED" }, },
-						isSkipColorInfo = Input { Value = 0, },
-						blendGroup = Input { Value = 0, },
-						blendIn = Input { Value = 1, },
-						blend = Input { Value = 0, },
-						ignoreContentShape = Input { Value = 0, },
-						legacyIsProcessRGBOnly = Input { Value = 0, },
-						IsNoTemporalFramesReqd = Input { Value = 0, },
-						refreshTrigger = Input { Value = 1, },
-						srcProcessingAlphaMode = Input { Value = -1, },
-						dstProcessingAlphaMode = Input { Value = -1, },
-						resolvefxVersion = Input { Value = "1.2", }
+						Name1 = Input { Value = "Motion Mask", },
+						Input1 = Input {
+							SourceOp = "ChannelBooleans1_2",
+							Source = "Output",
+						}
 					},
-					ViewInfo = OperatorInfo { Pos = { 330, -181.5 } },
+					ViewInfo = OperatorInfo { Pos = { 0, 121.5 } },
+					Colors = { TileColor = { R = 0.572549019607843, G = 0.572549019607843, B = 0.572549019607843 }, }
 				},
 				AutomaticDirtRemoval1 = ofx.com.blackmagicdesign.resolvefx.VideoRestoration {
 					CtrlWZoom = false,
@@ -303,11 +358,11 @@
 						},
 						motionEstType = Input { Value = FuID { "OF_MODE_HS_BETTER" }, },
 						supportLength = Input { Value = FuID { "SUPPORT_LENGTH_4" }, },
-						temporalThreshold = Input { Value = 0.45, },
+						temporalThreshold = Input { Value = 0.5, },
 						dirtSize = Input { Value = 0.01, },
 						showRepairMask = Input { Value = 0, },
 						fineControlGroup = Input { Value = 1, },
-						motionThreshold = Input { Value = 25, },
+						motionThreshold = Input { Value = 55, },
 						edgeAttenuation = Input { Value = 0, },
 						blendGroup = Input { Value = 0, },
 						blendIn = Input { Value = 1, },
@@ -320,24 +375,7 @@
 						dstProcessingAlphaMode = Input { Value = -1, },
 						resolvefxVersion = Input { Value = "1.0", }
 					},
-					ViewInfo = OperatorInfo { Pos = { 165, 115.5 } },
-				},
-				Switch1_2 = Switch {
-					CtrlWShown = false,
-					Inputs = {
-						Name0 = Input { Value = "Recovery Brush", },
-						Input0 = Input {
-							SourceOp = "ChannelBooleans1",
-							Source = "Output",
-						},
-						Name1 = Input { Value = "Motion Mask", },
-						Input1 = Input {
-							SourceOp = "ChannelBooleans1_2",
-							Source = "Output",
-						}
-					},
-					ViewInfo = OperatorInfo { Pos = { 0, 115.5 } },
-					Colors = { TileColor = { R = 0.572549019607843, G = 0.572549019607843, B = 0.572549019607843 }, }
+					ViewInfo = OperatorInfo { Pos = { 165, 121.5 } },
 				},
 				Merge1 = Merge {
 					CtrlWShown = false,
@@ -352,38 +390,12 @@
 						},
 						PerformDepthMerge = Input { Value = 0, }
 					},
-					ViewInfo = OperatorInfo { Pos = { 495, 115.5 } },
-				},
-				CustomFilter1 = CustomFilter {
-					CtrlWShown = false,
-					Inputs = {
-						Red = Input { Value = 0, },
-						Green = Input { Value = 0, },
-						Blue = Input { Value = 0, },
-						Alpha = Input { Value = 0, },
-						Matrix = Input {
-							Value = FilterTable {
-								NumEntries = 54,
-								Type = 6,
-								Offset = 0,
-								Minimum = 0,
-								Maximum = 1,
-								MinimumValue = 0,
-								MaximumValue = 1,
-								StartSlope = 1,
-								EndSlope = 1,
-								StartIn = 0,
-								EndIn = 1,
-								Table = { 0, 0, 9, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 }
-							},
-						}
-					},
-					ViewInfo = OperatorInfo { Pos = { 495, -280.5 } },
+					ViewInfo = OperatorInfo { Pos = { 495, 121.5 } },
 				},
 				Merge2 = Merge {
 					CtrlWShown = false,
 					Inputs = {
-						Blend = Input { Value = 0.6, },
+						Blend = Input { Value = 0.9, },
 						Background = Input {
 							SourceOp = "CustomFilter1",
 							Source = "Output",
@@ -395,7 +407,7 @@
 						ApplyMode = Input { Value = FuID { "Difference" }, },
 						PerformDepthMerge = Input { Value = 0, }
 					},
-					ViewInfo = OperatorInfo { Pos = { 330, 214.5 } },
+					ViewInfo = OperatorInfo { Pos = { 330, 220.5 } },
 				},
 				Switch1 = Switch {
 					CtrlWShown = false,
@@ -412,11 +424,24 @@
 							Source = "Output",
 						}
 					},
-					ViewInfo = OperatorInfo { Pos = { 495, 214.5 } },
+					ViewInfo = OperatorInfo { Pos = { 495, 220.5 } },
 					Colors = { TileColor = { R = 0.572549019607843, G = 0.572549019607843, B = 0.572549019607843 }, }
+				},
+				CineonLog1_1 = CineonLog {
+					CtrlWZoom = false,
+					Inputs = {
+						Depth = Input { Value = 0, },
+						Mode = Input { Value = 1, },
+						LogType = Input { Value = FuID { "Cineon" }, },
+						Input = Input {
+							SourceOp = "Switch1",
+							Source = "Output",
+						}
+					},
+					ViewInfo = OperatorInfo { Pos = { 495, 319.5 } },
 				}
 			},
 		}
 	},
-	ActiveTool = "AdvancedDirtRemoval11"
+	ActiveTool = "AdvancedDirtRemovalCineon"
 }
