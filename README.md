@@ -1,6 +1,6 @@
 # Advanced Dirt Removal for DaVinci Resolve
 
-[![Version](https://img.shields.io/badge/version-v1.0-blue?style=flat-square)](https://github.com/fabiocolor/Dirt-Removal-Recovery/releases)
+[![Version](https://img.shields.io/badge/version-v1.1-blue?style=flat-square)](https://github.com/fabiocolor/Dirt-Removal-Recovery/releases)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 [![DaVinci Resolve](https://img.shields.io/badge/DaVinci%20Resolve-18%2B-red?style=flat-square)](https://www.blackmagicdesign.com/products/davinciresolve)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat-square)](#installation)
@@ -31,6 +31,7 @@
 
 **👁️ Educational Diagnostics**
 - **Difference View**: See exactly what's being changed
+- **Difference Intensity**: Adjust visibility for different footage contrast levels
 - **Spanish Dirt Removal**: Learn different brush techniques
 - **Iterative Workflow**: Understand and refine restoration decisions
 
@@ -131,6 +132,7 @@
 |---------|---------|---------|-------|
 | **Recovery type** | Choose between automatic or manual recovery | Recovery Brush (0) | 0 = Recovery Brush, 1 = Motion Mask |
 | **View Mode** | Toggle output between final result and diagnostic | RGB (1) | 0 = Difference View, 1 = RGB Output |
+| **Difference Intensity** | Adjust visibility of difference view | 0.6 | Higher = more visible difference (0.0-1.0) |
 
 ### Motion Analysis
 

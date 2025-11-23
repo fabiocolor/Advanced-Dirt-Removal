@@ -67,6 +67,12 @@
 					Source = "Source",
 					Name = "View Mode",
 					Default = 1,
+				},
+				Input12 = InstanceInput {
+					SourceOp = "Merge2",
+					Source = "Blend",
+					Name = "Difference Intensity",
+					Default = 0.6,
 				}
 			},
 			Outputs = {
