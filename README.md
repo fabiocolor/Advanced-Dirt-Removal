@@ -20,7 +20,7 @@ Both versions are professional Fusion macros for DaVinci Resolve that improve fi
 
 [![Advanced Dirt Removal Tutorial](assets/images/tutorial-preview.gif)](https://youtu.be/Gepw0XG0FGw?si=i8R3JqCKS8fHNTm3)
 
-**[▶️ Watch the complete 22-minute tutorial on YouTube](https://youtu.be/Gepw0XG0FGw?si=i8R3JqCKS8fHNTm3)**
+**[▶️ Watch the complete tutorial on YouTube](https://youtu.be/Gepw0XG0FGw?si=i8R3JqCKS8fHNTm3)**
 
 ---
 
