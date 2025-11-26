@@ -16,6 +16,14 @@
 
 Both versions are professional Fusion macros for DaVinci Resolve that improve film restoration capabilities, making it a viable low-cost platform for archival and educational restoration projects. Designed primarily for use in Fusion page workflows, they extend the built-in Automatic Dirt Removal with motion-masking, manual recovery tools, and diagnostic views to handle challenging restoration work without expensive specialized software.
 
+## 🎥 Video Tutorial
+
+[![Advanced Dirt Removal Tutorial](assets/images/tutorial-preview.gif)](https://youtu.be/Gepw0XG0FGw?si=i8R3JqCKS8fHNTm3)
+
+**[▶️ Watch the complete 22-minute tutorial on YouTube](https://youtu.be/Gepw0XG0FGw?si=i8R3JqCKS8fHNTm3)**
+
+---
+
 ![Recovery Brush Workflow](assets/images/Recovery%20brush.png)
 *Manual recovery brush workflow for precise restoration control*
 
