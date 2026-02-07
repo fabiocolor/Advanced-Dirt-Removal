@@ -5,7 +5,10 @@
 [![DaVinci Resolve](https://img.shields.io/badge/DaVinci%20Resolve-18%2B-red?style=flat-square)](https://www.blackmagicdesign.com/products/davinciresolve)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat-square)](#installation)
 
-[![Download](https://img.shields.io/badge/Download-Latest%20Release-brightgreen?style=for-the-badge&logo=download)](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases/latest)
+[![Download](https://img.shields.io/badge/Download-Easy%20Installer-brightgreen?style=for-the-badge&logo=download)](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases/latest)
+
+Preferred: download the platform installer (`.pkg` or `.exe`) from [Latest Release](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases/latest).  
+Manual `.setting` install is also available.
 
 ---
 
@@ -55,11 +58,15 @@ Both versions are professional Fusion macros for DaVinci Resolve that improve fi
 
 ### Quick & Easy Setup
 
-**Easy installer packages (.exe/.pkg):**
+**Recommended: Easy installer packages (.exe/.pkg):**
 
-Use the installer packages with install/uninstall/replace behavior. See [docs/INSTALLERS.md](docs/INSTALLERS.md).
+Download the installer packages from [Latest Release](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases/latest):
+- Windows: `AdvancedDirtRemoval-Setup-<version>.exe`
+- macOS: `AdvancedDirtRemoval-<version>.pkg`
 
-**Manual install (copy files):**
+Both installers support install/uninstall/replace behavior.
+
+**Alternative: Manual install (copy files):**
 
 1. **📥 Download** both macro files from the [latest release](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases):
    - `Advanced Dirt Removal.setting` (for linear footage)
