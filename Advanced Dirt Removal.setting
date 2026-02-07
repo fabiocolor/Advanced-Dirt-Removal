@@ -73,6 +73,24 @@
 					Source = "Blend",
 					Name = "Difference Intensity",
 					Default = 0.6,
+				},
+				Input13 = InstanceInput {
+					SourceOp = "Switch1_3",
+					Source = "Source",
+					Name = "Dust Polarity",
+					Default = 0,
+				},
+				Input14 = InstanceInput {
+					SourceOp = "LumaKeyer1",
+					Source = "High",
+					Name = "White Threshold",
+					Default = 0.7,
+				},
+				Input15 = InstanceInput {
+					SourceOp = "LumaKeyer1",
+					Source = "Low",
+					Name = "Black Threshold",
+					Default = 0.3,
 				}
 			},
 			Outputs = {
@@ -293,7 +311,7 @@
 					CtrlWShown = false,
 					Inputs = {
 						EffectMask = Input {
-							SourceOp = "Switch1_2",
+							SourceOp = "ChannelBooleans3",
 							Source = "Output",
 						},
 						ApplyMaskInverted = Input { Value = 1, },
@@ -321,6 +339,83 @@
 						resolvefxVersion = Input { Value = "1.0", }
 					},
 					ViewInfo = OperatorInfo { Pos = { 165, 115.5 } },
+				},
+				LumaKeyer1 = LumaKeyer {
+					CtrlWShown = false,
+					Inputs = {
+						High = Input { Value = 0.7, },
+						Low = Input { Value = 0.3, },
+						Input = Input {
+							SourceOp = "CustomFilter1",
+							Source = "Output",
+						}
+					},
+					ViewInfo = OperatorInfo { Pos = { -330, 115.5 } },
+				},
+				ChannelBooleans2 = ChannelBoolean {
+					CtrlWShown = false,
+					Inputs = {
+						Operation = Input { Value = 13, },
+						Background = Input {
+							SourceOp = "LumaKeyer1",
+							Source = "Output",
+						},
+						Foreground = Input {
+							SourceOp = "Background1",
+							Source = "Output",
+						}
+					},
+					ViewInfo = OperatorInfo { Pos = { -330, 181.5 } },
+				},
+				Background1 = Background {
+					CtrlWShown = false,
+					Inputs = {
+						Width = Input { Value = 1920, },
+						Height = Input { Value = 1080, },
+						["Gamut.Space"] = Input { Value = FuID { "sRGB" }, },
+						TopLeftRed = Input { Value = 1, },
+						TopLeftGreen = Input { Value = 1, },
+						TopLeftBlue = Input { Value = 1, },
+						TopLeftAlpha = Input { Value = 1, }
+					},
+					ViewInfo = OperatorInfo { Pos = { -495, 181.5 } },
+				},
+				Switch1_3 = Switch {
+					CtrlWShown = false,
+					Inputs = {
+						Name0 = Input { Value = "Both", },
+						Input0 = Input {
+							SourceOp = "Background1",
+							Source = "Output",
+						},
+						Name1 = Input { Value = "White Only", },
+						Input1 = Input {
+							SourceOp = "LumaKeyer1",
+							Source = "Output",
+						},
+						Name2 = Input { Value = "Black Only", },
+						Input2 = Input {
+							SourceOp = "ChannelBooleans2",
+							Source = "Output",
+						}
+					},
+					ViewInfo = OperatorInfo { Pos = { -165, 115.5 } },
+					Colors = { TileColor = { R = 0.572549019607843, G = 0.572549019607843, B = 0.572549019607843 }, }
+				},
+				ChannelBooleans3 = ChannelBoolean {
+					CtrlWShown = false,
+					Inputs = {
+						Operation = Input { Value = 8, },
+						Background = Input {
+							SourceOp = "Switch1_2",
+							Source = "Output",
+						},
+						Foreground = Input {
+							SourceOp = "Switch1_3",
+							Source = "Output",
+						}
+					},
+					ViewInfo = OperatorInfo { Pos = { -165, 181.5 } },
 				},
 				Switch1_2 = Switch {
 					CtrlWShown = false,

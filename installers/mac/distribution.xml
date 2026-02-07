@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="1">
+    <title>Advanced Dirt Removal</title>
+    <organization>com.fabiocolor</organization>
+    <domains enable_anywhere="false" enable_currentUserHome="false" enable_localSystem="true"/>
+    <options customize="never" require-scripts="true" hostArchitectures="x86_64,arm64"/>
+    <welcome file="welcome.html" mime-type="text/html"/>
+    <conclusion file="conclusion.html" mime-type="text/html"/>
+
+    <pkg-ref id="com.fabiocolor.AdvancedDirtRemoval"/>
+    <choices-outline>
+        <line choice="com.fabiocolor.AdvancedDirtRemoval"/>
+    </choices-outline>
+    <choice id="com.fabiocolor.AdvancedDirtRemoval" visible="true">
+        <pkg-ref id="com.fabiocolor.AdvancedDirtRemoval"/>
+    </choice>
+    <pkg-ref id="com.fabiocolor.AdvancedDirtRemoval" version="1.1.0" onConclusion="none">AdvancedDirtRemoval-component.pkg</pkg-ref>
+</installer-gui-script>

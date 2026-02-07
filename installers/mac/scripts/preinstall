@@ -1,0 +1,57 @@
+#!/bin/bash
+# Advanced Dirt Removal - prompt to remove existing version before install
+# $1 = target volume (e.g. /)
+
+set -euo pipefail
+
+if [ -z "${1:-}" ]; then
+  VOLUME="/"
+elif [[ "$1" == *".pkg"* ]] || [[ "$1" != "/"* ]]; then
+  VOLUME="/"
+else
+  VOLUME="$1"
+fi
+
+if [ "$VOLUME" != "/" ] && [ "${VOLUME: -1}" = "/" ]; then
+  VOLUME="${VOLUME%/}"
+fi
+
+MACROS_PATH="${VOLUME}/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Macros"
+MACRO_1="Advanced Dirt Removal.setting"
+MACRO_2="Advanced Dirt Removal Cineon.setting"
+INSTALLED_1="${MACROS_PATH}/${MACRO_1}"
+INSTALLED_2="${MACROS_PATH}/${MACRO_2}"
+PKG_IDENTIFIER="com.fabiocolor.AdvancedDirtRemoval"
+ACTION_FILE="${VOLUME}/tmp/AdvancedDirtRemoval_action"
+
+if [ -f "${INSTALLED_1}" ] || [ -e "${INSTALLED_1}" ] || test -r "${INSTALLED_1}" 2>/dev/null || \
+   [ -f "${INSTALLED_2}" ] || [ -e "${INSTALLED_2}" ] || test -r "${INSTALLED_2}" 2>/dev/null; then
+  ACTION="replace"
+
+  if command -v /usr/bin/osascript >/dev/null 2>&1; then
+    BUTTON=$(/usr/bin/osascript <<'APPLESCRIPT'
+display dialog "A previous version of Advanced Dirt Removal is already installed.\n\nChoose what to do:" buttons {"Cancel", "Uninstall Only", "Replace & Install"} default button "Replace & Install" with title "Advanced Dirt Removal"
+button returned of result
+APPLESCRIPT
+) || {
+      echo "Installation canceled by user." >&2
+      exit 1
+    }
+
+    if [ "$BUTTON" = "Uninstall Only" ]; then
+      ACTION="uninstall"
+    elif [ "$BUTTON" = "Replace & Install" ]; then
+      ACTION="replace"
+    else
+      echo "Installation canceled by user." >&2
+      exit 1
+    fi
+  else
+    echo "Warning: Unable to prompt for confirmation. Proceeding to replace existing installation." >&2
+  fi
+
+  rm -f "${INSTALLED_1}" "${INSTALLED_2}" || true
+  pkgutil --forget "${PKG_IDENTIFIER}" >/dev/null 2>&1 || true
+
+  echo "$ACTION" > "$ACTION_FILE"
+fi

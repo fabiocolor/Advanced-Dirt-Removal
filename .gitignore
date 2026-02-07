@@ -47,3 +47,4 @@ docs/
 
 # Project specific
 # Keep only essential project files
+installers/mac/build/

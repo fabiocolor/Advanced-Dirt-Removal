@@ -36,6 +36,7 @@ Both versions are professional Fusion macros for DaVinci Resolve that improve fi
 **🔄 Accessible Recovery Options**
 - **Motion Mask**: Automatically restricts repairs to low/no-motion areas
 - **Recovery Brush**: Manual painting to restore original details when automatic fails
+- **Dust Polarity Selection**: Choose to remove white dust (negatives), black dust (positives), or both - matches professional restoration software like DVO Dry Clean
 
 **🎨 Enhanced Processing**
 - Leverages existing DaVinci Resolve tools (optical flow, noise reduction, deflicker)
@@ -53,6 +54,12 @@ Both versions are professional Fusion macros for DaVinci Resolve that improve fi
 ## 📦 Installation
 
 ### Quick & Easy Setup
+
+**Easy installer packages (.exe/.pkg):**
+
+Use the installer packages with install/uninstall/replace behavior. See [docs/INSTALLERS.md](docs/INSTALLERS.md).
+
+**Manual install (copy files):**
 
 1. **📥 Download** both macro files from the [latest release](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases):
    - `Advanced Dirt Removal.setting` (for linear footage)
@@ -117,10 +124,16 @@ Both versions are professional Fusion macros for DaVinci Resolve that improve fi
    - For Cineon log film scans: Use "Advanced Dirt Removal Cineon" macro
    - For standard footage: Use "Advanced Dirt Removal" macro
 
+6. **Select Dust Polarity (if needed)**
+   - **Both** (default): Removes all defects (current behavior)
+   - **White Only**: For film negatives - only removes bright white dust/scratches
+   - **Black Only**: For film positives - only removes dark dust/scratches
+   - Adjust White/Black Threshold sliders to fine-tune detection sensitivity
+
 ![Spanish Dirt Removal](assets/images/Spanish%20Dirt%20Removal.png)
 *Spanish Dirt Removal mode - paint to target specific repairs*
 
-6. **Fine-tune Parameters**
+7. **Fine-tune Parameters**
    - Adjust dirt detection sensitivity
    - Control motion threshold
    - Set temporal processing strength
@@ -256,6 +269,9 @@ MediaIn → Advanced Dirt Removal → MediaOut
 
 | Control | Purpose | Default | Notes |
 |---------|---------|---------|-------|
+| **Dust Polarity** | Select which type of dust to remove | Both (0) | 0 = Both, 1 = White Only (negatives), 2 = Black Only (positives) |
+| **White Threshold** | Luminance threshold for white dust detection | 0.7 | Higher = only very bright defects (0.0-1.0) |
+| **Black Threshold** | Luminance threshold for black dust detection | 0.3 | Lower = only very dark defects (0.0-1.0) |
 | **temporalThreshold** | How aggressive the dirt detection is | 0.45 (Linear) / 0.5 (Cineon) | Lower = more sensitive, detects smaller defects |
 | **dirtSize** | Minimum size of defects to detect | 0.01 | Smaller = detects tinier dirt particles |
 | **motionEstType** | Motion estimation algorithm | HS_Better | Different methods for motion calculation |

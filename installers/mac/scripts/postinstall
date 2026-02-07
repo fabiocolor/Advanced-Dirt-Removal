@@ -1,0 +1,81 @@
+#!/bin/bash
+# Advanced Dirt Removal - single .pkg install/uninstall toggle
+# $1 = target volume (e.g. /)
+# If macros already installed -> uninstall. Else install from payload.
+
+set -euo pipefail
+
+if [ -z "${1:-}" ]; then
+  VOLUME="/"
+elif [[ "$1" == *".pkg"* ]] || [[ "$1" != "/"* ]]; then
+  VOLUME="/"
+else
+  VOLUME="$1"
+fi
+
+if [ "$VOLUME" != "/" ] && [ "${VOLUME: -1}" = "/" ]; then
+  VOLUME="${VOLUME%/}"
+fi
+
+MACROS_PATH="${VOLUME}/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Macros"
+MACRO_1="Advanced Dirt Removal.setting"
+MACRO_2="Advanced Dirt Removal Cineon.setting"
+STAGING="${VOLUME}/tmp/AdvancedDirtRemoval_payload"
+INSTALLED_1="${MACROS_PATH}/${MACRO_1}"
+INSTALLED_2="${MACROS_PATH}/${MACRO_2}"
+PKG_IDENTIFIER="com.fabiocolor.AdvancedDirtRemoval"
+ACTION_FILE="${VOLUME}/tmp/AdvancedDirtRemoval_action"
+
+ACTION=""
+if [ -f "${ACTION_FILE}" ]; then
+  ACTION="$(cat "${ACTION_FILE}" 2>/dev/null || true)"
+  rm -f "${ACTION_FILE}" || true
+fi
+
+IS_INSTALLED=false
+if [ -f "${INSTALLED_1}" ] || [ -e "${INSTALLED_1}" ] || test -r "${INSTALLED_1}" 2>/dev/null; then
+  IS_INSTALLED=true
+fi
+if [ -f "${INSTALLED_2}" ] || [ -e "${INSTALLED_2}" ] || test -r "${INSTALLED_2}" 2>/dev/null; then
+  IS_INSTALLED=true
+fi
+
+if [ "$ACTION" = "replace" ]; then
+  rm -f "${INSTALLED_1}" "${INSTALLED_2}" || true
+  IS_INSTALLED=false
+fi
+
+if [ "$ACTION" = "uninstall" ]; then
+  rm -f "${INSTALLED_1}" "${INSTALLED_2}" || true
+  echo "Advanced Dirt Removal uninstalled."
+  pkgutil --forget "${PKG_IDENTIFIER}" >/dev/null 2>&1 || true
+elif [ "$IS_INSTALLED" = "true" ]; then
+  if rm -f "${INSTALLED_1}" "${INSTALLED_2}" 2>/dev/null; then
+    echo "Advanced Dirt Removal uninstalled."
+    pkgutil --forget "${PKG_IDENTIFIER}" >/dev/null 2>&1 || true
+  else
+    rm -f "${INSTALLED_1}" "${INSTALLED_2}" || true
+    echo "Advanced Dirt Removal uninstalled."
+    pkgutil --forget "${PKG_IDENTIFIER}" >/dev/null 2>&1 || true
+  fi
+else
+  if ! mkdir -p "${MACROS_PATH}" 2>/dev/null; then
+    echo "Error: Failed to create Macros directory: ${MACROS_PATH}" >&2
+    exit 1
+  fi
+
+  if [ -f "${STAGING}/${MACRO_1}" ] && [ -f "${STAGING}/${MACRO_2}" ]; then
+    if cp "${STAGING}/${MACRO_1}" "${MACROS_PATH}/${MACRO_1}" && cp "${STAGING}/${MACRO_2}" "${MACROS_PATH}/${MACRO_2}"; then
+      echo "Advanced Dirt Removal installed."
+      pkgutil --forget "${PKG_IDENTIFIER}" >/dev/null 2>&1 || true
+    else
+      echo "Error: Failed to copy macro files" >&2
+      exit 1
+    fi
+  else
+    echo "Error: payload not found at ${STAGING}" >&2
+    exit 1
+  fi
+fi
+
+rm -rf "${STAGING}"

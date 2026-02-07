@@ -39,6 +39,15 @@ Version: 1.1 (Current Release - Dual Version System)
   - Motion Mask (automatic motion-based)
 - **ChannelBooleans1/1_2** - Mask generation and processing
 
+### Dust Polarity System
+- **LumaKeyer1** - Extracts bright or dark areas based on polarity selection
+- **Switch1_3** - Dust polarity selector:
+  - Both (0): White mask - no filtering, processes all defects
+  - White Only (1): LumaKeyer output - only bright defects
+  - Black Only (2): Inverted LumaKeyer - only dark defects
+- **ChannelBooleans3** - Combines polarity mask with Recovery/Motion mask (AND operation)
+- **Background1** - Generates white mask for "Both" mode (no filtering)
+
 ### View Modes
 - **Switch1** - Output selector:
   - RGB View (final result)
@@ -52,6 +61,12 @@ Version: 1.1 (Current Release - Dual Version System)
 - Positioned after Recovery type for better workflow
 
 ### Dirt Removal - Linear Version Optimized
+- **Dust Polarity** - Select dust type to remove (Default: 0 = Both)
+  - 0 = Both (all defects)
+  - 1 = White Only (for negatives)
+  - 2 = Black Only (for positives)
+- **White Threshold** - Luminance threshold for white dust (Default: 0.7)
+- **Black Threshold** - Luminance threshold for black dust (Default: 0.3)
 - **motionEstType** - Motion estimation method (HS_Better)
 - **supportLength** - Temporal support window (SUPPORT_LENGTH_4)
 - **temporalThreshold** - Detection threshold (Default: 0.45)
@@ -59,6 +74,12 @@ Version: 1.1 (Current Release - Dual Version System)
 - **motionThreshold** - Motion sensitivity (Default: 25)
 
 ### Dirt Removal - Cineon Version Optimized
+- **Dust Polarity** - Select dust type to remove (Default: 0 = Both)
+  - 0 = Both (all defects)
+  - 1 = White Only (for negatives)
+  - 2 = Black Only (for positives)
+- **White Threshold** - Luminance threshold for white dust (Default: 0.7)
+- **Black Threshold** - Luminance threshold for black dust (Default: 0.3)
 - **motionEstType** - Motion estimation method (HS_Better)
 - **supportLength** - Temporal support window (SUPPORT_LENGTH_4)
 - **temporalThreshold** - Detection threshold (Default: 0.5)
@@ -84,6 +105,9 @@ This section lists the macro's published (InstanceInput) controls and how they m
 - `Recovery/Spanish Dirt Removal` (maps to `AutomaticDirtRemoval1.ApplyMaskInverted`) — toggles brush polarity (see Behavior Notes).
 - `View Mode` (maps to `Switch1.Source`) — toggles RGB vs Difference (diagnostic) view.
 - `Difference Intensity` (maps to `Merge2.Blend`) — default: 0.6 — adjusts visibility of difference view.
+- `Dust Polarity` (maps to `Switch1_3.Source`) — selects dust type: Both (0), White Only (1), Black Only (2).
+- `White Threshold` (maps to `LumaKeyer1.High`) — default: 0.7 — luminance threshold for white dust detection.
+- `Black Threshold` (maps to `LumaKeyer1.Low`) — default: 0.3 — luminance threshold for black dust detection.
 
 **Note:** v1.2 has no user control for log conversion - Cineon log conversion is always active.
 
@@ -99,9 +123,16 @@ The macro's internal node graph wires the automatic repair and recovery mask as 
 - `CustomFilter1` → `Deflicker1` → `NoiseReduction1` → `OpticalFlow1` → preprocessing chain
 - `OpticalFlow1` → `CustomTool1` → motion magnitude calculation for motion mask
 - `AutomaticDirtRemoval1` (ResolveFX VideoRestoration) → foreground into `Merge1`/`Merge2`
-- `Switch1_2` selects which mask is used as the `EffectMask` for `AutomaticDirtRemoval1`:
+- `LumaKeyer1` extracts bright/dark areas from source based on polarity selection
+- `Switch1_3` selects polarity mask:
+  - Option 0: `Background1` (white mask - no filtering for "Both")
+  - Option 1: `LumaKeyer1` (bright areas for "White Only")
+  - Option 2: `ChannelBooleans2` (inverted LumaKeyer for "Black Only")
+- `Switch1_2` selects which mask is used (Recovery Brush or Motion Mask):
   - Option 0: `ChannelBooleans1` (Recovery Brush mask)
   - Option 1: `ChannelBooleans1_2` (Motion Mask / Motion-based mask)
+- `ChannelBooleans3` combines polarity mask (from `Switch1_3`) with Recovery/Motion mask (from `Switch1_2`) using Multiply operation (AND)
+- `ChannelBooleans3` output is used as the `EffectMask` for `AutomaticDirtRemoval1`
 - `Merge1` composites AutomaticDirtRemoval (Foreground) over Source (Background) for the final RGB result
 - `Merge2` is configured to produce a difference-style view (ApplyMode = Difference, Blend ~0.6) used by `Switch1` to offer RGB vs Difference outputs
 - `Switch1` selects between RGB (Merge1) and Difference (Merge2)
@@ -121,6 +152,13 @@ The macro's internal node graph wires the automatic repair and recovery mask as 
 - **Hybrid workflows**: even in Motion Mask mode the user can add manual paints (the published mask input accepts painted masks), enabling a mix of automatic motion-based selection and manual correction.
 - **Difference View**: use `View Mode` / `Switch1` to toggle Difference View for fast visual inspection; this aids deciding where to add recovery paints or change mask polarity.
 - **Difference Intensity (v1.1+)**: adjust the `Difference Intensity` slider to control the visibility of the difference view, making it easier to see changes in low-contrast footage.
+- **Dust Polarity Selection**: The `Dust Polarity` control allows selective removal of white or black dust, matching professional restoration software like DVO Dry Clean:
+  - **Both** (default): No filtering - all defects are processed (maintains backward compatibility)
+  - **White Only**: Only bright defects are removed - ideal for film negatives where dust appears white
+  - **Black Only**: Only dark defects are removed - ideal for film positives where dust appears dark
+  - The polarity mask is combined with the existing Recovery/Motion mask using an AND operation, so repairs only occur where both conditions are met
+  - Threshold controls allow fine-tuning of what counts as "white" or "black" dust
+  - In Cineon version, polarity detection operates in linear color space for accurate luminance analysis
 
 ## Defaults, Versions and Notes
 
