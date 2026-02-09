@@ -5,10 +5,10 @@
 [![DaVinci Resolve](https://img.shields.io/badge/DaVinci%20Resolve-18%2B-red?style=flat-square)](https://www.blackmagicdesign.com/products/davinciresolve)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat-square)](#installation)
 
-[![Download](https://img.shields.io/badge/Download-Easy%20Installer-brightgreen?style=for-the-badge&logo=download)](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases/latest)
+[![Download](https://img.shields.io/badge/Download-Latest%20Release-brightgreen?style=for-the-badge&logo=download)](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases/latest)
 
-Preferred: download the platform installer (`.pkg` or `.exe`) from [Latest Release](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases/latest).  
-Manual `.setting` install is also available.
+Download from [Latest Release](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases/latest):  
+`Advanced Dirt Removal.setting` and `Advanced Dirt Removal Cineon.setting`.
 
 ---
 
@@ -56,17 +56,9 @@ Both versions are professional Fusion macros for DaVinci Resolve that improve fi
 
 ## 📦 Installation
 
-### Quick & Easy Setup
+### Quick Setup
 
-**Recommended: Easy installer packages (.exe/.pkg):**
-
-Download the installer packages from [Latest Release](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases/latest):
-- Windows: `AdvancedDirtRemoval-Setup-<version>.exe`
-- macOS: `AdvancedDirtRemoval-<version>.pkg`
-
-Both installers support install/uninstall/replace behavior.
-
-**Alternative: Manual install (copy files):**
+Use the two `.setting` files from [Latest Release](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases/latest).
 
 1. **📥 Download** both macro files from the [latest release](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases):
    - `Advanced Dirt Removal.setting` (for linear footage)
@@ -99,6 +91,8 @@ Both installers support install/uninstall/replace behavior.
 > ⚡ **Best Practice**: Install to the Macros folder for full Fusion page functionality including manual recovery workflows
 >
 > 🎯 **Version Choice**: Use the Linear version for standard footage, Cineon version for film scans. Both macros will appear in your Effects panel after restart.
+
+Simple step-by-step guide: [docs/INSTALL.md](docs/INSTALL.md)
 
 ---
 

@@ -1,0 +1,35 @@
+name: Release on tag
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish-release-assets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare user-facing assets
+        run: |
+          mkdir -p dist/public
+          cp "Advanced Dirt Removal.setting" dist/public/
+          cp "Advanced Dirt Removal Cineon.setting" dist/public/
+          cp docs/INSTALL.md dist/public/
+
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="$GITHUB_REF_NAME"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" dist/public/* --clobber
+          else
+            gh release create "$tag" --title "$tag" --generate-notes dist/public/*
+          fi
