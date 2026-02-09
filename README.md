@@ -99,6 +99,8 @@ Both versions are professional Fusion macros for DaVinci Resolve that improve fi
 
 Simple step-by-step guide: [docs/INSTALL.md](docs/INSTALL.md)
 
+Maintainer release notes: [docs/MAINTAINERS_RELEASE.md](docs/MAINTAINERS_RELEASE.md)
+
 ---
 
 ## 🚀 Usage
