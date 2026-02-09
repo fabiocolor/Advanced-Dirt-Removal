@@ -1,5 +1,16 @@
 # Install Advanced Dirt Removal
 
+## Option 1 (recommended): Installer ZIP
+
+1. Download from the latest release:
+   - `AdvancedDirtRemoval-Setup-<version>-win64.zip` (Windows)
+   - `AdvancedDirtRemoval-<version>-macos.zip` (macOS)
+2. Extract the ZIP.
+3. Run the installer inside (`.exe` or `.pkg`).
+4. Restart DaVinci Resolve.
+
+## Option 2: Manual `.setting` install
+
 1. Download both files from the latest release:
    - `Advanced Dirt Removal.setting`
    - `Advanced Dirt Removal Cineon.setting`
@@ -12,4 +23,5 @@
 
 ## Uninstall
 
-Delete both `.setting` files from the same folder, then restart Resolve.
+- Installer path: run the same installer again and choose uninstall if prompted.
+- Manual path: delete both `.setting` files from the same folder, then restart Resolve.

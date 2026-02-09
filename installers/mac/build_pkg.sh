@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Build macOS .pkg for Advanced Dirt Removal
-# Run from repo root: bash installers/mac/build_pkg.sh
+# Run from repo root: bash installers/mac/build_pkg.sh [version]
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 BUILD_DIR="$REPO_ROOT/installers/mac/build"
@@ -10,7 +10,7 @@ PAYLOAD_DIR="$BUILD_DIR/payload"
 SCRIPTS_DIR="$REPO_ROOT/installers/mac/scripts"
 RESOURCES_DIR="$REPO_ROOT/installers/mac"
 PKG_ID="com.fabiocolor.AdvancedDirtRemoval"
-VERSION="1.1.0"
+VERSION="${1:-1.1.0}"
 
 MACRO_1="Advanced Dirt Removal.setting"
 MACRO_2="Advanced Dirt Removal Cineon.setting"
@@ -35,8 +35,11 @@ pkgbuild \
   --scripts "$SCRIPTS_DIR" \
   "$BUILD_DIR/AdvancedDirtRemoval-component.pkg"
 
+DIST_FILE="$BUILD_DIR/distribution.xml"
+sed -E "s/version=\"[0-9]+\\.[0-9]+\\.[0-9]+\"/version=\"$VERSION\"/" "$RESOURCES_DIR/distribution.xml" > "$DIST_FILE"
+
 productbuild \
-  --distribution "$RESOURCES_DIR/distribution.xml" \
+  --distribution "$DIST_FILE" \
   --resources "$RESOURCES_DIR" \
   --package-path "$BUILD_DIR" \
   "$BUILD_DIR/AdvancedDirtRemoval-$VERSION.pkg"

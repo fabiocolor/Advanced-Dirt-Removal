@@ -8,7 +8,7 @@
 [![Download](https://img.shields.io/badge/Download-Latest%20Release-brightgreen?style=for-the-badge&logo=download)](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases/latest)
 
 Download from [Latest Release](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases/latest):  
-`Advanced Dirt Removal.setting` and `Advanced Dirt Removal Cineon.setting`.
+installer ZIP for your platform (`*-win64.zip` or `*-macos.zip`), or manual `.setting` files.
 
 ---
 
@@ -58,7 +58,12 @@ Both versions are professional Fusion macros for DaVinci Resolve that improve fi
 
 ### Quick Setup
 
-Use the two `.setting` files from [Latest Release](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases/latest).
+**Recommended: Installer ZIPs from [Latest Release](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases/latest)**
+
+- Windows: `AdvancedDirtRemoval-Setup-<version>-win64.zip` (extract and run contained `.exe`)
+- macOS: `AdvancedDirtRemoval-<version>-macos.zip` (extract and run contained `.pkg`)
+
+**Manual fallback: use the two `.setting` files**
 
 1. **📥 Download** both macro files from the [latest release](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases):
    - `Advanced Dirt Removal.setting` (for linear footage)

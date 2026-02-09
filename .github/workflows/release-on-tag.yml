@@ -4,13 +4,12 @@ on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  publish-release-assets:
+  create-release:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -23,7 +22,7 @@ jobs:
           cp "Advanced Dirt Removal Cineon.setting" dist/public/
           cp docs/INSTALL.md dist/public/
 
-      - name: Create or update release
+      - name: Create or update release with base assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -33,3 +32,83 @@ jobs:
           else
             gh release create "$tag" --title "$tag" --generate-notes dist/public/*
           fi
+
+  build-win-installer:
+    needs: create-release
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y
+
+      - name: Build Windows installer and zip
+        shell: pwsh
+        run: |
+          $tag = "$env:GITHUB_REF_NAME"
+          $ver = if ($tag -match '^v(.+)$') { $Matches[1] } else { $tag }
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=$ver installers\win\AdvancedDirtRemoval.iss
+          $exe = Get-ChildItem installers\AdvancedDirtRemoval-Setup-*.exe | Select-Object -First 1
+          $zip = "installers\AdvancedDirtRemoval-Setup-$ver-win64.zip"
+          Compress-Archive -Path $exe.FullName -DestinationPath $zip -Force
+
+      - name: Upload Windows installer zip to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          gh release upload "$env:GITHUB_REF_NAME" installers\AdvancedDirtRemoval-Setup-*-win64.zip --clobber
+
+      - name: Build internal Windows security metadata
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path internal-security/windows | Out-Null
+          Copy-Item -Force installers\AdvancedDirtRemoval-Setup-*-win64.zip internal-security/windows/
+          $files = Get-ChildItem internal-security/windows -File
+          $lines = foreach ($file in $files) {
+            $hash = (Get-FileHash -Path $file.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash *$($file.Name)"
+          }
+          Set-Content -Path internal-security/windows/SHA256SUMS.txt -Value $lines
+
+      - name: Upload internal Windows security artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: internal-security-windows
+          path: internal-security/windows/*
+
+  build-mac-installer:
+    needs: create-release
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build macOS installer and zip
+        run: |
+          tag="$GITHUB_REF_NAME"
+          ver="${tag#v}"
+          bash installers/mac/build_pkg.sh "$ver"
+          ditto -c -k --sequesterRsrc --keepParent "installers/mac/build/AdvancedDirtRemoval-$ver.pkg" "installers/mac/build/AdvancedDirtRemoval-$ver-macos.zip"
+
+      - name: Upload macOS installer zip to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "$GITHUB_REF_NAME" installers/mac/build/AdvancedDirtRemoval-*-macos.zip --clobber
+
+      - name: Build internal macOS security metadata
+        run: |
+          mkdir -p internal-security/macos
+          cp installers/mac/build/AdvancedDirtRemoval-*-macos.zip internal-security/macos/
+          (
+            cd internal-security/macos
+            shasum -a 256 * > SHA256SUMS.txt
+          )
+
+      - name: Upload internal macOS security artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: internal-security-macos
+          path: internal-security/macos/*
