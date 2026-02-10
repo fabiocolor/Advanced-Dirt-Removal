@@ -35,13 +35,14 @@ Source: "..\..\Advanced Dirt Removal Cineon.setting"; DestDir: "{userappdata}\{#
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 
 [Code]
-function RunUninstall(const UninstallStr: string): Boolean;
+function RunUninstall(const UninstallStr: string; const SilentMode: Boolean): Boolean;
 var
   ExePath: string;
   Params: string;
   PosSpace: Integer;
   ResultCode: Integer;
   Cmd: string;
+  ShowCmd: Integer;
 begin
   Result := False;
   Cmd := Trim(UninstallStr);
@@ -74,7 +75,12 @@ begin
 
   if (ExePath <> '') and FileExists(ExePath) then
   begin
-    if Exec(ExePath, Params, '', SW_SHOW, ewWaitUntilTerminated, ResultCode) then
+    if SilentMode then
+      ShowCmd := SW_HIDE
+    else
+      ShowCmd := SW_SHOW;
+
+    if Exec(ExePath, Params, '', ShowCmd, ewWaitUntilTerminated, ResultCode) then
       Result := True;
   end;
 end;
@@ -100,6 +106,18 @@ begin
 
   if HasInstaller or HasFile then
   begin
+    if WizardSilent then
+    begin
+      if HasInstaller then
+        if not RunUninstall(UninstallStr + ' /VERYSILENT /SUPPRESSMSGBOXES /NOCANCEL /NORESTART', True) then;
+      if FileExists(MacroPath) then
+        if DeleteFile(MacroPath) then;
+      if FileExists(MacroPath2) then
+        if DeleteFile(MacroPath2) then;
+      Result := True;
+      Exit;
+    end;
+
     Choice := MsgBox('A previous version of Advanced Dirt Removal is already installed.' #13#10 #13#10 +
       'Choose an option:' #13#10 +
       '- Yes: Replace and install' #13#10 +
@@ -118,7 +136,7 @@ begin
     begin
       if HasInstaller then
       begin
-        if not RunUninstall(UninstallStr) then
+        if not RunUninstall(UninstallStr, False) then
           MsgBox('Uninstall may have failed. You can also remove it from Settings > Apps.', mbError, MB_OK);
       end
       else
