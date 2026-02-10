@@ -108,12 +108,7 @@ begin
   begin
     if WizardSilent then
     begin
-      if HasInstaller then
-        if not RunUninstall(UninstallStr + ' /VERYSILENT /SUPPRESSMSGBOXES /NOCANCEL /NORESTART', True) then;
-      if FileExists(MacroPath) then
-        if DeleteFile(MacroPath) then;
-      if FileExists(MacroPath2) then
-        if DeleteFile(MacroPath2) then;
+      { Keep unattended installs non-interactive and deterministic. }
       Result := True;
       Exit;
     end;
