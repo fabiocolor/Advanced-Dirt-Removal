@@ -7,8 +7,12 @@
 
 [![Download](https://img.shields.io/badge/Download-Latest%20Release-brightgreen?style=for-the-badge&logo=download)](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases/latest)
 
-Download from [Latest Release](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases/latest):  
-installer ZIP for your platform (`*-win64.zip` or `*-macos.zip`), or manual `.setting` files.
+Windows users can now install with `winget`:
+`winget install --id FabioColor.AdvancedDirtRemoval --exact --source winget`
+
+Preferred fallback: download from [Latest Release](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases/latest):  
+installer ZIP for your platform (`*-win64.zip` or `*-macos.zip`).
+Manual `.setting` install is also available.
 
 ---
 
@@ -58,7 +62,19 @@ Both versions are professional Fusion macros for DaVinci Resolve that improve fi
 
 ### Quick Setup
 
-**Recommended: Installer ZIPs from [Latest Release](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases/latest)**
+**Windows (winget, recommended):**
+
+```powershell
+winget install --id FabioColor.AdvancedDirtRemoval --exact --source winget
+```
+
+To update later:
+
+```powershell
+winget upgrade --id FabioColor.AdvancedDirtRemoval --exact --source winget
+```
+
+**Installer ZIP fallback from [Latest Release](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases/latest):**
 
 - Windows: `AdvancedDirtRemoval-Setup-<version>-win64.zip` (extract and run contained `.exe`)
 - macOS: `AdvancedDirtRemoval-<version>-macos.zip` (extract and run contained `.pkg`)
