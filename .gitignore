@@ -48,3 +48,4 @@ docs/
 # Project specific
 # Keep only essential project files
 installers/mac/build/
+tests/resolve_headless/

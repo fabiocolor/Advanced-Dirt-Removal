@@ -38,12 +38,20 @@ Both versions are professional Fusion macros for DaVinci Resolve that improve fi
 
 ---
 
+## Known Issue: Dust Polarity Controls
+
+A previous release included Dust Polarity controls for white-only and black-only dirt filtering. Those controls do not reliably limit cleanup by dust color and may interfere with the core Recovery Brush and Spanish Dirt Removal workflows.
+
+If you see Dust Polarity controls in the macro, update to this release. This version removes those controls and restores the expected Recovery Brush, Spanish Dirt Removal, Motion Mask, and Cineon behavior. Selective white/black dust cleanup remains planned for a future release once it works reliably across the full workflow.
+
+---
+
 ## ✨ Key Features
 
 **🔄 Accessible Recovery Options**
 - **Motion Mask**: Automatically restricts repairs to low/no-motion areas
 - **Recovery Brush**: Manual painting to restore original details when automatic fails
-- **Dust Polarity Selection**: Choose to remove white dust (negatives), black dust (positives), or both - matches professional restoration software like DVO Dry Clean
+- **Spanish Dirt Removal**: Paint targeted repairs directly while preserving the recovery workflow
 
 **🎨 Enhanced Processing**
 - Leverages existing DaVinci Resolve tools (optical flow, noise reduction, deflicker)
@@ -148,16 +156,10 @@ Maintainer release notes: [docs/MAINTAINERS_RELEASE.md](docs/MAINTAINERS_RELEASE
    - For Cineon log film scans: Use "Advanced Dirt Removal Cineon" macro
    - For standard footage: Use "Advanced Dirt Removal" macro
 
-6. **Select Dust Polarity (if needed)**
-   - **Both** (default): Removes all defects (current behavior)
-   - **White Only**: For film negatives - only removes bright white dust/scratches
-   - **Black Only**: For film positives - only removes dark dust/scratches
-   - Adjust White/Black Threshold sliders to fine-tune detection sensitivity
-
 ![Spanish Dirt Removal](assets/images/Spanish%20Dirt%20Removal.png)
 *Spanish Dirt Removal mode - paint to target specific repairs*
 
-7. **Fine-tune Parameters**
+6. **Fine-tune Parameters**
    - Adjust dirt detection sensitivity
    - Control motion threshold
    - Set temporal processing strength
@@ -186,7 +188,7 @@ While primarily a Fusion macro, Advanced Dirt Removal can also be applied as an 
 > **📝 Note**: Requires Mask Paint tool connection (see Recovery Brush Workflow below)
 
 - **Recovery Polarity** (Default): Paint to protect original details
-- **Spanish Polarity**: Paint to target specific repairs
+- **Spanish Polarity**: Paint to target specific repairs directly
 - Toggle the "Spanish Dirt Removal" checkbox to switch modes
 
 **🔍 Difference View**
@@ -293,13 +295,12 @@ MediaIn → Advanced Dirt Removal → MediaOut
 
 | Control | Purpose | Default | Notes |
 |---------|---------|---------|-------|
-| **Dust Polarity** | Select which type of dust to remove | Both (0) | 0 = Both, 1 = White Only (negatives), 2 = Black Only (positives) |
-| **White Threshold** | Luminance threshold for white dust detection | 0.7 | Higher = only very bright defects (0.0-1.0) |
-| **Black Threshold** | Luminance threshold for black dust detection | 0.3 | Lower = only very dark defects (0.0-1.0) |
 | **temporalThreshold** | How aggressive the dirt detection is | 0.45 (Linear) / 0.5 (Cineon) | Lower = more sensitive, detects smaller defects |
 | **dirtSize** | Minimum size of defects to detect | 0.01 | Smaller = detects tinier dirt particles |
 | **motionEstType** | Motion estimation algorithm | HS_Better | Different methods for motion calculation |
 | **supportLength** | Temporal window for analysis | SUPPORT_LENGTH_4 | How many frames to analyze together |
+
+Selective white/black dust cleanup is planned for a future release. It is not included in this version so the core Recovery Brush, Spanish Dirt Removal, Motion Mask, and Cineon workflows remain reliable.
 
 ### Advanced Options
 
