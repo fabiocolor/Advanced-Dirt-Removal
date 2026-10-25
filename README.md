@@ -351,3 +351,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 <div align="center">
   <sub>Making film restoration accessible to archives, educators, and preservation enthusiasts</sub>
 </div>
+
+Releases are built locally; the former GitHub Actions release workflows are kept for reference in `.ci-archive/github-actions/` (not run).
