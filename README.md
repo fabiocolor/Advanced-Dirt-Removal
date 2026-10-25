@@ -1,6 +1,6 @@
 # Advanced Dirt Removal for DaVinci Resolve
 
-[![Version](https://img.shields.io/badge/version-v1.1-blue?style=flat-square)](https://github.com/fabiocolor/Dirt-Removal-Recovery/releases)
+[![Version](https://img.shields.io/badge/version-v1.1.3-blue?style=flat-square)](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 [![DaVinci Resolve](https://img.shields.io/badge/DaVinci%20Resolve-18%2B-red?style=flat-square)](https://www.blackmagicdesign.com/products/davinciresolve)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat-square)](#installation)
@@ -16,12 +16,12 @@ Manual `.setting` install is also available.
 
 ---
 
-**Advanced Dirt Removal** provides professional dirt removal capabilities with two specialized versions for different workflows:
+**Advanced Dirt Removal** is a dirt removal macro for DaVinci Resolve, in two versions for different workflows:
 
 - **Linear Version**: Optimized for standard footage (Rec.709, sRGB, etc.)
 - **Cineon Version**: Optimized for film scans with built-in Cineon→Linear→Cineon conversion
 
-Both versions are professional Fusion macros for DaVinci Resolve that improve film restoration capabilities, making it a viable low-cost platform for archival and educational restoration projects. Designed primarily for use in Fusion page workflows, they extend the built-in Automatic Dirt Removal with motion-masking, manual recovery tools, and diagnostic views to handle challenging restoration work without expensive specialized software.
+Both versions are Fusion macros for DaVinci Resolve. I made them so that Resolve can be a low-cost option for archival and educational restoration. Designed primarily for use in Fusion page workflows, they extend the built-in Automatic Dirt Removal with motion-masking, manual recovery tools, and diagnostic views to handle challenging restoration work without expensive specialized software.
 
 ## 🎥 Video Tutorial
 
@@ -34,7 +34,7 @@ Both versions are professional Fusion macros for DaVinci Resolve that improve fi
 ![Recovery Brush Workflow](assets/images/Recovery%20brush.png)
 *Manual recovery brush workflow for precise restoration control*
 
-> 🎯 **Perfect for**: Educational institutions, archives, non-commercial restoration projects, and making film preservation more accessible
+> **Intended for**: educational institutions, archives and non-commercial restoration projects.
 
 ---
 
@@ -226,7 +226,7 @@ Use the **Advanced Dirt Removal Cineon** macro which includes built-in Cineon→
 - Archival film scans (Cineon, DPX with Cineon log encoding)
 - Film transfer workflows using standard Cineon log
 - Any footage requiring Cineon log to linear processing
-- Professional film preservation projects
+- Film preservation projects
 
 **Simple Workflow:**
 
@@ -257,7 +257,7 @@ MediaIn → Advanced Dirt Removal Cineon → MediaOut
 - **Automatic Conversion**: Built-in Cineon→Linear→Cineon pipeline
 - **Optimized Processing**: All dirt removal happens in linear color space
 - **Preserves Film Characteristics**: Output maintains original Cineon log encoding
-- **Professional Workflow**: Designed specifically for film restoration work
+- **Made for film restoration**: designed around film scans and their damage
 - **Better Results**: Optical flow and motion analysis work optimally in linear space
 
 **Technical Details:**
@@ -337,8 +337,7 @@ Selective white/black dust cleanup is planned for a future release. It is not in
 
 ## 🤝 Community & Support
 
-- **Issues**: [GitHub Issues](https://github.com/fabiocolor/Dirt-Removal-Recovery/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/fabiocolor/Dirt-Removal-Recovery/discussions)
+- **Issues**: [GitHub Issues](https://github.com/fabiocolor/Advanced-Dirt-Removal/issues)
 
 ---
 
