@@ -1,0 +1,502 @@
+/* Detection group: byte compensation, temporal combine, noise analysis,
+ * weighted residual filters, Gaussian/energy/mask passes, repair masks,
+ * connected components and the post-repair contrast mask. */
+
+/* Relaxed atomic load for union-find roots (no dialect helper exists). */
+#if defined(ADR_METAL)
+#define DETECT_LOAD(ptr) atomic_load_explicit((ptr), memory_order_relaxed)
+#elif defined(ADR_CUDA)
+#define DETECT_LOAD(ptr) (*(volatile int*)(ptr))
+#else
+#define DETECT_LOAD(ptr) (*(volatile GLOBAL int*)(ptr))
+#endif
+
+
+/* ---------------------------------------------------------------------- */
+/* compensate_analysis: half-pixel four-tap [-1,5,5,-1]/8 warp of a byte plane. */
+KERNEL void detect_compensate(GLOBAL const uchar* image, GLOBAL const short* vectors, GLOBAL uchar* out,
+                              PARAMS(DetectCompensateParams) KARGS) {
+  const int xx = GID_X, yy = GID_Y, z = GID_Z;
+  if (xx >= p.w || yy >= p.h || z >= p.nchan) return;
+  const int vi = ((yy / p.block) * ((p.w + p.block - 1) / p.block) + xx / p.block) * 2;
+  const int x2 = xx * 2 + (int)vectors[vi], y2 = yy * 2 + (int)vectors[vi + 1];
+  const int x = x2 >> 1, y = y2 >> 1, fx = x2 & 1, fy = y2 & 1;
+  const int c = p.c0 + z;
+  int result = 0;
+  for (int j = 0; j < 4; ++j) {
+    const int wy = fy ? (j == 0 || j == 3 ? -1 : 5) : (j == 1 ? 8 : 0);
+    if (!wy) continue;
+    const int row = adr_clampi(y + j - 1, 0, p.h - 1) * p.w;
+    for (int i = 0; i < 4; ++i) {
+      const int wx = fx ? (i == 0 || i == 3 ? -1 : 5) : (i == 1 ? 8 : 0);
+      if (!wx) continue;
+      result += (int)image[(row + adr_clampi(x + i - 1, 0, p.w - 1)) * p.cstride + c] * wy * wx;
+    }
+  }
+  out[z * p.h * p.w + yy * p.w + xx] = (uchar)adr_clampi((result + 32) >> 6, 0, 255);
+}
+
+/* ---------------------------------------------------------------------- */
+/* combine_analysis_bytes with order 1 and margin 3. */
+KERNEL void detect_combine(GLOBAL const uchar* current, GLOBAL const uchar* r0, GLOBAL const uchar* r1,
+                           GLOBAL const uchar* r2, GLOBAL const uchar* r3, GLOBAL uchar* base_out,
+                           GLOBAL uchar* residual_out, GLOBAL uchar* spread_out, PARAMS(DetectCombineParams) KARGS) {
+  const int i = GID_X, z = GID_Y;
+  if (i >= p.n || z >= p.nchan) return;
+  const int k = z * p.n + i;
+  const int t = current[i * p.cstride + p.c0 + z];
+  int n = p.count;
+  int s[4];
+  if (n == 0) {
+    s[0] = t;
+    s[1] = t;
+    n = 2;
+  } else if (n == 1) {
+    s[0] = r0[k];
+    s[1] = s[0];
+    n = 2;
+  } else {
+    s[0] = r0[k];
+    s[1] = r1[k];
+    s[2] = n > 2 ? (int)r2[k] : 0;
+    s[3] = n > 3 ? (int)r3[k] : 0;
+  }
+  /* Comparison networks with strict-less-than swaps. */
+  int pairs[10];
+  int npairs;
+  if (n == 2) {
+    npairs = 1;
+    pairs[0] = 0; pairs[1] = 1;
+  } else if (n == 3) {
+    npairs = 3;
+    pairs[0] = 0; pairs[1] = 1; pairs[2] = 1; pairs[3] = 2; pairs[4] = 0; pairs[5] = 1;
+  } else {
+    npairs = 5;
+    pairs[0] = 0; pairs[1] = 1; pairs[2] = 2; pairs[3] = 3; pairs[4] = 0;
+    pairs[5] = 2; pairs[6] = 1; pairs[7] = 3; pairs[8] = 1; pairs[9] = 2;
+  }
+  for (int q = 0; q < npairs; ++q) {
+    const int l = pairs[2 * q], r = pairs[2 * q + 1];
+    const int a = s[l], b = s[r];
+    if (adr_absi(t - b) < adr_absi(t - a)) {
+      s[l] = b;
+      s[r] = a;
+    }
+  }
+  int d[4];
+  for (int q = 0; q < n; ++q) d[q] = adr_absi(t - s[q]);
+  const int radius = adr_maxi(d[0] + 1, d[1] + 3);
+  int total = 0, numerator = 0;
+  for (int q = 0; q < n; ++q) {
+    const int wq = adr_maxi(radius - d[q], 0);
+    total += wq;
+    numerator += wq * s[q];
+  }
+  numerator += total / 2;
+  const int base = numerator / total;
+  base_out[k] = (uchar)base;
+  residual_out[k] = (uchar)adr_clampi(t - base + 128, 0, 255);
+  float spread = (float)adr_absi(s[0] - s[1]);
+  if (n >= 3) spread = spread + (float)adr_absi(s[0] - s[2]) * p.third;
+  if (n == 4) spread = spread + (float)adr_absi(s[0] - s[3]) * p.fourth;
+  spread_out[k] = (uchar)(((int)spread) & 255);
+}
+
+/* ---------------------------------------------------------------------- */
+/* estimate_analysis_noise: 8x8 block means of |base - current| and histogram. */
+KERNEL void detect_noise_blocks(GLOBAL const uchar* base, GLOBAL const uchar* current, GLOBAL ATOMIC_INT* hist,
+                                PARAMS(DetectBlocksParams) KARGS) {
+  const int bx = GID_X, by = GID_Y, z = GID_Z;
+  if (bx >= p.cols || by >= p.rows || z >= p.nchan) return;
+  const int cy = adr_clampi(p.h - by * 8, 1, 8), cx = adr_clampi(p.w - bx * 8, 1, 8);
+  GLOBAL const uchar* plane = base + z * p.h * p.w;
+  int sum = 0;
+  for (int j = 0; j < cy; ++j) {
+    const int y = by * 8 + j;
+    for (int i = 0; i < cx; ++i) {
+      const int x = bx * 8 + i;
+      sum += adr_absi((int)plane[y * p.w + x] - (int)current[(y * p.w + x) * p.cstride + p.c0 + z]);
+    }
+  }
+  const int value = adr_mini((sum * 64) / (cy * cx * 8), 255);
+  ATOMIC_ADD(&hist[z * 256 + value], 1);
+}
+
+/* Noise-dependent LUT and normalization from the (unscaled by 3) noise level. */
+DEVICE_FN void detect_build_lut(float adjusted, int dark, int bright, GLOBAL uchar* lut, GLOBAL int* divisor,
+                                GLOBAL int* rounding) {
+  const int ramp_high = (int)(adjusted + 30.0f);
+  const float normalized = adjusted * 3.0f;
+  for (int k = 0; k < 256; ++k) {
+    const int distance = adr_absi(k - 128);
+    int v;
+    if (distance == 0)
+      v = (int)normalized;
+    else
+      v = 1 + adr_floordiv((adr_clampi(distance, 1, 30) - 1) * (ramp_high - 1) + 14, 29);
+    v = adr_clampi(v, 0, 255);
+    const int disabled = (k < 128 && !dark) || (k > 128 && !bright);
+    if (disabled && (float)v > normalized) v = 0;
+    lut[k] = (uchar)v;
+  }
+  const int dv = adr_maxi((int)(normalized * 9.0f + 0.5f), 1);
+  divisor[0] = dv;
+  rounding[0] = adr_floordiv(dv, 2);
+}
+
+/* Histogram statistics, interpolated noise, LUT and normalization; one thread per channel. */
+KERNEL void detect_noise_scalars(GLOBAL const int* hist, GLOBAL float* mean_out, GLOBAL float* noise_out,
+                                 GLOBAL uchar* lut, GLOBAL int* divisor, GLOBAL int* rounding,
+                                 PARAMS(DetectScalarParams) KARGS) {
+  const int c = GID_X;
+  if (c >= p.nchan) return;
+  GLOBAL const int* h = hist + c * 256 + 1; /* zero differences are excluded */
+  int total_i = 0;
+  for (int i = 0; i < 255; ++i) total_i += h[i];
+  const float total = (float)total_i;
+  const float qlow = total * 0.25f, qhigh = total * 0.75f;
+  int low = 0, high = 0, running = 0;
+  for (int i = 0; i < 255; ++i) {
+    running += h[i];
+    const float cumulative = (float)running;
+    low += cumulative < qlow;
+    high += cumulative <= qhigh;
+  }
+  high = adr_mini(adr_maxi(high, low + 1), 254);
+  int count = 0, weighted = 0;
+  for (int i = 0; i < 255; ++i) {
+    if (i >= low && i <= high) {
+      count += h[i];
+      weighted += h[i] * i;
+    }
+  }
+  count = adr_maxi(count, 1);
+  const float mean = (float)weighted / (float)count + 1.0f;
+  const float ax[6] = {6.0f, 10.0f, 20.0f, 30.0f, 40.0f, 250.0f};
+  const float oy[6] = {2.5f, 2.6f, 3.8f, 5.0f, 6.2f, 12.6f};
+  float noise = oy[0];
+  for (int i = 0; i < 5; ++i) {
+    const float value = (mean - ax[i]) * (oy[i + 1] - oy[i]) / (ax[i + 1] - ax[i]) + oy[i];
+    if (mean > ax[i]) noise = value;
+  }
+  if (mean >= ax[5]) noise = oy[5];
+  if (p.mode1) noise = noise * 1.2200000286102295f;
+  float adjusted = noise * p.multiplier;
+  adjusted = adjusted * p.scale;
+  mean_out[c] = mean;
+  noise_out[c] = noise;
+  detect_build_lut(adjusted, p.remove_dark, p.remove_light, lut + c * 256, divisor + c, rounding + c);
+}
+
+/* repair_noise_weights: LUT and normalization from the detection noise. */
+KERNEL void detect_repair_scalars(GLOBAL const float* noise, GLOBAL float* modified_out, GLOBAL uchar* lut,
+                                  GLOBAL int* divisor, GLOBAL int* rounding, PARAMS(DetectScalarParams) KARGS) {
+  if (GID_X != 0) return;
+  const float detection = noise[0];
+  float adjusted = detection * p.multiplier;
+  if (p.blend) adjusted = adjusted + ((detection - adjusted) * (p.value - 0.5f)) / 0.5f;
+  const float modified = adjusted * p.scale;
+  modified_out[0] = modified;
+  detect_build_lut(modified, p.remove_dark, p.remove_light, lut, divisor, rounding);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Weighted residual core with device divisor/rounding; z = channel.
+ * mode 1: clamp to [lo,hi] and write the absolute residual to out2.
+ * mode 2: clamp to [lo,hi] and gate against aux (the first-pass source). */
+KERNEL void detect_weighted(GLOBAL const uchar* src, GLOBAL const uchar* lut, GLOBAL const int* divisor,
+                            GLOBAL const int* rounding, GLOBAL const uchar* aux, GLOBAL uchar* out, GLOBAL uchar* out2,
+                            PARAMS(DetectWeightedParams) KARGS) {
+  const int x = GID_X, y = GID_Y, z = GID_Z;
+  if (x >= p.w || y >= p.h || z >= p.nchan) return;
+  const int n = p.h * p.w, radius = p.window / 2;
+  GLOBAL const uchar* plane = src + z * n;
+  GLOBAL const uchar* weights = lut + z * 256;
+  int sum = 0;
+  for (int dy = -radius; dy <= radius; ++dy) {
+    const int row = adr_clampi(y + dy, 0, p.h - 1) * p.w;
+    for (int dx = -radius; dx <= radius; ++dx) {
+      const int value = plane[row + adr_clampi(x + dx, 0, p.w - 1)];
+      sum += (value - p.center) * (int)weights[value];
+    }
+  }
+  const int dv = divisor[z], rnd = rounding[z];
+  const int quotient = sum / dv, remainder = sum - quotient * dv;
+  const int adjustment = sum >= 0 ? (remainder >= dv - rnd) : (quotient < 0 && remainder > -rnd);
+  int result = adr_clampi(quotient + adjustment + p.center, 0, 255);
+  const int i = z * n + y * p.w + x;
+  if (p.mode == 0) {
+    out[i] = (uchar)result;
+    return;
+  }
+  result = adr_clampi(result, p.lo, p.hi);
+  if (p.mode == 1) {
+    out[i] = (uchar)result;
+    out2[i] = (uchar)adr_mini(adr_absi(result - 128) * 2, 255);
+    return;
+  }
+  const int magnitude = adr_absi(result - 128);
+  out[i] = (uchar)(magnitude != 0 ? adr_mini(magnitude + adr_absi((int)aux[i] - 128), 255) : 0);
+}
+
+/* ---------------------------------------------------------------------- */
+DEVICE_FN int detect_remap(int v, int in_low, int span, int out_low, int coarse, int fractional) {
+  const int offset = adr_clampi(v - in_low, 0, span);
+  const int part = (((offset * fractional) >> 12) + 1) >> 1;
+  return adr_clampi(out_low + 2 * coarse * offset + part, 0, 255);
+}
+
+/* add_scaled_bytes, vector8 rounding: nearest-even in whole groups of eight
+ * columns, ties away from zero in the scalar tail. */
+DEVICE_FN int detect_add_scaled(int source, int secondary, float scale, int x, int vector_end) {
+  const float product = (float)secondary * scale;
+  int rounded;
+  if (x < vector_end)
+    rounded = (int)adr_rint(product);
+  else
+    rounded = (int)(product + (product >= 0.0f ? 0.5f : -0.5f));
+  return adr_clampi(source + rounded, 0, 255);
+}
+
+/* rcp8192: the x86 RCPSS of 8192 (src/rcpss.h), the scale used here. */
+DEVICE_FN int detect_gauss_scale(int total, float rcp8192) {
+  return adr_clampi((int)adr_rint((float)total * rcp8192), 0, 255);
+}
+
+/* Vertical Gaussian pass; z = channel. */
+KERNEL void detect_gauss_v(GLOBAL const uchar* src, GLOBAL const int* weights, GLOBAL uchar* out,
+                           PARAMS(DetectGaussParams) KARGS) {
+  const int x = GID_X, y = GID_Y, z = GID_Z;
+  if (x >= p.w || y >= p.h || z >= p.nchan) return;
+  const int n = p.h * p.w, radius = p.window / 2;
+  GLOBAL const uchar* plane = src + z * n;
+  int total = 0;
+  for (int k = 0; k < p.window; ++k) total += (int)plane[adr_clampi(y + k - radius, 0, p.h - 1) * p.w + x] * weights[k];
+  out[z * n + y * p.w + x] = (uchar)detect_gauss_scale(total, p.rcp8192);
+}
+
+DEVICE_FN int detect_gauss_row(GLOBAL const uchar* row, GLOBAL const int* weights, int x, int w, int window,
+                                float rcp8192) {
+  const int radius = window / 2;
+  int total = 0;
+  for (int k = 0; k < window; ++k) total += (int)row[adr_clampi(x + k - radius, 0, w - 1)] * weights[k];
+  return detect_gauss_scale(total, rcp8192);
+}
+
+/* Horizontal Gaussian pass with fused consumers.
+ * mode 0: plain (z = channel).
+ * mode 1: amplify by the smoothed map and average with aux (spread conditioning).
+ * mode 2: energy = aux + 6*G; out = min over channels of the confidence ramp,
+ *         out2[c] = 255 where energy >= 64.
+ * mode 3: out = max over channels of 255*((aux + 2.5*G) >= 64). */
+KERNEL void detect_gauss_h(GLOBAL const uchar* src, GLOBAL const int* weights, GLOBAL const uchar* aux,
+                           GLOBAL uchar* out, GLOBAL uchar* out2, PARAMS(DetectGaussParams) KARGS) {
+  const int x = GID_X, y = GID_Y, z = GID_Z;
+  if (x >= p.w || y >= p.h) return;
+  const int n = p.h * p.w, i = y * p.w + x;
+  if (p.mode <= 1) {
+    if (z >= p.nchan) return;
+    const int g = detect_gauss_row(src + z * n + y * p.w, weights, x, p.w, p.window, p.rcp8192);
+    if (p.mode == 0) {
+      out[z * n + i] = (uchar)g;
+    } else {
+      const int s = aux[z * n + i];
+      const int amplified = adr_mini((s * g + 2) >> 2, 255);
+      out[z * n + i] = (uchar)((s + amplified + 1) >> 1);
+    }
+    return;
+  }
+  if (z != 0) return;
+  const int vector_end = p.w / 8 * 8;
+  int result = p.mode == 2 ? 255 : 0;
+  for (int c = 0; c < p.nchan; ++c) {
+    const int g = detect_gauss_row(src + c * n + y * p.w, weights, x, p.w, p.window, p.rcp8192);
+    const int v = detect_add_scaled(aux[c * n + i], g, p.scale, x, vector_end);
+    if (p.mode == 2) {
+      result = adr_mini(result, detect_remap(v, p.in_low, p.span, p.out_low, p.coarse, p.fractional));
+      out2[c * n + i] = (uchar)(v >= 64 ? 255 : 0);
+    } else {
+      result = adr_maxi(result, v >= 64 ? 255 : 0);
+    }
+  }
+  out[i] = (uchar)result;
+}
+
+/* remap_analysis_bytes with host endpoints. */
+KERNEL void detect_remap_bytes(GLOBAL const uchar* src, GLOBAL uchar* out, PARAMS(DetectRemapParams) KARGS) {
+  const int i = GID_X;
+  if (i >= p.n) return;
+  out[i] = (uchar)detect_remap(src[i], p.in_low, p.span, p.out_low, p.coarse, p.fractional);
+}
+
+/* condition_repair_spread mapping with a device noise mean. */
+KERNEL void detect_condition_map(GLOBAL const uchar* spread, GLOBAL const float* noise_mean, GLOBAL uchar* out,
+                                 PARAMS(DetectConditionParams) KARGS) {
+  const int i = GID_X;
+  if (i >= p.n) return;
+  const float mean = noise_mean[0] / p.divisor;
+  const float scale = adr_clampf((mean - 7.0f) * 1.5f / 18.0f, 0.0f, 1.5f);
+  int low = (int)(mean * scale + 0.5f);
+  const int high = adr_mini(low + 166, 255);
+  low = adr_mini(low, 128);
+  const int span = high - low;
+  const int coarse = 255 / (span * 2);
+  const int fractional = (255 - 2 * coarse * span) * 8192 / span;
+  out[i] = (uchar)detect_remap(spread[i], low, span, 0, coarse, fractional);
+}
+
+/* Three-by-three maximum with replicated boundaries. */
+KERNEL void detect_max3(GLOBAL const uchar* src, GLOBAL uchar* out, PARAMS(DetectPlaneParams) KARGS) {
+  const int x = GID_X, y = GID_Y;
+  if (x >= p.w || y >= p.h) return;
+  int m = 0;
+  for (int dy = -1; dy <= 1; ++dy) {
+    const int row = adr_clampi(y + dy, 0, p.h - 1) * p.w;
+    for (int dx = -1; dx <= 1; ++dx) m = adr_maxi(m, src[row + adr_clampi(x + dx, 0, p.w - 1)]);
+  }
+  out[y * p.w + x] = (uchar)m;
+}
+
+/* ---------------------------------------------------------------------- */
+/* 8-connected components: lock-free union-find (Playne & Hawick). */
+DEVICE_FN int detect_find(GLOBAL ATOMIC_INT* parent, int a) {
+  int next = DETECT_LOAD(&parent[a]);
+  while (next != a) {
+    a = next;
+    next = DETECT_LOAD(&parent[a]);
+  }
+  return a;
+}
+
+DEVICE_FN void detect_union(GLOBAL ATOMIC_INT* parent, int a, int b) {
+  for (;;) {
+    a = detect_find(parent, a);
+    b = detect_find(parent, b);
+    if (a == b) return;
+    if (b < a) {
+      const int old = ATOMIC_MIN(&parent[a], b);
+      if (old == a) return;
+      a = old;
+    } else {
+      const int old = ATOMIC_MIN(&parent[b], a);
+      if (old == b) return;
+      b = old;
+    }
+  }
+}
+
+KERNEL void detect_cc_init(GLOBAL int* parent, GLOBAL int* counts, PARAMS(DetectPlaneParams) KARGS) {
+  const int i = GID_X;
+  if (i >= p.h * p.w) return;
+  parent[i] = i;
+  counts[i] = 0;
+}
+
+KERNEL void detect_cc_merge(GLOBAL const uchar* mask, GLOBAL ATOMIC_INT* parent, PARAMS(DetectPlaneParams) KARGS) {
+  const int x = GID_X, y = GID_Y;
+  if (x >= p.w || y >= p.h) return;
+  const int i = y * p.w + x;
+  if (!mask[i]) return;
+  if (x > 0 && mask[i - 1]) detect_union(parent, i, i - 1);
+  if (y > 0) {
+    const int up = i - p.w;
+    if (x > 0 && mask[up - 1]) detect_union(parent, i, up - 1);
+    if (mask[up]) detect_union(parent, i, up);
+    if (x + 1 < p.w && mask[up + 1]) detect_union(parent, i, up + 1);
+  }
+}
+
+KERNEL void detect_cc_count(GLOBAL const uchar* mask, GLOBAL ATOMIC_INT* parent, GLOBAL ATOMIC_INT* counts,
+                            PARAMS(DetectPlaneParams) KARGS) {
+  const int i = GID_X;
+  if (i >= p.h * p.w || !mask[i]) return;
+  const int root = detect_find(parent, i);
+  ATOMIC_MIN(&parent[i], root);
+  ATOMIC_ADD(&counts[root], 1);
+}
+
+/* mode 0: 255 where the component area exceeds maximum_area; mode 1: target
+ * with those pixels cleared. */
+KERNEL void detect_cc_output(GLOBAL const uchar* mask, GLOBAL const int* parent, GLOBAL const int* counts,
+                             GLOBAL const uchar* target, GLOBAL uchar* out, PARAMS(DetectComponentParams) KARGS) {
+  const int i = GID_X;
+  if (i >= p.h * p.w) return;
+  const int excluded = mask[i] != 0 && counts[parent[i]] > p.maximum_area;
+  if (p.mode == 0)
+    out[i] = (uchar)(excluded ? 255 : 0);
+  else
+    out[i] = excluded ? (uchar)0 : target[i];
+}
+
+/* ---------------------------------------------------------------------- */
+/* introduced_contrast: local contrast mask (columns not yet replicated) and
+ * the source frame's neighbour difference sums. */
+KERNEL void detect_contrast(GLOBAL const int* repaired, GLOBAL const int* original, GLOBAL uchar* mask,
+                            GLOBAL int* sums, PARAMS(DetectContrastParams) KARGS) {
+  const int x = GID_X, y = GID_Y;
+  if (x >= p.w || y >= p.h) return;
+  const int i = y * p.w + x;
+  const int rc = repaired[i], oc = original[i];
+  int a_sum = 0, b_sum = 0, d_sum = 0, d_max = 0;
+  for (int dy = -1; dy <= 1; ++dy) {
+    const int row = adr_clampi(y + dy, 0, p.h - 1) * p.w;
+    for (int dx = -1; dx <= 1; ++dx) {
+      if (dx == 0 && dy == 0) continue;
+      const int q = row + adr_clampi(x + dx, 0, p.w - 1);
+      const int a = adr_absi(repaired[q] - rc), b = adr_absi(original[q] - oc);
+      const int d = adr_maxi(a - b, 0);
+      a_sum += a;
+      b_sum += b;
+      d_sum += d;
+      d_max = adr_maxi(d_max, d);
+    }
+  }
+  const int scale = adr_maxi(128 - ((a_sum + b_sum) >> 4), 1);
+  mask[i] = (uchar)adr_clampi(((d_sum + 2 * d_max) * scale + 256) >> 9, 0, 255);
+  sums[i] = b_sum;
+}
+
+/* Source-noise statistic: one 256-thread group per row. */
+KERNEL void detect_contrast_rows(GLOBAL const int* sums, GLOBAL ATOMIC_INT* total, PARAMS(DetectContrastParams) KARGS) {
+  LOCAL int detect_partial[256];
+  const int y = GID_Y, t = LID_X;
+  int s = 0;
+  if (y < p.h) {
+    GLOBAL const int* row = sums + y * p.w;
+    if (y == 0 || y == p.h - 1) {
+      for (int x = 1 + t; x < p.w - 1; x += 256) s += (row[x] + 4) >> 3;
+    } else {
+      const int blocks = (p.w - 2) / 8;
+      for (int x = 1 + t; x < 1 + blocks * 8; x += 256) s += row[x];
+      for (int x = p.w - 9 + t; x < p.w - 1; x += 256) s += row[x];
+    }
+  }
+  detect_partial[t] = s;
+  BARRIER;
+  for (int stride = 128; stride > 0; stride >>= 1) {
+    if (t < stride) detect_partial[t] += detect_partial[t + stride];
+    BARRIER;
+  }
+  if (t == 0 && y < p.h) {
+    const int r = detect_partial[0];
+    ATOMIC_ADD(&total[0], (y == 0 || y == p.h - 1) ? r : ((r + 4) >> 3));
+  }
+}
+
+/* contrast_blend_mask with replicated border columns. */
+KERNEL void detect_contrast_blend(GLOBAL const uchar* mask, GLOBAL const int* total, GLOBAL uchar* out,
+                                  GLOBAL float* noise_out, PARAMS(DetectContrastParams) KARGS) {
+  const int x = GID_X, y = GID_Y;
+  if (x >= p.w || y >= p.h) return;
+  const float noise = (float)total[0] / p.denominator;
+  const float value = (noise - 15.0f) * p.factor;
+  const int shift = (int)(value + (value >= 0.0f ? 0.5f : -0.5f));
+  const int low = adr_clampi(p.base_low + shift, 4, 251);
+  const int high = adr_mini(adr_maxi(p.base_high + shift, low + 4), 255);
+  const int span = high - low;
+  const int coarse = 255 / (span * 2);
+  const int fractional = (255 - 2 * coarse * span) * 8192 / span;
+  const int sx = adr_clampi(x, 1, p.w - 2);
+  out[y * p.w + x] = (uchar)detect_remap(mask[y * p.w + sx], low, span, 0, coarse, fractional);
+  if (x == 0 && y == 0) noise_out[0] = noise;
+}

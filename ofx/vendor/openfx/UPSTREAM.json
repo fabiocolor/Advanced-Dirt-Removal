@@ -1,0 +1,47 @@
+{
+  "repository": "https://github.com/AcademySoftwareFoundation/openfx",
+  "commit": "adb790bf0043714cae6091d58791e8cdabdd9e12",
+  "license": "BSD-3-Clause",
+  "files": [
+    {
+      "path": "LICENSE.md",
+      "sha256": "63b0f0533a90223e7dbe5dd50b94821b069672f91797ac03dbbad496b4ca7d9b"
+    },
+    {
+      "path": "include/ofxCore.h",
+      "sha256": "e2ad90185153aa4b415422ac172418d43edbf4af63750d7b1e968cf154ad3884"
+    },
+    {
+      "path": "include/ofxImageEffect.h",
+      "sha256": "d42af3b7985837ce3799aea0466d2a8257add1daae62feb43f7afc87376ede31"
+    },
+    {
+      "path": "include/ofxInteract.h",
+      "sha256": "64ede699c53c075e7498c383314a8b41fece6291677698a76b4af44cda6f7283"
+    },
+    {
+      "path": "include/ofxMemory.h",
+      "sha256": "52ba2b7ee3fcb88a04b8ce80e5af3485b1ad25743c58b31b32457a13ea41e871"
+    },
+    {
+      "path": "include/ofxMessage.h",
+      "sha256": "6cdf7598431fdd58c5efc0144cea585083d03aa151d2cda601198136ae860963"
+    },
+    {
+      "path": "include/ofxMultiThread.h",
+      "sha256": "d59a6816e3b17e2de7639ace9fc03c9a81d58587d64368553d9bcac6473733ba"
+    },
+    {
+      "path": "include/ofxParam.h",
+      "sha256": "a56c76aac856cadd307ed2c7c62e132afb7dd5ab8e69436decd28e45b24cb6b3"
+    },
+    {
+      "path": "include/ofxProperty.h",
+      "sha256": "b3340b71499571ff55ec05260209dab3311b30b4adc7a04e82df9f2c913e0929"
+    },
+    {
+      "path": "include/ofxTimeLine.h",
+      "sha256": "c36cded0c96c26797092e1574808806af4428b3560b589e6edc54eae2562182a"
+    }
+  ]
+}

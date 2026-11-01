@@ -1,0 +1,427 @@
+/* Group "refine": nine-level motion masks and dirt-aware motion refinement.
+ * Integer sums may use any order; float expressions keep a fixed order. */
+
+/* ---------------------------------------------------------------------------
+ * Motion masks
+ * ------------------------------------------------------------------------- */
+
+/* reduce_analysis_plane mode 1 taps for offsets -3..4 (index 0..7). */
+DEVICE_FN int refine_reduce_weight(int k) {
+  return (k == 1 || k == 6) ? 2 : (k == 2 || k == 5) ? 17 : (k == 3 || k == 4) ? 45 : 0;
+}
+
+/* One twofold mode-1 reduction of the binary and confidence planes, plus the
+ * byte-narrowed threshold of the reduced binary plane (0/255). */
+KERNEL void refine_mask_reduce(GLOBAL const uchar* a, GLOBAL const uchar* b, GLOBAL uchar* a_out,
+                               GLOBAL uchar* b_out, GLOBAL uchar* binary, PARAMS(RefineReduceParams) KARGS) {
+  const int x = GID_X, y = GID_Y;
+  if (x >= p.ow || y >= p.oh) return;
+  int ta = 0, tb = 0;
+  for (int k = 1; k < 7; ++k) {
+    const int row = adr_clampi(2 * y + k - 3, 0, p.h - 1) * p.w;
+    int ha = 0, hb = 0;
+    for (int q = 1; q < 7; ++q) {
+      const int i = row + adr_clampi(2 * x + q - 3, 0, p.w - 1), wq = refine_reduce_weight(q);
+      ha += (int)a[i] * wq;
+      hb += (int)b[i] * wq;
+    }
+    const int wk = refine_reduce_weight(k);
+    ta += ((ha + 64) >> 7) * wk;
+    tb += ((hb + 64) >> 7) * wk;
+  }
+  const int va = (ta + 64) >> 7, o = y * p.ow + x;
+  a_out[o] = (uchar)va;
+  b_out[o] = (uchar)((tb + 64) >> 7);
+  binary[o] = (uchar)(va >= p.threshold ? 255 : 0);
+}
+
+/* classify_mask_blocks: 0 empty, 1 partial, 2 full, gated by a nonzero 2x2
+ * group of the finer (still unmarked) class grid. */
+KERNEL void refine_mask_classify(GLOBAL const uchar* source, GLOBAL const uchar* finer, GLOBAL uchar* classes,
+                                 PARAMS(RefineClassifyParams) KARGS) {
+  const int bx = GID_X, by = GID_Y;
+  if (bx >= p.gw || by >= p.gh) return;
+  const int x0 = bx * p.block, y0 = by * p.block;
+  const int ew = adr_mini(p.block, p.sw - x0), eh = adr_mini(p.block, p.sh - y0);
+  int count = 0;
+  for (int yy = 0; yy < eh; ++yy)
+    for (int xx = 0; xx < ew; ++xx) count += source[(y0 + yy) * p.sw + x0 + xx] != 0;
+  int c = count == 0 ? 0 : (count == ew * eh ? 2 : 1);
+  if (p.has_finer) {
+    int gate = 0;
+    for (int dy = 0; dy < 2; ++dy)
+      for (int dx = 0; dx < 2; ++dx) {
+        const int fx = 2 * bx + dx, fy = 2 * by + dy;
+        if (fx < p.fw && fy < p.fh && finer[fy * p.fw + fx] != 0) gate = 1;
+      }
+    if (!gate) c = 0;
+  }
+  classes[by * p.gw + bx] = (uchar)c;
+}
+
+/* Final classes (bit 4 when the coarser parent block is active) and
+ * block_confidence (rounded block mean, sentinel 255 for inactive blocks). */
+KERNEL void refine_mask_finalize(GLOBAL const uchar* gated, GLOBAL const uchar* parent, GLOBAL const uchar* confidence,
+                                 GLOBAL uchar* classes, GLOBAL uchar* block_confidence,
+                                 PARAMS(RefineFinalizeParams) KARGS) {
+  const int bx = GID_X, by = GID_Y;
+  if (bx >= p.gw || by >= p.gh) return;
+  const int i = by * p.gw + bx;
+  int c = gated[i];
+  if (p.has_parent && parent[(by / 2) * p.qw + bx / 2] != 0) c |= 4;
+  classes[i] = (uchar)c;
+  const int x0 = bx * p.block, y0 = by * p.block;
+  const int ew = adr_mini(p.block, p.pw - x0), eh = adr_mini(p.block, p.ph - y0);
+  int total = 0;
+  for (int yy = 0; yy < eh; ++yy)
+    for (int xx = 0; xx < ew; ++xx) total += confidence[(y0 + yy) * p.pw + x0 + xx];
+  const int count = ew * eh;
+  block_confidence[i] = (uchar)(c != 0 ? (total + count / 2) / count : 255);
+}
+
+/* ---------------------------------------------------------------------------
+ * Refinement
+ * ------------------------------------------------------------------------- */
+
+/* Appends the indices of active blocks (classes != 0). The order is
+ * irrelevant: every block is refined independently. */
+KERNEL void refine_compact(GLOBAL const uchar* classes, GLOBAL ATOMIC_INT* counter, GLOBAL int* list,
+                           PARAMS(RefineCompactParams) KARGS) {
+  const int i = GID_X;
+  if (i >= p.n || classes[i] == 0) return;
+  list[ATOMIC_ADD(counter, 1)] = i;
+}
+
+#define REFINE_INT_MAX 2147483647
+
+/* Ray direction table: ray 0 is the block itself. */
+DEVICE_FN int refine_ray_dx(int ray) { return (ray == 1 || ray == 2 || ray == 8) ? -1 : (ray == 4 || ray == 5 || ray == 6) ? 1 : 0; }
+DEVICE_FN int refine_ray_dy(int ray) { return (ray == 2 || ray == 3 || ray == 4) ? -1 : (ray == 6 || ray == 7 || ray == 8) ? 1 : 0; }
+
+/* Walks one ray until the first block with plane >= threshold (threshold < 0:
+ * plane == 0) or the last inside block; returns the block index. */
+DEVICE_FN int refine_ray(GLOBAL const uchar* plane, int x, int y, int gw, int gh, int ray, int threshold) {
+  const int dx = refine_ray_dx(ray), dy = refine_ray_dy(ray), n = adr_maxi(gw, gh);
+  int xx = x, yy = y;
+  if (ray) {
+    for (int step = 1; step < n; ++step) {
+      const int nx = x + dx * step, ny = y + dy * step;
+      if (nx < 0 || ny < 0 || nx >= gw || ny >= gh) break;
+      xx = nx;
+      yy = ny;
+      const int v = plane[yy * gw + xx];
+      if (threshold < 0 ? v == 0 : v >= threshold) break;
+    }
+  }
+  return yy * gw + xx;
+}
+
+/* Sum of absolute differences of four packed bytes. */
+DEVICE_FN int refine_sad4(uint a, uint b) {
+  int s = 0;
+  for (int c = 0; c < 32; c += 8) s += adr_absi((int)((a >> c) & 255u) - (int)((b >> c) & 255u));
+  return s;
+}
+
+/* Summary of values v[base + i*stride], i < count (dup: [v0,v0,v1,v2,v3]).
+ * Writes the rounded mean and the span-adaptive mean/median blend. */
+DEVICE_FN void refine_summary(LPTR int* v, int base, int stride, int count, int dup, float reciprocal, int dst_mean,
+                              int dst_adaptive) {
+  int s[9];
+  int total = 0;
+  for (int i = 0; i < count; ++i) {
+    s[i] = v[base + (dup ? adr_maxi(i - 1, 0) : i) * stride];
+    total += s[i];
+  }
+  for (int i = 1; i < count; ++i) {
+    const int value = s[i];
+    int j = i - 1;
+    while (j >= 0 && s[j] > value) {
+      s[j + 1] = s[j];
+      --j;
+    }
+    s[j + 1] = value;
+  }
+  const int mean = (int)adr_rint((float)total * reciprocal);
+  const int median = s[count / 2], span = s[count - 1] - s[0];
+  const int mixed = (int)((uint)mean * (uint)(20 - span) + (uint)median * (uint)(span - 6)) / 14;
+  v[dst_mean] = mean;
+  v[dst_adaptive] = span <= 5 ? mean : (span >= 20 ? median : mixed);
+}
+
+/* Refines active blocks (grid-stride over the compacted list), one work-group
+ * of 64 or more threads per block at a time. Candidates are stored as
+ * cand[((k*22)+c)*2+axis]. */
+KERNEL void refine_blocks(GLOBAL const uint* current, GLOBAL const uint* reference0, GLOBAL const uint* reference1,
+                          GLOBAL const uchar* pixel, GLOBAL const uchar* classes, GLOBAL const uchar* confidence,
+                          GLOBAL const short* initial0, GLOBAL const short* initial1, GLOBAL const short* coarse0,
+                          GLOBAL const short* coarse1, GLOBAL const int* list, GLOBAL const int* counter,
+                          GLOBAL short* output0, GLOBAL short* output1, GLOBAL const uint* rcpss,
+                          PARAMS(RefineParams) KARGS) {
+  LOCAL int s_cand[88];
+  LOCAL int s_nb[18];
+  LOCAL int s_inside[9];
+  LOCAL int s_weight[9];
+  LOCAL int s_good[9];
+  LOCAL int s_ray[9];
+  LOCAL int s_ray2[9];
+  LOCAL int s_clean[9];
+  LOCAL int s_smooth[4];
+  LOCAL float s_factor[22];
+  LOCAL int s_work[640];
+  LOCAL int s_cost[44];
+  const int t = LID_X, threads = LSIZE_X;
+  const int count = counter[0];
+  const int w = p.w, h = p.h, gw = p.gw, gh = p.gh, block = p.block, units = p.units;
+  const int both = p.valid0 && p.valid1;
+  for (int slot = GROUP_X; slot < count; slot += p.groups) {
+    const int cell = list[slot], cx = cell % gw, cy = cell / gw;
+    const int px = cx * block, py = cy * block;
+    const int ew = adr_mini(block, w - px), eh = adr_mini(block, h - py);
+    const int lo0 = -px * units, lo1 = -py * units;
+    const int hi0 = (w - ew - px) * units, hi1 = (h - eh - py) * units;
+
+    /* Phase 1: neighbours and rays, one task per 16-thread slice. */
+    if (t < 9) {
+      const int j = t, dx = j % 3 - 1, dy = j / 3 - 1;
+      int nx = cx + dx, ny = cy + dy;
+      int in = nx >= 0 && ny >= 0 && nx < gw && ny < gh;
+      const int good = in && confidence[adr_clampi(ny, 0, gh - 1) * gw + adr_clampi(nx, 0, gw - 1)] >= p.threshold;
+      int good2 = 0;
+      if (p.mode == 2) {
+        const int x2 = cx + 2 * dx, y2 = cy + 2 * dy;
+        good2 = x2 >= 0 && y2 >= 0 && x2 < gw && y2 < gh && confidence[y2 * gw + x2] == 255;
+        if (!good && good2) {
+          nx = x2;
+          ny = y2;
+          in = 1;
+        }
+      }
+      nx = adr_clampi(nx, 0, gw - 1);
+      ny = adr_clampi(ny, 0, gh - 1);
+      s_nb[j * 2] = nx * block;
+      s_nb[j * 2 + 1] = ny * block;
+      s_inside[j] = in;
+      s_weight[j] = (nx == cx && ny == cy ? 10 : 9) * ((int)confidence[ny * gw + nx] / 10);
+      s_good[j] = good | (good2 << 1);
+    } else if (t >= 16 && t < 25) {
+      s_ray[t - 16] = refine_ray(confidence, cx, cy, gw, gh, t - 16, 235);
+    } else if (t >= 32 && t < 41) {
+      /* No coarse level: rays stop at the level threshold. */
+      if (!p.has_coarse) s_ray2[t - 32] = refine_ray(confidence, cx, cy, gw, gh, t - 32, p.threshold);
+    } else if (t >= 48 && t < 57) {
+      if (p.level >= 5 && both) s_clean[t - 48] = refine_ray(classes, cx, cy, gw, gh, t - 48, -1);
+    }
+    BARRIER;
+
+    int any_good = 0, good_count = 0;
+    for (int j = 0; j < 9; ++j) {
+      any_good += s_good[j] & 1;
+      good_count += s_good[j] != 0;
+    }
+    const int main_branch = good_count - (p.mode == 2 && any_good == 0 ? 1 : 0) > 0;
+    const int fallback_count = (p.level < 5 || !both) ? 0 : (p.has_coarse ? 16 : 10);
+    const int candidates = main_branch ? (p.has_coarse ? 22 : 11) : fallback_count;
+
+    /* Phase 2: candidates per (reference k, axis). */
+    if (t < 4) {
+      const int k = t >> 1, axis = t & 1, base = k * 22;
+      GLOBAL const short* initial = k ? initial1 : initial0;
+      GLOBAL const short* coarse = k ? coarse1 : coarse0;
+      const int lo = axis ? lo1 : lo0, hi = axis ? hi1 : hi0;
+      if (main_branch) {
+        for (int j = 0; j < 9; ++j) {
+          s_cand[(base + j) * 2 + axis] = initial[s_ray[j] * 2 + axis];
+          if (p.has_coarse) {
+            const int ci = adr_clampi(cy / 2 + j / 3 - 1, 0, p.ch - 1) * p.cw + adr_clampi(cx / 2 + j % 3 - 1, 0, p.cw - 1);
+            s_cand[(base + 9 + j) * 2 + axis] = coarse[ci * 2 + axis];
+          }
+        }
+        const int at = p.has_coarse ? 18 : 9;
+        refine_summary(s_cand, base * 2 + axis, 2, 9, 0, 0.111083984375f, (base + at) * 2 + axis,
+                       (base + at + 1) * 2 + axis);
+        if (p.has_coarse)
+          refine_summary(s_cand, (base + 9) * 2 + axis, 2, 9, 0, 0.111083984375f, (base + 20) * 2 + axis,
+                         (base + 21) * 2 + axis);
+      } else {
+        int value;
+        if (p.has_coarse) {
+          const int table[9] = {5, 6, 3, 6, 7, 4, 3, 4, 2};
+          int total = 0;
+          for (int j = 0; j < 9; ++j) {
+            const int ci = adr_clampi(cy / 2 + j / 3 - 1, 0, p.ch - 1) * p.cw + adr_clampi(cx / 2 + j % 3 - 1, 0, p.cw - 1);
+            const int wy = cy % 2 ? 2 - j / 3 : j / 3, wx = cx % 2 ? 2 - j % 3 : j % 3;
+            total += (int)coarse[ci * 2 + axis] * table[wy * 3 + wx];
+          }
+          value = adr_round_div(total, 40);
+        } else {
+          int total = 0, weights = 0;
+          for (int j = 0; j < 9; ++j) {
+            const int wgt = confidence[s_ray2[j]];
+            total += (int)initial[s_ray2[j] * 2 + axis] * wgt;
+            weights += wgt;
+          }
+          /* Divides by the x86 RCPSS reciprocal, not exactly (src/rcpss.h). */
+          value = (int)adr_rint((float)total * adr_as_float((int)rcpss[adr_maxi(weights, 1) - 1]));
+        }
+        value = adr_clampi(value, lo, hi);
+        s_smooth[k * 2 + axis] = value;
+        if (fallback_count) {
+          for (int j = 0; j < 9; ++j) s_cand[(base + j) * 2 + axis] = initial[s_clean[j] * 2 + axis];
+          if (p.has_coarse) {
+            const int x0 = cx / 2, y0 = cy / 2;
+            const int x1 = adr_clampi(x0 + (cx % 2 ? 1 : -1), 0, p.cw - 1), y1 = adr_clampi(y0 + (cy % 2 ? 1 : -1), 0, p.ch - 1);
+            s_cand[(base + 9) * 2 + axis] = coarse[(y0 * p.cw + x0) * 2 + axis];
+            s_cand[(base + 10) * 2 + axis] = coarse[(y0 * p.cw + x1) * 2 + axis];
+            s_cand[(base + 11) * 2 + axis] = coarse[(y1 * p.cw + x0) * 2 + axis];
+            s_cand[(base + 12) * 2 + axis] = coarse[(y1 * p.cw + x1) * 2 + axis];
+            refine_summary(s_cand, (base + 9) * 2 + axis, 2, 5, 1, 0.199951171875f, (base + 13) * 2 + axis,
+                           (base + 14) * 2 + axis);
+          }
+          s_cand[(base + fallback_count - 1) * 2 + axis] = value;
+        }
+      }
+      for (int c = 0; c < candidates; ++c)
+        s_cand[(base + c) * 2 + axis] = adr_clampi(s_cand[(base + c) * 2 + axis], lo, hi);
+    } else if (t == 16 && !main_branch && fallback_count) {
+      /* Penalty factors (penalty / 5 + 1 in float32). */
+      for (int j = 0; j < 9; ++j) {
+        int penalty;
+        if (j == 0) {
+          const int dx = adr_absi((int)initial0[cell * 2] + (int)initial1[cell * 2]);
+          const int dy = adr_absi((int)initial0[cell * 2 + 1] + (int)initial1[cell * 2 + 1]);
+          penalty = 5 + adr_mini(10, (adr_maxi(dx, dy) + adr_mini(dx, dy) / 2) / 15);
+        } else {
+          const int r = s_clean[j];
+          penalty = adr_mini(10, adr_maxi(adr_absi(r % gw - cx), adr_absi(r / gw - cy)));
+        }
+        s_factor[j] = (float)penalty / 5.0f + 1.0f;
+      }
+      int logscale = 8;
+      for (int q = block * (p.level <= 6 ? 1 << (6 - p.level) : 1); q > 1; q >>= 1) --logscale;
+      if (p.has_coarse) {
+        s_factor[9] = (float)(-1 - logscale / 4) / 5.0f + 1.0f;
+        s_factor[10] = s_factor[11] = s_factor[12] = (float)0 / 5.0f + 1.0f;
+        s_factor[13] = s_factor[14] = (float)(-1 - logscale / 6) / 5.0f + 1.0f;
+      }
+      s_factor[fallback_count - 1] = (float)(-1 - logscale / 4) / 5.0f + 1.0f;
+    }
+    BARRIER;
+
+    /* Phase 3: candidate costs. */
+    if (main_branch) {
+      const int items = 2 * candidates * 9;
+      for (int i = t; i < items; i += threads) {
+        const int k = i / (candidates * 9), r = i % (candidates * 9), c = r / 9, j = r % 9;
+        if (!(k ? p.valid1 : p.valid0)) continue;
+        GLOBAL const uint* reference = k ? reference1 : reference0;
+        const int dx = adr_round_div(s_cand[(k * 22 + c) * 2], units);
+        const int dy = adr_round_div(s_cand[(k * 22 + c) * 2 + 1], units);
+        const int sx = s_nb[j * 2], sy = s_nb[j * 2 + 1], tx = sx + dx, ty = sy + dy;
+        const int nw = adr_mini(block, w - sx), nh = adr_mini(block, h - sy);
+        const int good = s_inside[j] && tx >= 0 && ty >= 0 && tx + nw <= w && ty + nh <= h;
+        int sad = 0;
+        if (good) {
+          for (int yy = 0; yy < nh; ++yy) {
+            const int srow = (sy + yy) * w + sx, trow = (ty + yy) * w + tx;
+            for (int xx = 0; xx < nw; ++xx)
+              sad += refine_sad4(current[srow + xx], reference[trow + xx]) * (int)pixel[srow + xx];
+          }
+        }
+        s_work[i] = good ? (sad >> 8) * s_weight[j] : -1;
+      }
+    } else if (candidates) {
+      const int items = candidates * block;
+      for (int i = t; i < items; i += threads) {
+        const int c = i / block, yy = i % block;
+        int sad0 = 0, sad1 = 0, cross = 0, cp = 0, cf = 0;
+        if (yy < eh) {
+          const int a0 = s_cand[c * 2], a1 = s_cand[c * 2 + 1];
+          const int b0 = s_cand[(22 + c) * 2], b1 = s_cand[(22 + c) * 2 + 1];
+          const int ax = adr_round_div(a0, units), ay = adr_round_div(a1, units);
+          const int bx = adr_round_div(b0, units), by = adr_round_div(b1, units);
+          const int nax = adr_round_div(adr_clampi(-a0, lo0, hi0), units), nay = adr_round_div(adr_clampi(-a1, lo1, hi1), units);
+          const int nbx = adr_round_div(adr_clampi(-b0, lo0, hi0), units), nby = adr_round_div(adr_clampi(-b1, lo1, hi1), units);
+          const int row = py + yy;
+          for (int xx = 0; xx < ew; ++xx) {
+            const int pi = row * w + px + xx;
+            const uint v = current[pi];
+            const int wgt = pixel[pi];
+            const uint a = reference0[(row + ay) * w + px + ax + xx];
+            const uint b = reference1[(row + by) * w + px + bx + xx];
+            const uint oa = reference1[(row + nay) * w + px + nax + xx];
+            const uint ob = reference0[(row + nby) * w + px + nbx + xx];
+            sad0 += refine_sad4(v, a) * wgt;
+            sad1 += refine_sad4(v, b) * wgt;
+            cross += refine_sad4(a, b);
+            cp += refine_sad4(a, oa);
+            cf += refine_sad4(ob, b);
+          }
+        }
+        s_work[i * 5] = sad0;
+        s_work[i * 5 + 1] = sad1;
+        s_work[i * 5 + 2] = cross;
+        s_work[i * 5 + 3] = cp;
+        s_work[i * 5 + 4] = cf;
+      }
+    }
+    BARRIER;
+    if (main_branch) {
+      if (t < 2 * candidates) {
+        const int k = t / candidates, c = t % candidates;
+        if (k ? p.valid1 : p.valid0) {
+          int total = 0, n = 0;
+          for (int j = 0; j < 9; ++j) {
+            const int v = s_work[(k * candidates + c) * 9 + j];
+            if (v >= 0) {
+              total += v;
+              ++n;
+            }
+          }
+          s_cost[k * 22 + c] = n > 0 ? (total + n / 2) / n : REFINE_INT_MAX;
+        }
+      }
+    } else if (t < candidates) {
+      int sad0 = 0, sad1 = 0, cross = 0, cp = 0, cf = 0;
+      for (int yy = 0; yy < block; ++yy) {
+        const int i = (t * block + yy) * 5;
+        sad0 += s_work[i];
+        sad1 += s_work[i + 1];
+        cross += s_work[i + 2];
+        cp += s_work[i + 3];
+        cf += s_work[i + 4];
+      }
+      s_cost[t] = (int)((float)((sad0 >> 8) * 3 + ((cp + cross) >> 1)) * s_factor[t]);
+      s_cost[22 + t] = (int)((float)((sad1 >> 8) * 3 + ((cf + cross) >> 1)) * s_factor[t]);
+    }
+    BARRIER;
+
+    /* Phase 4: selection and output. */
+    if (t < 2 && (t ? p.valid1 : p.valid0)) {
+      const int k = t;
+      GLOBAL short* output = k ? output1 : output0;
+      int vx, vy;
+      if (candidates) {
+        int chosen = 0, best = REFINE_INT_MAX;
+        for (int c = 0; c < candidates; ++c)
+          if (s_cost[k * 22 + c] < best) {
+            best = s_cost[k * 22 + c];
+            chosen = c;
+          }
+        vx = s_cand[(k * 22 + chosen) * 2];
+        vy = s_cand[(k * 22 + chosen) * 2 + 1];
+        if (main_branch && best == REFINE_INT_MAX) {
+          GLOBAL const short* initial = k ? initial1 : initial0;
+          vx = initial[cell * 2];
+          vy = initial[cell * 2 + 1];
+        }
+      } else {
+        vx = s_smooth[k * 2];
+        vy = s_smooth[k * 2 + 1];
+      }
+      output[cell * 2] = (short)vx;
+      output[cell * 2 + 1] = (short)vy;
+    }
+    BARRIER;
+  }
+}

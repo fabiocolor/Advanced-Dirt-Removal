@@ -1,0 +1,127 @@
+/* Analysis preparation: float colour features, byte analysis planes, the packed
+ * Y,U,V,Y pyramid and the half-pixel luma plane. */
+
+/* float_colour_analysis matrix 2, evaluated as (r*a + g*b) + b*c in float32. */
+DEVICE_FN float adr_feature(float r, float g, float b, int c) {
+  if (c == 0) return (r * 0.299f + g * 0.587f) + b * 0.114f;
+  if (c == 1) return (r * -0.169f + g * -0.331f) + b * 0.5f;
+  return (r * 0.5f + g * -0.419f) + b * -0.081f;
+}
+
+/* quantize_float_analysis: (x*255 + bias) truncated to int32, then clamped. */
+DEVICE_FN uchar adr_quantize(float x, int chroma) {
+  float v = x * 255.0f + (chroma ? 128.5f : 0.5f);
+  return (uchar)adr_clampi((int)v, 0, 255);
+}
+
+/* One thread per analysis pixel (bottom-up coordinates). Writes unclamped
+ * float features (3,H,W), byte planes (H,W,3) from clamped RGB, the packed
+ * level-0 image (H,W,4) and optional byte RGB planes (H,W,3). */
+/* hdr_analysis_planes index: (x*8191 + .5) clamped to [0,32767], truncated. */
+DEVICE_FN int adr_hdr_index(float x) { return (int)adr_clampf(x * 8191.0f + 0.5f, 0.0f, 32767.0f); }
+
+KERNEL void prepare_float(GLOBAL const float* rgb, GLOBAL float* features, GLOBAL uchar* planes,
+                          GLOBAL uchar* packed, GLOBAL uchar* rgb_planes, GLOBAL const int* hdr_table,
+                          GLOBAL const uchar* hdr_bytes, PARAMS(PrepareParams) KARGS) {
+  const int x = GID_X, y = GID_Y;
+  if (x >= p.w || y >= p.h) return;
+  const int sy = p.flip ? p.h - 1 - y : y;
+  GLOBAL const float* s = rgb + sy * p.in_stride + x * 3;
+  const float r = s[0], g = s[1], b = s[2];
+  const int i = y * p.w + x, n = p.h * p.w;
+  const float cr = adr_clampf(r, 0.0f, 1.0f), cg = adr_clampf(g, 0.0f, 1.0f), cb = adr_clampf(b, 0.0f, 1.0f);
+  uchar q[3];
+  if (p.hdr) {
+    /* hdr_analysis_planes: integer matrix on mapped 15-bit codes. */
+    const int mr = hdr_table[adr_hdr_index(r)], mg = hdr_table[adr_hdr_index(g)], mb = hdr_table[adr_hdr_index(b)];
+    q[0] = (uchar)adr_clampi((mr * 2449 + mg * 4809 + mb * 934 + 16384) >> 15, 0, 255);
+    q[1] = (uchar)adr_clampi((mr * -1384 + mg * -2712 + mb * 4096 + 16384 + 4194304) >> 15, 0, 255);
+    q[2] = (uchar)adr_clampi((mr * 4096 + mg * -3432 + mb * -664 + 16384 + 4194304) >> 15, 0, 255);
+  } else {
+    for (int c = 0; c < 3; ++c) q[c] = adr_quantize(adr_feature(cr, cg, cb, c), c != 0);
+  }
+  for (int c = 0; c < 3; ++c) {
+    features[c * n + i] = adr_feature(r, g, b, c);
+    planes[i * 3 + c] = q[c];
+    packed[i * 4 + c] = q[c];
+  }
+  packed[i * 4 + 3] = q[0];
+  if (p.rgb_mode && p.hdr) {
+    rgb_planes[i * 3 + 0] = hdr_bytes[adr_hdr_index(r)];
+    rgb_planes[i * 3 + 1] = hdr_bytes[adr_hdr_index(g)];
+    rgb_planes[i * 3 + 2] = hdr_bytes[adr_hdr_index(b)];
+  } else if (p.rgb_mode) {
+    rgb_planes[i * 3 + 0] = adr_quantize(r, 0);
+    rgb_planes[i * 3 + 1] = adr_quantize(g, 0);
+    rgb_planes[i * 3 + 2] = adr_quantize(b, 0);
+  }
+}
+
+DEVICE_FN int adr_reduce_weight(int mode, int k) {
+  /* offsets -3..4 */
+  if (mode == 0) return (k == 3 || k == 4) ? 64 : 0;
+  if (mode == 1) {
+    const int w1[8] = {0, 2, 17, 45, 45, 17, 2, 0};
+    return w1[k];
+  }
+  const int w2[8] = {6, 12, 20, 26, 26, 20, 12, 6};
+  return w2[k];
+}
+
+/* Horizontal half of reduce_analysis_plane on packed (H,W,4) input: output
+ * (H,OW,3) bytes, one thread per output sample and channel. */
+KERNEL void reduce_packed_h(GLOBAL const uchar* src, GLOBAL uchar* dst, PARAMS(ReduceParams) KARGS) {
+  const int x = GID_X, y = GID_Y, c = GID_Z;
+  if (x >= p.ow || y >= p.h || c >= 3) return;
+  int total = 0;
+  for (int k = 0; k < 8; ++k) {
+    const int wgt = adr_reduce_weight(p.mode, k);
+    if (wgt) total += (int)src[(y * p.w + adr_clampi(2 * x + k - 3, 0, p.w - 1)) * 4 + c] * wgt;
+  }
+  dst[(y * p.ow + x) * 3 + c] = (uchar)((total + 64) >> 7);
+}
+
+/* Vertical half: (H,OW,3) -> packed (OH,OW,4) with Y duplicated last. */
+KERNEL void reduce_packed_v(GLOBAL const uchar* src, GLOBAL uchar* dst, PARAMS(ReduceParams) KARGS) {
+  const int x = GID_X, y = GID_Y;
+  if (x >= p.ow || y >= p.oh) return;
+  for (int c = 0; c < 3; ++c) {
+    int total = 0;
+    for (int k = 0; k < 8; ++k) {
+      const int wgt = adr_reduce_weight(p.mode, k);
+      if (wgt) total += (int)src[(adr_clampi(2 * y + k - 3, 0, p.h - 1) * p.ow + x) * 3 + c] * wgt;
+    }
+    const uchar v = (uchar)((total + 64) >> 7);
+    dst[(y * p.ow + x) * 4 + c] = v;
+    if (c == 0) dst[(y * p.ow + x) * 4 + 3] = v;
+  }
+}
+
+/* double_analysis_plane horizontal pass: luma from packed (H,W,4) -> (H,2W). */
+KERNEL void double_h(GLOBAL const uchar* packed, GLOBAL uchar* dst, PARAMS(DoubleParams) KARGS) {
+  const int x = GID_X, y = GID_Y;
+  if (x >= p.w || y >= p.h) return;
+  GLOBAL const uchar* row = packed + y * p.w * 4;
+  const int a = row[adr_clampi(x - 1, 0, p.w - 1) * 4], b = row[x * 4];
+  const int c = row[adr_clampi(x + 1, 0, p.w - 1) * 4], d = row[adr_clampi(x + 2, 0, p.w - 1) * 4];
+  dst[y * 2 * p.w + 2 * x] = (uchar)b;
+  dst[y * 2 * p.w + 2 * x + 1] = (uchar)adr_clampi((p.side * (a + d) + p.center * (b + c) + 8) >> 4, 0, 255);
+}
+
+/* Vertical pass: (H,2W) -> (2H,2W). w is the doubled width here. */
+KERNEL void double_v(GLOBAL const uchar* src, GLOBAL uchar* dst, PARAMS(DoubleParams) KARGS) {
+  const int x = GID_X, y = GID_Y;
+  if (x >= p.w || y >= p.h) return;
+  const int a = src[adr_clampi(y - 1, 0, p.h - 1) * p.w + x], b = src[y * p.w + x];
+  const int c = src[adr_clampi(y + 1, 0, p.h - 1) * p.w + x], d = src[adr_clampi(y + 2, 0, p.h - 1) * p.w + x];
+  dst[2 * y * p.w + x] = (uchar)b;
+  dst[(2 * y + 1) * p.w + x] = (uchar)adr_clampi((p.side * (a + d) + p.center * (b + c) + 8) >> 4, 0, 255);
+}
+
+/* Device-side fill used by the OpenCL backend (some runtimes ignore
+ * clEnqueueFillBuffer). n counts 32-bit words starting at word offset. */
+KERNEL void adr_fill_words(GLOBAL uint* dst, PARAMS(FillParams) KARGS) {
+  const int i = GID_X;
+  if (i >= p.n) return;
+  dst[p.offset + i] = p.value;
+}
