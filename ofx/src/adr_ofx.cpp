@@ -396,7 +396,7 @@ std::array<int,4> renderWindow(OfxImageEffectHandle e,OfxPropertySetHandle in,co
 // white strokes give the original back, black strokes keep the repair.
 const char*const spanishRecoveryError="Auto recovery cannot be used with Spanish dirt removal. Set Auto recovery to Off, or turn Spanish dirt removal off.";
 const char*const encodingChoices[]={"Video","Cineon log"};
-const char*const recoveryModeChoices[]={"Off","Calculate while rendering","Use saved matte"};
+const char*const recoveryModeChoices[]={"Off","On"};
 const char*const viewChoices[]={"Restored","Red difference","True difference","Auto recovery matte"};
 // View choice -> internal view (0 restored, 1 original, 2 wipe, 3 true difference, 4 red, 5 eligibility, 6 changed, 7 matte).
 const int viewOfChoice[]={0,4,3,7};
@@ -404,8 +404,8 @@ struct Extra{const char*name;const char*label;const char*hint;const char*group;i
 enum{ExtraChoice,ExtraBool,ExtraDouble,ExtraInt,ExtraString,ExtraButton};
 const Extra extras[]={
  {"spanish","Spanish dirt removal","Off (default): the Mask input is a recovery brush, painted areas keep the original. On: only painted areas are repaired. With auto recovery, white strokes give back the original and black strokes keep the repair.","auto_recovery_group",ExtraBool,0,0,1},
- {"recovery_calculate","Calculate recovery","Score every repaired spot of the shot and save the auto-recovery matte. Uses the current cleaning controls; calculate again after changing them.","auto_recovery_group",ExtraButton,0,0,0},
- {"auto_recovery","Auto recovery","Off: none. Calculate while rendering: score each frame as it renders (when the button cannot read the shot in this host). Use saved matte: apply the calculated matte.","auto_recovery_group",ExtraChoice,0,0,2,recoveryModeChoices,3},
+ {"recovery_calculate","Calculate recovery","Calculate the auto-recovery matte for the whole shot now (otherwise frames are calculated as they render).","auto_recovery_group",ExtraButton,0,0,0},
+ {"auto_recovery","Auto recovery","On: give back repaired spots the model judges to be real picture detail. The matte is calculated once per shot and cleaning settings, and recalculated automatically when Input encoding or any cleaning control changes (Calculate recovery does the whole shot at once).","auto_recovery_group",ExtraChoice,0,0,1,recoveryModeChoices,2},
  {"recovery_confidence","Confidence","Give back only spots the model is at least this sure were real picture detail. Higher gives back less.","auto_recovery_group",ExtraDouble,.8,.5,.99},
  {"recovery_folder","Matte folder","Where calculated mattes are stored. Empty: the user's application data folder.","auto_recovery_group",ExtraString,0,0,0},
  {"view","View","Restored: the result. Red difference: grey picture with every repair in red. True difference: the change, amplified. Auto recovery matte: where auto recovery gives back the original.",nullptr,ExtraChoice,0,0,3,viewChoices,4},
@@ -471,7 +471,7 @@ Settings readSettings(Instance&i,double time){
  D("difference_threshold",s.threshold);D("red_intensity",s.redIntensity);D("red_opacity",s.redOpacity);D("gray_background",s.gray);D("difference_gain",s.gain);
  s.maskMode=spanish?2:1;s.view=viewOfChoice[std::max(0,std::min(3,choice))];
  char*str=nullptr;if(params->paramGetValueAtTime(i.parameters.at("recovery_folder"),time,&str)==kOfxStatOK&&str)s.folder=str;
- s.encoding=s.encoding==1;s.mode=std::max(0,std::min(2,s.mode));s.view=std::max(0,std::min(7,s.view));s.confidence=std::max(.5,std::min(.99,s.confidence));
+ s.encoding=s.encoding==1;s.mode=s.mode>0?1:0;s.view=std::max(0,std::min(7,s.view));s.confidence=std::max(.5,std::min(.99,s.confidence));
  return s;
 }
 // Cineon log (black 95, white 685, film gamma 0.6) <-> linear; values as code / 1023.
@@ -590,8 +590,8 @@ void calculateShot(OfxImageEffectHandle e,Instance&i){
  adr_sequence_destroy(seq);
  const double secs=std::chrono::duration<double>(std::chrono::steady_clock::now()-t0).count();
  char line[200];std::snprintf(line,sizeof line," auto recovery: %d frames calculated in %.0f s (%.2f s/frame)",done,secs,secs/std::max(1,done));adrlog::info(i.label()+line);
- if(params->paramSetValue)params->paramSetValue(i.parameters.at("auto_recovery"),2);
- if(messages)messages->message(e,kOfxMessageMessage,"adr","Auto recovery calculated for %d frames in %.0f s. Auto recovery is set to Use saved matte.",done,secs);
+ if(params->paramSetValue)params->paramSetValue(i.parameters.at("auto_recovery"),1);
+ if(messages)messages->message(e,kOfxMessageMessage,"adr","Auto recovery calculated for %d frames in %.0f s and switched on.",done,secs);
 }
 // The optional Mask input as coverage m and stroke colour s (white 1, black 0) per source pixel, top-down.
 bool readMask(Instance&i,int time,int w,int h,const std::array<int,4>&bounds,std::vector<float>&m,std::vector<float>&s){
@@ -740,10 +740,8 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
     if(st.mode&&st.maskMode!=2){  // Spanish dirt removal repairs only inside the mask: nothing to give back
      const std::string dir=recoveryShotFolder(i,e,st,identity,range,w,h,source.b);
      std::vector<uint8_t> prob;bool have=loadProbability(dir,time,w,h,prob);
-     if(!have&&st.mode==1){computeProbability(i,e,time,range,w,h,source.b,src,rep,prob);saveProbability(dir,time,w,h,prob);have=true;}
+     if(!have){computeProbability(i,e,time,range,w,h,source.b,src,rep,prob);saveProbability(dir,time,w,h,prob);have=true;}
      if(have){const uint8_t cut=uint8_t(1+std::nearbyint(st.confidence*254));matte.resize(prob.size());for(size_t k=0;k<prob.size();++k)matte[k]=prob[k]>=cut;}
-     else{adrlog::warn(i.label()+" auto recovery: no saved matte for frame "+std::to_string(time)+" in "+dir+" (calculate first)");
-      if(persistentMessages)persistentMessages->setPersistentMessage(e,kOfxMessageWarning,"adr","%s","No auto-recovery matte for this frame yet: press Calculate recovery (or choose Calculate while rendering).");}
     }
     finish(st,time,w,h,src,rep,matte,haveMask,mm,ms,finished);pixels=finished.data();
    }}
@@ -797,7 +795,7 @@ OfxStatus entry(const char*action,const void*handle,OfxPropertySetHandle in,OfxP
   if(prop->propGetString(in,kOfxPropType,0,&type)==kOfxStatOK&&type&&!std::strcmp(type,kOfxTypeParameter)&&prop->propGetString(in,kOfxPropName,0,&name)==kOfxStatOK&&name&&!std::strcmp(name,"recovery_calculate")){
    auto&i=instance(e);std::unique_lock<std::mutex> g(i.lock);
    try{calculateShot(e,i);}catch(const std::exception&x){adrlog::error(i.label()+" auto recovery failed: "+x.what());
-    if(messages)messages->message(e,kOfxMessageError,"adr","Auto recovery could not read the shot from the button: %s. Set Recovery to \"Calculate while rendering\" and play or render the shot once.",x.what());}
+    if(messages)messages->message(e,kOfxMessageError,"adr","Auto recovery could not read the shot from the button: %s. With Auto recovery on, frames are calculated as they render: play or render the shot once.",x.what());}
    return kOfxStatOK;}}
  if(!std::strcmp(action,kOfxActionInstanceChanged)&&!invalidatesHistory(in))return kOfxStatReplyDefault;
  if(perInstance)lock=std::unique_lock<std::mutex>(instance(e).lock);else if(!metadata)lock=std::unique_lock<std::mutex>(mutex);
