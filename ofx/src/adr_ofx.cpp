@@ -417,7 +417,7 @@ const Extra extras[]={
  {"recovery_folder","Matte folder","Where calculated mattes are stored. Empty: the user's application data folder.","auto_recovery_group",ExtraString,0,0,0},
  {"view","View","Restored: the result. Red difference: grey picture with every repair in red. True difference: the change, amplified. Auto recovery matte: where auto recovery gives back the original.",nullptr,ExtraChoice,0,0,3,viewChoices,4},
  {"difference_threshold","Difference threshold (%)","Red difference: changes smaller than this are not shown in red. The engine moves unrepaired pixels by less than one 10-bit code, so 0.1% shows only real repairs.","view_group",ExtraDouble,.1,0,100},
- {"red_intensity","Red difference intensity","Brightness of the red highlights and of Changed pixels.","view_group",ExtraDouble,8,0,100},
+ {"red_intensity","Red difference intensity","Brightness of the red highlights.","view_group",ExtraDouble,8,0,100},
  {"red_opacity","Red highlight opacity","Opacity of the red highlights.","view_group",ExtraDouble,.85,0,1},
  {"gray_background","Grayscale background","Brightness of the grey picture behind the red highlights (0 = black).","view_group",ExtraDouble,1,0,1},
  {"difference_gain","Difference gain","Gain of the True difference view.","view_group",ExtraDouble,4,0,100},
