@@ -248,6 +248,7 @@ struct Instance {
  std::string prefetchKey;
  std::mutex lock;            // serializes this instance's actions
  std::string recoveryId,recoveryIdFor; // auto-recovery shot folder and what it was computed for
+ bool calculateRequested=false;       // set by the button, done by the next render (frames are only fetched while rendering)
  // Diagnostic log: instance number and the live sequence's statistics.
  int id=0;
  std::string label()const{return "instance #"+std::to_string(id);}
@@ -406,6 +407,7 @@ enum{ExtraChoice,ExtraBool,ExtraDouble,ExtraInt,ExtraString,ExtraButton};
 const Extra extras[]={
  {"mask_mode","Mask","How the Mask input (Mask Paint or Magic Mask) is used. Recovery (default): painted areas keep the original; with auto recovery, white strokes give back the original and black strokes keep the repair. Spanish dirt removal: only painted areas are repaired.","auto_recovery_group",ExtraChoice,0,0,1,maskModeChoices,2},
  {"recovery_calculate","Calculate recovery","Calculate the auto-recovery matte for the whole shot now (otherwise frames are calculated as they render).","auto_recovery_group",ExtraButton,0,0,0},
+ {"recovery_request","Recovery request","Internal: changed by Calculate recovery so the host renders again.","auto_recovery_group",ExtraInt,0,0,1000000},
  {"auto_recovery","Auto recovery","On: give back repaired spots the model judges to be real picture detail. The matte is calculated once per shot and cleaning settings, and recalculated automatically when Input encoding or any cleaning control changes (Calculate recovery does the whole shot at once).","auto_recovery_group",ExtraChoice,0,0,1,recoveryModeChoices,2},
  {"recovery_confidence","Confidence","Give back only spots the model is at least this sure were real picture detail. Higher gives back less.","auto_recovery_group",ExtraDouble,.8,.5,.99},
  {"recovery_folder","Matte folder","Where calculated mattes are stored. Empty: the user's application data folder.","auto_recovery_group",ExtraString,0,0,0},
@@ -433,7 +435,7 @@ void defineExtraParams(OfxParamSetHandle ps,bool topLevel){
   si(p,kOfxParamPropAnimates,0);
   if(x.kind==ExtraChoice){for(int k=0;k<x.count;++k)ss(p,kOfxParamPropChoiceOption,x.choices[k],k);si(p,kOfxParamPropDefault,int(x.initial));}
   else if(x.kind==ExtraBool)si(p,kOfxParamPropDefault,int(x.initial));
-  else if(x.kind==ExtraInt){si(p,kOfxParamPropDefault,int(x.initial));for(auto k:{kOfxParamPropMin,kOfxParamPropDisplayMin})si(p,k,int(x.minimum));for(auto k:{kOfxParamPropMax,kOfxParamPropDisplayMax})si(p,k,int(x.maximum));}
+  else if(x.kind==ExtraInt){if(!std::strcmp(x.name,"recovery_request")){si(p,kOfxParamPropSecret,1);si(p,kOfxParamPropEvaluateOnChange,1);}si(p,kOfxParamPropDefault,int(x.initial));for(auto k:{kOfxParamPropMin,kOfxParamPropDisplayMin})si(p,k,int(x.minimum));for(auto k:{kOfxParamPropMax,kOfxParamPropDisplayMax})si(p,k,int(x.maximum));}
   else if(x.kind==ExtraDouble){for(auto v:{std::make_pair(kOfxParamPropDefault,x.initial),{kOfxParamPropMin,x.minimum},{kOfxParamPropMax,x.maximum},{kOfxParamPropDisplayMin,x.minimum},{kOfxParamPropDisplayMax,x.maximum}})check(prop->propSetDouble(p,v.first,0,v.second),"extra range");}
   else if(x.kind==ExtraString){ss(p,kOfxParamPropStringMode,kOfxParamStringIsDirectoryPath);ss(p,kOfxParamPropDefault,"");}
  }
@@ -562,7 +564,6 @@ void computeProbability(Instance&i,OfxImageEffectHandle e,int time,const std::ar
 }
 // The whole shot from the button: its own engine pass over the clip range, then each frame scored and saved.
 void calculateShot(OfxImageEffectHandle e,Instance&i){
- {int spanish=0;if(params->paramGetValue(i.parameters.at("mask_mode"),&spanish)==kOfxStatOK&&spanish==1){if(messages)messages->message(e,kOfxMessageError,"adr","%s",spanishRecoveryError);return;}}
  const auto t0=std::chrono::steady_clock::now();
  auto range=sourceRange(i);const int count=range[1]-range[0]+1;
  std::array<int,4> bounds;int w,h;{Image first(i.source,range[0],e,"auto recovery");bounds=first.b;w=first.width();h=first.height();}
@@ -590,8 +591,6 @@ void calculateShot(OfxImageEffectHandle e,Instance&i){
  adr_sequence_destroy(seq);
  const double secs=std::chrono::duration<double>(std::chrono::steady_clock::now()-t0).count();
  char line[200];std::snprintf(line,sizeof line," auto recovery: %d frames calculated in %.0f s (%.2f s/frame)",done,secs,secs/std::max(1,done));adrlog::info(i.label()+line);
- if(params->paramSetValue)params->paramSetValue(i.parameters.at("auto_recovery"),1);
- if(messages)messages->message(e,kOfxMessageMessage,"adr","Auto recovery calculated for %d frames in %.0f s and switched on.",done,secs);
 }
 // The optional Mask input as coverage m and stroke colour s (white 1, black 0) per source pixel, top-down.
 bool readMask(Instance&i,int time,int w,int h,const std::array<int,4>&bounds,std::vector<float>&m,std::vector<float>&s){
@@ -607,8 +606,10 @@ bool readMask(Instance&i,int time,int w,int h,const std::array<int,4>&bounds,std
  void*data=nullptr;check(prop->propGetPointer(img,kOfxImagePropData,0,&data),"mask pixels");
  auto val=[&](const char*px,int c)->float{const char*q=px+c*bytes;if(bytes==4){float v;std::memcpy(&v,q,4);return v;}if(bytes==1)return uint8_t(*q)/255.f;uint16_t v;std::memcpy(&v,q,2);return depth==kOfxBitDepthHalf?decodeHalf(v):v/65535.f;};
  m.assign(size_t(w)*h,0.f);s.assign(size_t(w)*h,1.f);
- parallelRows(h,[&](int y0,int y1){for(int y=y0;y<y1;++y){const int Y=bounds[3]-1-y;if(Y<mb[1]||Y>=mb[3])continue;const char*row=static_cast<const char*>(data)+int64_t(Y-mb[1])*stride;
-  for(int x=0;x<w;++x){const int X=bounds[0]+x;if(X<mb[0]||X>=mb[2])continue;const char*px=row+int64_t(X-mb[0])*ch*bytes;
+ // A mask at another resolution is mapped by position (normalised coordinates) instead of by pixel index.
+ const bool sameSize=mb[2]-mb[0]==w&&mb[3]-mb[1]==h;const int mw=mb[2]-mb[0],mh=mb[3]-mb[1];
+ parallelRows(h,[&](int y0,int y1){for(int y=y0;y<y1;++y){const int Y=sameSize?bounds[3]-1-y:mb[1]+int((h-1-y+.5)*mh/h);if(Y<mb[1]||Y>=mb[3])continue;const char*row=static_cast<const char*>(data)+int64_t(Y-mb[1])*stride;
+  for(int x=0;x<w;++x){const int X=sameSize?bounds[0]+x:mb[0]+int((x+.5)*mw/w);if(X<mb[0]||X>=mb[2])continue;const char*px=row+int64_t(X-mb[0])*ch*bytes;
    float a,r;if(ch==1){a=val(px,0);r=a;}else if(ch==3){a=val(px,0);r=a;}else{a=val(px,3);r=val(px,0);}
    a=std::min(1.f,std::max(0.f,a));const size_t k=size_t(y)*w+x;m[k]=a;s[k]=a>1e-6f?std::min(1.f,std::max(0.f,r/a)):1.f;}}});
  return true;
@@ -657,6 +658,7 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
   auto window=renderWindow(e,in,source.b);
   std::string identity;adr_controls c=readControls(i,time,identity);const Settings st=readSettings(i,time);if(st.encoding)c.extended_range=1;
   std::ostringstream key;key<<identity<<'|'<<range[0]<<'|'<<range[1]<<'|'<<w<<'x'<<h<<'|'<<i.generation<<"|enc"<<st.encoding;
+  if(i.calculateRequested&&st.mode&&st.maskMode!=2){i.calculateRequested=false;calculateShot(e,i);}
   if(key.str()!=i.key){if(std::getenv("ADR_DEBUG")&&!i.key.empty())std::fprintf(stderr,"adr key change instance=%p\n",(void*)&i);i.close();}
   const int index=time-range[0],count=range[1]-range[0]+1;
   const auto traceStart=std::chrono::steady_clock::now();double tFetch=0,tEngine=0;
@@ -793,9 +795,13 @@ OfxStatus entry(const char*action,const void*handle,OfxPropertySetHandle in,OfxP
  if(!std::strcmp(action,kOfxActionInstanceChanged)&&in){char*type=nullptr;char*name=nullptr;
   if(prop->propGetString(in,kOfxPropType,0,&type)==kOfxStatOK&&type&&!std::strcmp(type,kOfxTypeParameter)&&prop->propGetString(in,kOfxPropName,0,&name)==kOfxStatOK&&name&&!std::strcmp(name,"mask_mode")){auto&i=instance(e);std::unique_lock<std::mutex> g(i.lock);updateRecoveryEnabled(i);return kOfxStatOK;}
   if(prop->propGetString(in,kOfxPropType,0,&type)==kOfxStatOK&&type&&!std::strcmp(type,kOfxTypeParameter)&&prop->propGetString(in,kOfxPropName,0,&name)==kOfxStatOK&&name&&!std::strcmp(name,"recovery_calculate")){
-   auto&i=instance(e);std::unique_lock<std::mutex> g(i.lock);
-   try{calculateShot(e,i);}catch(const std::exception&x){adrlog::error(i.label()+" auto recovery failed: "+x.what());
-    if(messages)messages->message(e,kOfxMessageError,"adr","Auto recovery could not read the shot from the button: %s. With Auto recovery on, frames are calculated as they render: play or render the shot once.",x.what());}
+   // Never fetch frames here: in some hosts this runs on the UI thread, which the image fetch waits for.
+   auto&i=instance(e);
+   {int spanish=0;if(params->paramGetValue(i.parameters.at("mask_mode"),&spanish)==kOfxStatOK&&spanish==1){if(messages)messages->message(e,kOfxMessageError,"adr","%s",spanishRecoveryError);return kOfxStatOK;}}
+   {std::unique_lock<std::mutex> g(i.lock);i.calculateRequested=true;}
+   int n=0;params->paramGetValue(i.parameters.at("recovery_request"),&n);
+   if(params->paramSetValue){params->paramSetValue(i.parameters.at("auto_recovery"),1);params->paramSetValue(i.parameters.at("recovery_request"),(n+1)%1000000);}
+   adrlog::info(i.label()+" auto recovery: whole-shot calculation requested; it runs with the next render");
    return kOfxStatOK;}}
  if(!std::strcmp(action,kOfxActionInstanceChanged)&&!invalidatesHistory(in))return kOfxStatReplyDefault;
  if(perInstance)lock=std::unique_lock<std::mutex>(instance(e).lock);else if(!metadata)lock=std::unique_lock<std::mutex>(mutex);
