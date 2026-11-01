@@ -1,6 +1,7 @@
 // Advanced Dirt Removal: OFX image-effect adapter for the linked engine
 // (Metal, CUDA, OpenCL or CPU). Fetches temporal source frames from the host,
 // streams them through the engine and writes the repaired frame.
+#include <cctype>
 #include "ofxImageEffect.h"
 #include "ofxProperty.h"
 #include "ofxTimeLine.h"
@@ -334,6 +335,9 @@ void readSource(Instance&i,OfxImageEffectHandle e,int time,int w,int h,const std
 }
 // Startup summary for the diagnostic log: plugin build, host, machine and overrides.
 std::string hostText(const char*k){char*v=nullptr;return host&&host->host&&prop->propGetString(host->host,k,0,&v)==kOfxStatOK&&v?v:"";}
+// Resolve and Fusion are resolution-independent: a mask made at another resolution covers the same picture.
+// Other hosts place every image on one pixel canvas, and may hand the mask over cropped to its data window.
+bool positionMappedMasks(){std::string n=hostText(kOfxPropName);for(char&c:n)c=char(std::tolower((unsigned char)c));return n.find("resolve")!=std::string::npos||n.find("fusion")!=std::string::npos||n.find("blackmagic")!=std::string::npos;}
 void logStartup(){
  std::array<int,3> version{};if(host&&host->host)prop->propGetIntN(host->host,kOfxPropVersion,3,version.data());
  adrlog::info(std::string("Advanced Dirt Removal ")+ADR_PLUGIN_VERSION+" (source "+ADR_SOURCE_REVISION+", built "+__DATE__+" "+__TIME__+"), engine "+adr_version()+", kernels "+std::string(adr_kernel_source_sha256()).substr(0,12));
@@ -606,10 +610,11 @@ bool readMask(Instance&i,int time,int w,int h,const std::array<int,4>&bounds,std
  void*data=nullptr;check(prop->propGetPointer(img,kOfxImagePropData,0,&data),"mask pixels");
  auto val=[&](const char*px,int c)->float{const char*q=px+c*bytes;if(bytes==4){float v;std::memcpy(&v,q,4);return v;}if(bytes==1)return uint8_t(*q)/255.f;uint16_t v;std::memcpy(&v,q,2);return depth==kOfxBitDepthHalf?decodeHalf(v):v/65535.f;};
  m.assign(size_t(w)*h,0.f);s.assign(size_t(w)*h,1.f);
- // A mask at another resolution is mapped by position (normalised coordinates) instead of by pixel index.
- const bool sameSize=mb[2]-mb[0]==w&&mb[3]-mb[1]==h;const int mw=mb[2]-mb[0],mh=mb[3]-mb[1];
- parallelRows(h,[&](int y0,int y1){for(int y=y0;y<y1;++y){const int Y=sameSize?bounds[3]-1-y:mb[1]+int((h-1-y+.5)*mh/h);if(Y<mb[1]||Y>=mb[3])continue;const char*row=static_cast<const char*>(data)+int64_t(Y-mb[1])*stride;
-  for(int x=0;x<w;++x){const int X=sameSize?bounds[0]+x:mb[0]+int((x+.5)*mw/w);if(X<mb[0]||X>=mb[2])continue;const char*px=row+int64_t(X-mb[0])*ch*bytes;
+ // On canvas hosts the mask is read at the same pixel position (outside its window is 0). On
+ // resolution-independent hosts a mask at another resolution is mapped by position (normalised coordinates).
+ static const bool byPosition=positionMappedMasks();const bool pixelMapped=!byPosition||(mb[2]-mb[0]==w&&mb[3]-mb[1]==h);const int mw=mb[2]-mb[0],mh=mb[3]-mb[1];
+ parallelRows(h,[&](int y0,int y1){for(int y=y0;y<y1;++y){const int Y=pixelMapped?bounds[3]-1-y:mb[1]+int((h-1-y+.5)*mh/h);if(Y<mb[1]||Y>=mb[3])continue;const char*row=static_cast<const char*>(data)+int64_t(Y-mb[1])*stride;
+  for(int x=0;x<w;++x){const int X=pixelMapped?bounds[0]+x:mb[0]+int((x+.5)*mw/w);if(X<mb[0]||X>=mb[2])continue;const char*px=row+int64_t(X-mb[0])*ch*bytes;
    float a,r;if(ch==1){a=val(px,0);r=a;}else if(ch==3){a=val(px,0);r=a;}else{a=val(px,3);r=val(px,0);}
    a=std::min(1.f,std::max(0.f,a));const size_t k=size_t(y)*w+x;m[k]=a;s[k]=a>1e-6f?std::min(1.f,std::max(0.f,r/a)):1.f;}}});
  return true;
@@ -792,6 +797,9 @@ OfxStatus entry(const char*action,const void*handle,OfxPropertySetHandle in,OfxP
  try{
  // Time/control notifications already preserve history: every render keys
  // controls by their actual values. They must not block a host/UI callback.
+ // A render error stays on the node until it is cleared, and some hosts (Nuke) will not render again while it is shown.
+ // Clear it on any change and whenever the host re-validates the node; the next render reports it again if it remains.
+ if((!std::strcmp(action,kOfxActionInstanceChanged)||!std::strcmp(action,kOfxImageEffectActionGetRegionOfDefinition)||!std::strcmp(action,kOfxImageEffectActionGetFramesNeeded))&&persistentMessages&&isLiveInstance(e))persistentMessages->clearPersistentMessage(e);
  if(!std::strcmp(action,kOfxActionInstanceChanged)&&in){char*type=nullptr;char*name=nullptr;
   if(prop->propGetString(in,kOfxPropType,0,&type)==kOfxStatOK&&type&&!std::strcmp(type,kOfxTypeParameter)&&prop->propGetString(in,kOfxPropName,0,&name)==kOfxStatOK&&name&&!std::strcmp(name,"mask_mode")){auto&i=instance(e);std::unique_lock<std::mutex> g(i.lock);updateRecoveryEnabled(i);return kOfxStatOK;}
   if(prop->propGetString(in,kOfxPropType,0,&type)==kOfxStatOK&&type&&!std::strcmp(type,kOfxTypeParameter)&&prop->propGetString(in,kOfxPropName,0,&name)==kOfxStatOK&&name&&!std::strcmp(name,"recovery_calculate")){
@@ -814,7 +822,7 @@ OfxStatus entry(const char*action,const void*handle,OfxPropertySetHandle in,OfxP
  if(!std::strcmp(action,kOfxActionDestroyInstance)){auto&i=instance(e);i.close();adrlog::info(i.label()+" destroyed");untrackInstance(e);delete &i;check(prop->propSetPointer(properties(e),kOfxPropInstanceData,0,nullptr),"clear instance");return kOfxStatOK;}
  if(!std::strcmp(action,kOfxActionInstanceChanged)){auto&i=instance(e);if(invalidatesHistory(in)){++i.generation;if(i.sequence){char*type=nullptr;char*name=nullptr;char*why=nullptr;if(in){prop->propGetString(in,kOfxPropType,0,&type);prop->propGetString(in,kOfxPropName,0,&name);prop->propGetString(in,kOfxPropChangeReason,0,&why);}adrlog::info(i.label()+" history reset: host reported a change ("+(type?type:"?")+" "+(name?name:"?")+", "+(why?why:"?")+")");}i.close();}return kOfxStatReplyDefault;}
  if(!std::strcmp(action,kOfxActionPurgeCaches)){auto&i=instance(e);adrlog::info(i.label()+" host asked to purge caches");i.purge();return kOfxStatOK;}
- if(!std::strcmp(action,kOfxImageEffectActionGetFramesNeeded)){int t=frameTime(in);auto r=sourceRange(instance(e));require(t>=r[0]&&t<=r[1],"time outside source");double v[2]={double(r[0]),double(std::min(r[1],t+4))};/* t+4 is prefetched while the GPU renders t */return prop->propSetDoubleN(out,"OfxImageClipPropFrameRange_Source",2,v);}
+ if(!std::strcmp(action,kOfxImageEffectActionGetFramesNeeded)){int t=frameTime(in);auto r=sourceRange(instance(e));/* Hosts may ask about a time outside the clip (Nuke validates at its current frame): it needs only itself, and a render there still fails clearly. */if(t<r[0]||t>r[1]){double v[2]={double(t),double(t)};return prop->propSetDoubleN(out,"OfxImageClipPropFrameRange_Source",2,v);}double v[2]={double(r[0]),double(std::min(r[1],t+4))};/* t+4 is prefetched while the GPU renders t */return prop->propSetDoubleN(out,"OfxImageClipPropFrameRange_Source",2,v);}
  if(!std::strcmp(action,kOfxImageEffectActionGetRegionOfDefinition)||!std::strcmp(action,kOfxImageEffectActionGetRegionsOfInterest)){scaleOne(in);OfxRectD rod;check(fx->clipGetRegionOfDefinition(instance(e).source,number(in,kOfxPropTime),&rod),"source RoD");double v[]={rod.x1,rod.y1,rod.x2,rod.y2};return prop->propSetDoubleN(out,!std::strcmp(action,kOfxImageEffectActionGetRegionOfDefinition)?kOfxImageEffectPropRegionOfDefinition:"OfxImageClipPropRoI_Source",4,v);}
  if(!std::strcmp(action,kOfxImageEffectActionGetClipPreferences)){si(out,kOfxImageEffectFrameVarying,1);
   // Alpha passes through unchanged, so the output keeps the source's
