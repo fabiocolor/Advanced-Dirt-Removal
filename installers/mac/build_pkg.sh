@@ -21,8 +21,7 @@ VERSION="${1:-2.0.0}"
 BUNDLE="${2:-}"
 BUNDLE_NAME="AdvancedDirtRemoval.ofx.bundle"
 
-MACRO_1="Advanced Dirt Removal.setting"
-MACRO_2="Advanced Dirt Removal Cineon.setting"
+MACRO="Advanced Dirt Removal.setting"
 
 if [ -z "$BUNDLE" ]; then
   cmake -S "$REPO_ROOT" -B "$REPO_ROOT/build/release-macos" -DCMAKE_BUILD_TYPE=Release -DADR_WITH_OPENCL=ON \
@@ -35,7 +34,7 @@ codesign --verify --deep --strict "$BUNDLE"
 
 mkdir -p "$PAYLOAD_DIR/Library/OFX/Plugins" "$PAYLOAD_DIR/tmp/AdvancedDirtRemoval_payload"
 ditto "$BUNDLE" "$PAYLOAD_DIR/Library/OFX/Plugins/$BUNDLE_NAME"
-cp "$REPO_ROOT/$MACRO_1" "$REPO_ROOT/$MACRO_2" "$PAYLOAD_DIR/tmp/AdvancedDirtRemoval_payload/"
+cp "$REPO_ROOT/$MACRO" "$PAYLOAD_DIR/tmp/AdvancedDirtRemoval_payload/"
 # No extended attributes in the payload (they would become ._ files).
 xattr -cr "$PAYLOAD_DIR"
 codesign --verify --deep --strict "$PAYLOAD_DIR/Library/OFX/Plugins/$BUNDLE_NAME"

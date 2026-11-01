@@ -10,8 +10,9 @@ VOLUME="${3:-/}"
 VOLUME="${VOLUME%/}"
 
 MACROS_PATH="${VOLUME}/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Macros"
-MACRO_1="Advanced Dirt Removal.setting"
-MACRO_2="Advanced Dirt Removal Cineon.setting"
+MACRO="Advanced Dirt Removal.setting"
+# 1.x also installed a separate Cineon macro; the 2.0 macro handles both encodings.
+OLD_MACRO="Advanced Dirt Removal Cineon.setting"
 BUNDLE="${VOLUME}/Library/OFX/Plugins/AdvancedDirtRemoval.ofx.bundle"
 STAGING="${VOLUME}/tmp/AdvancedDirtRemoval_payload"
 PKG_IDENTIFIER="com.fabiocolor.AdvancedDirtRemoval"
@@ -24,13 +25,13 @@ if [ -f "$ACTION_FILE" ]; then
 fi
 
 if [ "$ACTION" = "uninstall" ]; then
-  rm -f "${MACROS_PATH}/${MACRO_1}" "${MACROS_PATH}/${MACRO_2}"
+  rm -f "${MACROS_PATH}/${MACRO}" "${MACROS_PATH}/${OLD_MACRO}"
   rm -rf "$BUNDLE"
   pkgutil --volume "${VOLUME:-/}" --forget "$PKG_IDENTIFIER" >/dev/null 2>&1 || true
   echo "Advanced Dirt Removal uninstalled."
 else
   mkdir -p "$MACROS_PATH"
-  cp "${STAGING}/${MACRO_1}" "${STAGING}/${MACRO_2}" "$MACROS_PATH/"
+  cp "${STAGING}/${MACRO}" "$MACROS_PATH/"
   echo "Advanced Dirt Removal installed."
 fi
 rm -rf "$STAGING"

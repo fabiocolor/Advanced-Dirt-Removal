@@ -17,6 +17,7 @@
 #define AllUsersMacros "Blackmagic Design\DaVinci Resolve\Fusion\Macros"
 #define UserMacros "Blackmagic Design\DaVinci Resolve\Support\Fusion\Macros"
 #define MacroFile1 "Advanced Dirt Removal.setting"
+; 1.x also installed a separate Cineon macro; the 2.0 macro handles both encodings.
 #define MacroFile2 "Advanced Dirt Removal Cineon.setting"
 
 [Setup]
@@ -47,12 +48,12 @@ Source: "..\..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignor
 Source: "{#BundleDir}\*"; DestDir: "{commoncf64}\OFX\Plugins\{#BundleName}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; Fusion macros for every user of this computer.
 Source: "..\..\{#MacroFile1}"; DestDir: "{commonappdata}\{#AllUsersMacros}"; Flags: ignoreversion
-Source: "..\..\{#MacroFile2}"; DestDir: "{commonappdata}\{#AllUsersMacros}"; Flags: ignoreversion
 
 [InstallDelete]
 ; Version 1.x installed the macros per user; remove those copies so Resolve does not list them twice.
 Type: files; Name: "{userappdata}\{#UserMacros}\{#MacroFile1}"
 Type: files; Name: "{userappdata}\{#UserMacros}\{#MacroFile2}"
+Type: files; Name: "{commonappdata}\{#AllUsersMacros}\{#MacroFile2}"
 ; Replace the whole bundle on upgrade.
 Type: filesandordirs; Name: "{commoncf64}\OFX\Plugins\{#BundleName}"
 

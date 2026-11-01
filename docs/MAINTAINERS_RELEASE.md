@@ -25,7 +25,7 @@ There is no CI service. Every release is built and checked locally.
 
 Release assets: the macOS `.pkg` and Windows `.exe` each in a ZIP
 (`AdvancedDirtRemoval-<version>-macos.zip`, `AdvancedDirtRemoval-Setup-<version>-win64.zip`),
-the Linux tarball, the two `.setting` files and `INSTALL.md`.
+the Linux tarball, `Advanced Dirt Removal.setting` and `INSTALL.md`.
 
 macOS: the bundle is ad hoc signed by default. For distribution build with
 `-DADR_CODESIGN_IDENTITY="Developer ID Application: ..."`, sign the package with

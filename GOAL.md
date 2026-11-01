@@ -98,11 +98,11 @@ by file before keeping it:
    feature comparison. Leave them, or rewrite history and force-push.
 2. Control order in the effect: regrouped (detection, repair, guards). Keep or
    restore the earlier order.
-3. Cineon macro: the effect runs on linear values with Extended-range input on.
-   The alternative is to run it on the log values directly (the engine's real
-   film-scan checks were on log scans) and only build the motion mask in linear.
-4. Macro View Mode defaults to Difference View (unchanged from 1.x); switch the
-   default to the picture?
+3. Macro: the effect now runs on Cineon values directly (as in the engine's real
+   film-scan checks); confirm on your Cineon material.
+4. The effect moves pixels it does not repair by less than one 10-bit code
+   (inherited, validated behaviour). Keep, or add an option that passes such
+   pixels through untouched?
 
 ## Plan and milestones (week of 2026-11-02)
 
@@ -126,13 +126,14 @@ by file before keeping it:
    effect's controls are published. Linear macro default = effect alone, byte for
    byte; Motion Mask renders correctly; Cineon renders (quality review pending).
 8. **M7 – Docs. Done** (README, INSTALL, BUILD, TESTED, TECH_SPEC, maintainer notes).
-9. **M6b – Bring the workshop views into the 2.0 macros.** A local workshop
-   macro (kept out of Git) has extra diagnostic views that the public macros
-   never had: a red difference view (with intensity and highlight-opacity
-   controls), a compare wipe, true difference, changed pixels, repair
-   eligibility and motion protection, plus area and frame-range limits. It still
-   uses the host's built-in dirt removal. Port these views onto the macros that
-   run the new effect, and test them in Resolve.
+9. **M6b – Unified macro with the workshop fixes. Done on macOS.** The
+   tested local workshop macro (one macro for video and Cineon, direct Mask
+   Paint recovery, recovery modes, red difference and other views, motion
+   protection, rectangle and frame-range limits) is now the repository's macro,
+   with the new effect in place of the built-in dirt removal; the effect runs on
+   the values as delivered, Input encoding only tunes motion protection. Red
+   difference threshold defaults to 0.1%. All functional checks pass in Resolve
+   (docs/TESTED.md). The 1.x Linear and Cineon macros are replaced.
 10. **M8 – Other machines.** Windows CUDA + AMD OpenCL and a Linux host; update
    TESTED.
 11. **M9 – Premiere / After Effects.** Adapter design and a first build (the

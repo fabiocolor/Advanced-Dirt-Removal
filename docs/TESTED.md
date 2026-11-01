@@ -33,16 +33,27 @@ Version 2.0.0 (development), November 2026.
 | Other OFX hosts (Fusion Studio, Flame, Baselight and others) | any | Not tested |
 | Adobe Premiere Pro, After Effects | any | Not supported yet (they do not load OFX plugins; an adapter is planned) |
 
-## Fusion macros
+## Fusion macro
 
-| Macro | Host | Status |
-| --- | --- | --- |
-| Advanced Dirt Removal | Resolve Studio 21.1, macOS | Tested: default settings give output identical to the effect alone (56 frames); Motion Mask mode renders, and every pixel lies between source and repair (12 frames) |
-| Advanced Dirt Removal Cineon | Resolve Studio 21.1, macOS | Renders (12 frames, finite, every frame changed); picture quality on Cineon scans not yet reviewed |
-| Both | Resolve on Windows and Linux, Resolve 18 to 20 | Not tested with 2.0 |
+The 2.0 macro is the unified video/Cineon macro on the new effect. Tested in
+DaVinci Resolve Studio 21.1 on macOS (Metal) with a real 56-frame film scan:
 
-The recovery brush with a painted mask has not been exercised by a script yet;
-it uses the same effect-mask path as the motion mask.
+| Check | Result |
+| --- | --- |
+| Restored view, defaults, video encoding (56 frames) | identical to the effect alone |
+| Restored view, Cineon encoding (12 frames) | identical to the effect alone |
+| Red difference view (12 frames) | grey wherever nothing changed; red only on changed pixels |
+| Full Mask Paint, Mask Paint recovery (12 frames) | identical to the source |
+| Full Mask Paint, Apply repair inside mask (12 frames) | identical to the effect alone |
+| Rectangle limit (12 frames) | source outside, repair inside |
+| Frame-range limit (12 frames) | only the chosen frames repaired |
+| Protect moving areas (12 frames) | renders; every pixel between source and repair |
+
+The macro's recovery, motion-protection and view graph is the one that was
+reviewed on real footage with Resolve's built-in dirt removal before 2.0; with
+the new effect it has been checked functionally (table above), not yet reviewed
+for picture quality on many films. Resolve on Windows and Linux, and Resolve 18
+to 20, have not been tested with 2.0.
 
 ## How the checks are run
 

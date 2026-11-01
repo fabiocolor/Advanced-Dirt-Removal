@@ -16,16 +16,16 @@ Advanced Dirt Removal has two parts:
   compensation. It runs on the GPU (Apple Metal, NVIDIA CUDA, OpenCL for AMD,
   Intel and NVIDIA) and falls back to the CPU. It works in DaVinci Resolve, Nuke
   and other OFX hosts on macOS, Windows and Linux.
-- **The Fusion macros** for DaVinci Resolve: a recovery workflow around the
-  effect, with a motion mask, a recovery brush, "Spanish" targeted
-  repairs, a difference view and a Cineon version for log film scans.
+- **The Fusion macro** for DaVinci Resolve: a recovery workflow around the
+  effect, for video and Cineon scans, with a recovery brush, optional motion
+  protection, a red difference view and other comparison views.
 
-> **New in 2.0:** the macros now use the Advanced Dirt Removal effect instead of
+> **New in 2.0:** the macro now uses the Advanced Dirt Removal effect instead of
 > Resolve's built-in Automatic Dirt Removal, and the effect also works on its own
 > in any OFX host. See [docs/TESTED.md](docs/TESTED.md) for exactly which hosts,
 > systems and GPUs have been tested.
 
-## Video tutorial (macros)
+## Video tutorial (1.x macros)
 
 [![Advanced Dirt Removal Tutorial](assets/images/tutorial-demo.gif)](https://youtu.be/Gepw0XG0FGw?si=i8R3JqCKS8fHNTm3)
 
@@ -48,7 +48,7 @@ and open it.
 **Linux:** download `AdvancedDirtRemoval-<version>-linux-x86_64.tar.gz`, extract
 it and run `sudo ./install.sh`.
 
-The installers put the effect in the standard OFX plugin folder and the macros in
+The installers put the effect in the standard OFX plugin folder and the macro in
 Resolve's Fusion Macros folder. Restart your host afterwards. Manual installation,
 folder locations and uninstalling: [docs/INSTALL.md](docs/INSTALL.md).
 
@@ -98,34 +98,44 @@ device, timing, errors) in `~/Library/Logs/FabioColor/AdvancedDirtRemoval`
 `~/.local/state/fabiocolor/advanced-dirt-removal/logs` (Linux). Please attach it to
 issue reports.
 
-## The Fusion macros (DaVinci Resolve)
+## The Fusion macro (DaVinci Resolve)
 
 ![Recovery Brush Workflow](assets/images/Recovery%20brush.png)
 *Recovery brush: paint back original detail where an automatic repair went wrong*
 
-- **Advanced Dirt Removal**: for standard footage (Rec.709, sRGB and similar).
-- **Advanced Dirt Removal Cineon**: for Cineon log film scans, with a built-in
-  Cineon → linear → Cineon conversion.
-
-In the Fusion page press `Shift+Space`, type "Advanced Dirt Removal" and connect
+One macro, **Advanced Dirt Removal**, for video and Cineon film scans. In the
+Fusion page press `Shift+Space`, type "Advanced Dirt Removal" and connect
 `MediaIn → Advanced Dirt Removal → MediaOut`.
 
-- **Motion Mask** (Recovery type): limits repairs to areas without motion.
-- **Recovery Brush**: connect a Mask Paint tool to the "Mask Paint/Magic Mask"
-  input and paint where the original should be kept.
-- **Spanish Dirt Removal**: flips the brush, so painting marks where to repair.
-- **Difference View** (View Mode) and **Difference Intensity**: see exactly
-  what changed.
+- **Input encoding:** *Video / already converted*, or *Cineon log* if the values
+  entering the macro are still Cineon encoded. The repair itself works on the
+  values as delivered; the setting tunes the motion protection. Output keeps the
+  input encoding.
+- **Recovery brush:** connect a Mask Paint (or Magic Mask) tool directly to the
+  macro's second input and paint where the original should be kept. **Recovery
+  mode** (Advanced): *Mask Paint recovery* (paint keeps the original, the
+  default), *Apply repair inside mask* (only painted areas are repaired) or
+  *Ignore mask*.
+- **Protect moving areas:** an optional motion matte (optical flow plus colour
+  change between the neighbouring frames) that holds back repairs on moving
+  detail. It is slower; tuning is under Advanced.
+- **View Mode:** Restored, Original, Compare wipe, True difference, **Red
+  difference**, Repair eligibility, Changed pixels and Motion protection.
+- **Red difference:** a grey picture with every repaired pixel in red.
+  **Difference threshold (%)** hides changes smaller than the threshold (default
+  0.1%, so only real repairs show) and **Red difference intensity** sets the
+  highlight brightness. Both affect the view only.
+- **Limits (Advanced):** repair only inside a rectangle, or only between two
+  frames.
 - The effect's controls (Sensitivity, Motion guard and the rest) are on the
-  macro too. The Cineon macro turns on **Extended-range input**, because the
-  effect sees linear values there.
+  macro: everyday ones on the first page, the rest under Advanced.
 
 ![Motion Mask Mode](assets/images/Motion%20Mask.png)
-*Motion mask: repairs restricted to stationary areas*
+*Motion protection: repairs held back on moving areas*
 
-The macros can also be used on the Edit/Cut pages (Effects → Toolbox → Fusion
-Effects) with the motion mask; the brush needs the Fusion page. Control details:
-[docs/TECH_SPEC.md](docs/TECH_SPEC.md).
+Version 1.x had two macros (Linear and Cineon); 2.0 replaces both and the
+installers remove the old Cineon macro. Compositions saved with 1.x keep working
+as they were. Details: [docs/TECH_SPEC.md](docs/TECH_SPEC.md).
 
 ## Build from source
 

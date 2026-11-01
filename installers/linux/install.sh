@@ -25,7 +25,8 @@ cp -R "$HERE/$BUNDLE" "$OFX_DIR/"
 echo "OFX effect installed to $OFX_DIR/$BUNDLE"
 if [ -f "$HERE/Advanced Dirt Removal.setting" ]; then
   mkdir -p "$MACROS"
-  cp "$HERE/Advanced Dirt Removal.setting" "$HERE/Advanced Dirt Removal Cineon.setting" "$MACROS/"
+  rm -f "$MACROS/Advanced Dirt Removal Cineon.setting"  # 1.x; the 2.0 macro handles both encodings
+  cp "$HERE/Advanced Dirt Removal.setting" "$MACROS/"
   if [ -n "${SUDO_USER:-}" ]; then chown -R "$SUDO_USER" "$USER_HOME/.local/share/DaVinciResolve/Fusion" 2>/dev/null || true; fi
   echo "Fusion macros installed to $MACROS"
 fi

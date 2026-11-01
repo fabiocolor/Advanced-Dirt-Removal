@@ -9,13 +9,14 @@ VOLUME="${3:-/}"
 VOLUME="${VOLUME%/}"
 
 MACROS_PATH="${VOLUME}/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Macros"
-MACRO_1="Advanced Dirt Removal.setting"
-MACRO_2="Advanced Dirt Removal Cineon.setting"
+MACRO="Advanced Dirt Removal.setting"
+# 1.x also installed a separate Cineon macro; the 2.0 macro handles both encodings.
+OLD_MACRO="Advanced Dirt Removal Cineon.setting"
 BUNDLE="${VOLUME}/Library/OFX/Plugins/AdvancedDirtRemoval.ofx.bundle"
 ACTION_FILE="${VOLUME}/tmp/AdvancedDirtRemoval_action"
 
 rm -f "$ACTION_FILE"
-if [ -e "${MACROS_PATH}/${MACRO_1}" ] || [ -e "${MACROS_PATH}/${MACRO_2}" ] || [ -e "$BUNDLE" ]; then
+if [ -e "${MACROS_PATH}/${MACRO}" ] || [ -e "${MACROS_PATH}/${OLD_MACRO}" ] || [ -e "$BUNDLE" ]; then
   ACTION="replace"
   if [ -z "${COMMAND_LINE_INSTALL:-}" ] && [ -x /usr/bin/osascript ]; then
     BUTTON=$(/usr/bin/osascript <<'APPLESCRIPT'
@@ -29,7 +30,7 @@ APPLESCRIPT
       *) echo "Installation canceled by user." >&2; exit 1 ;;
     esac
   fi
-  rm -f "${MACROS_PATH}/${MACRO_1}" "${MACROS_PATH}/${MACRO_2}"
+  rm -f "${MACROS_PATH}/${MACRO}" "${MACROS_PATH}/${OLD_MACRO}"
   rm -rf "$BUNDLE"
   echo "$ACTION" > "$ACTION_FILE"
 fi
