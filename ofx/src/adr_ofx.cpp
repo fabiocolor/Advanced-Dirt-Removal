@@ -394,6 +394,7 @@ std::array<int,4> renderWindow(OfxImageEffectHandle e,OfxPropertySetHandle in,co
 // shot (keyed by the shot and its cleaning controls); renders turn it into a matte at
 // the chosen confidence. The Mask input edits it: unpainted areas follow the matte,
 // white strokes give the original back, black strokes keep the repair.
+const char*const spanishRecoveryError="Auto recovery cannot be used with Spanish dirt removal. Set Auto recovery to Off, or turn Spanish dirt removal off.";
 const char*const encodingChoices[]={"Video","Cineon log"};
 const char*const recoveryModeChoices[]={"Off","Calculate while rendering","Use saved matte"};
 const char*const viewChoices[]={"Restored","Red difference","True difference","Auto recovery matte"};
@@ -448,6 +449,13 @@ void definePages(OfxParamSetHandle ps){
   OfxPropertySetHandle p;check(params->paramDefine(ps,kOfxParamTypePage,pg.name,&p),"define page");ss(p,kOfxPropLabel,pg.label);
   for(size_t k=0;k<pg.kids->size();++k)ss(p,kOfxParamPropPageChild,(*pg.kids)[k].c_str(),int(k));
  }
+}
+// Spanish dirt removal makes auto recovery irrelevant: grey its controls out while it is on.
+void updateRecoveryEnabled(Instance&i){
+ if(!params->paramGetPropertySet)return;
+ int spanish=0;if(params->paramGetValue(i.parameters.at("spanish"),&spanish)!=kOfxStatOK)return;
+ for(auto n:{"recovery_calculate","recovery_confidence","recovery_folder"}){OfxPropertySetHandle ph=nullptr;
+  if(params->paramGetPropertySet(i.parameters.at(n),&ph)==kOfxStatOK&&ph)prop->propSetInt(ph,kOfxParamPropEnabled,0,spanish?0:1);}
 }
 struct Settings{
  int encoding=0,mode=0,maskMode=1,view=0,first=0,last=0;bool rect=false,frames=false;
@@ -554,6 +562,7 @@ void computeProbability(Instance&i,OfxImageEffectHandle e,int time,const std::ar
 }
 // The whole shot from the button: its own engine pass over the clip range, then each frame scored and saved.
 void calculateShot(OfxImageEffectHandle e,Instance&i){
+ {int spanish=0;if(params->paramGetValue(i.parameters.at("spanish"),&spanish)==kOfxStatOK&&spanish){if(messages)messages->message(e,kOfxMessageError,"adr","%s",spanishRecoveryError);return;}}
  const auto t0=std::chrono::steady_clock::now();
  auto range=sourceRange(i);const int count=range[1]-range[0]+1;
  std::array<int,4> bounds;int w,h;{Image first(i.source,range[0],e,"auto recovery");bounds=first.b;w=first.width();h=first.height();}
@@ -727,7 +736,8 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
     std::vector<float> src;readSource(i,e,time,w,h,source.b,src);
     std::vector<float> enc;const float*rep=pixels;if(st.encoding){cineonDelta(src,i.cached,enc);rep=enc.data();}
     std::vector<uint8_t> matte;
-    if(st.mode){
+    if(st.mode&&st.maskMode==2)throw Error(kOfxStatFailed,spanishRecoveryError);  // shown by the host as a render error
+    if(st.mode&&st.maskMode!=2){  // Spanish dirt removal repairs only inside the mask: nothing to give back
      const std::string dir=recoveryShotFolder(i,e,st,identity,range,w,h,source.b);
      std::vector<uint8_t> prob;bool have=loadProbability(dir,time,w,h,prob);
      if(!have&&st.mode==1){computeProbability(i,e,time,range,w,h,source.b,src,rep,prob);saveProbability(dir,time,w,h,prob);have=true;}
@@ -783,6 +793,7 @@ OfxStatus entry(const char*action,const void*handle,OfxPropertySetHandle in,OfxP
  // Time/control notifications already preserve history: every render keys
  // controls by their actual values. They must not block a host/UI callback.
  if(!std::strcmp(action,kOfxActionInstanceChanged)&&in){char*type=nullptr;char*name=nullptr;
+  if(prop->propGetString(in,kOfxPropType,0,&type)==kOfxStatOK&&type&&!std::strcmp(type,kOfxTypeParameter)&&prop->propGetString(in,kOfxPropName,0,&name)==kOfxStatOK&&name&&!std::strcmp(name,"spanish")){auto&i=instance(e);std::unique_lock<std::mutex> g(i.lock);updateRecoveryEnabled(i);return kOfxStatOK;}
   if(prop->propGetString(in,kOfxPropType,0,&type)==kOfxStatOK&&type&&!std::strcmp(type,kOfxTypeParameter)&&prop->propGetString(in,kOfxPropName,0,&name)==kOfxStatOK&&name&&!std::strcmp(name,"recovery_calculate")){
    auto&i=instance(e);std::unique_lock<std::mutex> g(i.lock);
    try{calculateShot(e,i);}catch(const std::exception&x){adrlog::error(i.label()+" auto recovery failed: "+x.what());
@@ -795,7 +806,7 @@ OfxStatus entry(const char*action,const void*handle,OfxPropertySetHandle in,OfxP
  if(!std::strcmp(action,kOfxActionDescribe)){auto p=properties(e);ss(p,kOfxPropLabel,"Advanced Dirt Removal");ss(p,kOfxImageEffectPluginPropGrouping,"FabioColor");{auto status=prop->propSetString(p,kOfxPropPluginDescription,0,("Open-source temporal dirt and dust removal for film scans (Metal, CUDA, OpenCL or CPU). Works on the RGB values as delivered; review moving shots before delivery."+(adrlog::path().empty()?std::string():" Diagnostic log: "+adrlog::path())).c_str());if(status!=kOfxStatErrUnknown)check(status,"optional plugin description");}ss(p,kOfxImageEffectPropSupportedContexts,kOfxImageEffectContextFilter);ss(p,kOfxImageEffectPropSupportedPixelDepths,kOfxBitDepthFloat,0);ss(p,kOfxImageEffectPropSupportedPixelDepths,kOfxBitDepthHalf,1);ss(p,kOfxImageEffectPropSupportedPixelDepths,kOfxBitDepthShort,2);ss(p,kOfxImageEffectPluginRenderThreadSafety,kOfxImageEffectRenderInstanceSafe);si(p,kOfxImageEffectPluginPropHostFrameThreading,0);si(p,kOfxImageEffectPropSupportsTiles,0);si(p,kOfxImageEffectPropSupportsMultiResolution,0);si(p,kOfxImageEffectPropTemporalClipAccess,1);si(p,kOfxImageEffectPropSupportsMultipleClipPARs,0);si(p,kOfxImageEffectPropSupportsMultipleClipDepths,0);return kOfxStatOK;}
  if(!std::strcmp(action,kOfxImageEffectActionDescribeInContext)){require(str(in,kOfxImageEffectPropContext)==kOfxImageEffectContextFilter,"Filter context required");for(auto name:{"Source","Output"}){OfxPropertySetHandle p;check(fx->clipDefine(e,name,&p),"define clip");ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGB,0);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGBA,1);si(p,kOfxImageEffectPropSupportsTiles,0);if(!std::strcmp(name,"Source"))si(p,kOfxImageEffectPropTemporalClipAccess,1);}{OfxPropertySetHandle p;check(fx->clipDefine(e,"Mask",&p),"define mask clip");ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentAlpha,0);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGBA,1);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGB,2);si(p,kOfxImageClipPropOptional,1);si(p,kOfxImageClipPropIsMask,1);si(p,kOfxImageEffectPropSupportsTiles,0);}OfxParamSetHandle ps;check(fx->getParamSet(e,&ps),"parameters");defineEncodingParam(ps);std::set<std::string> definedGroups;for(auto&c:controls){if(c.group&&!definedGroups.count("top")){definedGroups.insert("top");defineExtraParams(ps,true);}if(c.group&&definedGroups.insert(c.group).second)for(auto&g:groups)if(!std::strcmp(g.name,c.group)){OfxPropertySetHandle gp;check(params->paramDefine(ps,kOfxParamTypeGroup,g.name,&gp),"define group");ss(gp,kOfxPropLabel,g.label);si(gp,kOfxParamPropGroupOpen,!std::strcmp(g.name,"detection"));}OfxPropertySetHandle p;check(params->paramDefine(ps,c.boolean?kOfxParamTypeBoolean:c.choices?kOfxParamTypeChoice:c.integral?kOfxParamTypeInteger:kOfxParamTypeDouble,c.name,&p),"define control");ss(p,kOfxPropLabel,c.label);if(c.group)ss(p,kOfxParamPropParent,c.group);if(!std::strcmp(c.name,"enabled"))si(p,kOfxParamPropSecret,1);if(c.hint)ss(p,kOfxParamPropHint,c.hint);si(p,kOfxParamPropAnimates,0);if(c.boolean||c.integral){si(p,kOfxParamPropDefault,int(c.initial));if(c.choices){for(int index=0;index<=int(c.maximum);++index)ss(p,kOfxParamPropChoiceOption,c.choices[index],index);}else if(c.integral){for(auto key:{kOfxParamPropMin,kOfxParamPropDisplayMin})si(p,key,c.minimum);for(auto key:{kOfxParamPropMax,kOfxParamPropDisplayMax})si(p,key,int(c.maximum));}}else{for(auto v:{std::make_pair(kOfxParamPropDefault,c.initial),{kOfxParamPropMin,0.},{kOfxParamPropMax,c.maximum},{kOfxParamPropDisplayMin,0.},{kOfxParamPropDisplayMax,c.maximum}})check(prop->propSetDouble(p,v.first,0,v.second),"control range");}}defineExtraParams(ps,false);definePages(ps);
  return kOfxStatOK;}
- if(!std::strcmp(action,kOfxActionCreateInstance)){auto i=std::make_unique<Instance>();check(fx->clipGetHandle(e,"Source",&i->source,nullptr),"source clip");check(fx->clipGetHandle(e,"Output",&i->output,nullptr),"output clip");OfxParamSetHandle ps;check(fx->getParamSet(e,&ps),"parameters");for(auto&c:controls)check(params->paramGetHandle(ps,c.name,&i->parameters[c.name],nullptr),"control handle");check(params->paramGetHandle(ps,"encoding",&i->parameters["encoding"],nullptr),"encoding handle");for(auto&x:extras)if(x.kind!=ExtraButton)check(params->paramGetHandle(ps,x.name,&i->parameters[x.name],nullptr),"extra handle");if(fx->clipGetHandle(e,"Mask",&i->mask,nullptr)!=kOfxStatOK)i->mask=nullptr;check(prop->propSetPointer(properties(e),kOfxPropInstanceData,0,i.get()),"instance data");static int created=0;i->id=++created;trackInstance(e);adrlog::info(i->label()+" created");i.release();return kOfxStatOK;}
+ if(!std::strcmp(action,kOfxActionCreateInstance)){auto i=std::make_unique<Instance>();check(fx->clipGetHandle(e,"Source",&i->source,nullptr),"source clip");check(fx->clipGetHandle(e,"Output",&i->output,nullptr),"output clip");OfxParamSetHandle ps;check(fx->getParamSet(e,&ps),"parameters");for(auto&c:controls)check(params->paramGetHandle(ps,c.name,&i->parameters[c.name],nullptr),"control handle");check(params->paramGetHandle(ps,"encoding",&i->parameters["encoding"],nullptr),"encoding handle");for(auto&x:extras)check(params->paramGetHandle(ps,x.name,&i->parameters[x.name],nullptr),"extra handle");if(fx->clipGetHandle(e,"Mask",&i->mask,nullptr)!=kOfxStatOK)i->mask=nullptr;check(prop->propSetPointer(properties(e),kOfxPropInstanceData,0,i.get()),"instance data");static int created=0;i->id=++created;trackInstance(e);adrlog::info(i->label()+" created");try{updateRecoveryEnabled(*i);}catch(...){}i.release();return kOfxStatOK;}
  if(!std::strcmp(action,kOfxActionDestroyInstance)){auto&i=instance(e);i.close();adrlog::info(i.label()+" destroyed");untrackInstance(e);delete &i;check(prop->propSetPointer(properties(e),kOfxPropInstanceData,0,nullptr),"clear instance");return kOfxStatOK;}
  if(!std::strcmp(action,kOfxActionInstanceChanged)){auto&i=instance(e);if(invalidatesHistory(in)){++i.generation;if(i.sequence){char*type=nullptr;char*name=nullptr;char*why=nullptr;if(in){prop->propGetString(in,kOfxPropType,0,&type);prop->propGetString(in,kOfxPropName,0,&name);prop->propGetString(in,kOfxPropChangeReason,0,&why);}adrlog::info(i.label()+" history reset: host reported a change ("+(type?type:"?")+" "+(name?name:"?")+", "+(why?why:"?")+")");}i.close();}return kOfxStatReplyDefault;}
  if(!std::strcmp(action,kOfxActionPurgeCaches)){auto&i=instance(e);adrlog::info(i.label()+" host asked to purge caches");i.purge();return kOfxStatOK;}
