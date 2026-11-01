@@ -126,9 +126,16 @@ by file before keeping it:
    effect's controls are published. Linear macro default = effect alone, byte for
    byte; Motion Mask renders correctly; Cineon renders (quality review pending).
 8. **M7 – Docs. Done** (README, INSTALL, BUILD, TESTED, TECH_SPEC, maintainer notes).
-9. **M8 – Other machines.** Windows CUDA + AMD OpenCL and a Linux host; update
+9. **M6b – Bring the workshop views into the 2.0 macros.** A local workshop
+   macro (kept out of Git) has extra diagnostic views that the public macros
+   never had: a red difference view (with intensity and highlight-opacity
+   controls), a compare wipe, true difference, changed pixels, repair
+   eligibility and motion protection, plus area and frame-range limits. It still
+   uses the host's built-in dirt removal. Port these views onto the macros that
+   run the new effect, and test them in Resolve.
+10. **M8 – Other machines.** Windows CUDA + AMD OpenCL and a Linux host; update
    TESTED.
-10. **M9 – Premiere / After Effects.** Adapter design and a first build (the
+11. **M9 – Premiere / After Effects.** Adapter design and a first build (the
     Adobe SDK is a separate download; it cannot be redistributed).
-11. **M10 – Final scan of the tree, built binaries and history; owner review;
+12. **M10 – Final scan of the tree, built binaries and history; owner review;
     first push.**
