@@ -1,156 +1,74 @@
-# Technical Specification
+# Technical specification: the Fusion macros
 
-**Advanced Dirt Removal** - Professional Fusion macros for DaVinci Resolve
-Version: 1.1 (Current Release - Dual Version System)
+Version 2.0. Two Fusion `MacroOperator` files for DaVinci Resolve:
 
-**Type:** Fusion MacroOperator (.setting files)
-**Two Specialized Versions:**
-- **Linear Version**: Standard footage workflows
-- **Cineon Version**: Film scan workflows with built-in color space conversion
+- `Advanced Dirt Removal.setting`: standard footage (Rec.709, sRGB and similar).
+- `Advanced Dirt Removal Cineon.setting`: Cineon log film scans; converts log to
+  linear on the way in and back to log on the way out.
 
-**Primary Use:** Fusion page compositing workflows
-**Secondary Use:** Edit/Cut page effects (with limitations - no Recovery Brush support)
+Primary use is the Fusion page. On the Edit/Cut pages the macros work as Fusion
+effects with the motion mask; the recovery brush needs the Fusion page.
 
-## Architecture
+## What changed in 2.0
 
-**MacroOperator Structure** - Two specialized `.setting` files:
+The dirt removal inside both macros is now the **Advanced Dirt Removal OFX
+effect** (`ofx.com.fabiocolor.advanceddirtremoval`, node `DirtRemoval1`) in place
+of Resolve's built-in Automatic Dirt Removal. Masking, the recovery brush, the
+motion mask and the difference view are wired exactly as before. The effect's
+controls are published on the macro in place of the old dirt-removal controls.
 
-### Linear Version Processing Chain
-1. **CustomFilter1** - Input conditioning
-2. **Deflicker1** - ResolveFX temporal stabilization
-3. **NoiseReduction1** - ResolveFX spatial/temporal noise reduction
-4. **OpticalFlow1** - Motion vector calculation (Advanced method)
-5. **CustomTool1** - Motion magnitude visualization
-6. **AutomaticDirtRemoval1** - ResolveFX VideoRestoration (core engine)
+With no mask connected and Recovery type left at Recovery Brush, the macro's RGB
+view is byte-identical to the effect on its own (checked in Resolve Studio 21.1 on
+macOS, 56 frames of a real film scan).
 
-### Cineon Version Processing Chain
-1. **CineonLog1** - Cineon log to linear color space conversion
-2. **CustomFilter1** - Input conditioning (linear space)
-3. **Deflicker1** - ResolveFX temporal stabilization
-4. **NoiseReduction1** - ResolveFX spatial/temporal noise reduction
-5. **OpticalFlow1** - Motion vector calculation (Advanced method)
-6. **CustomTool1** - Motion magnitude visualization
-7. **AutomaticDirtRemoval1** - ResolveFX VideoRestoration (core engine)
-8. **CineonLog2** - Linear to Cineon log color space conversion (output)
+## Node graph
 
-### Recovery System
-- **Switch1_2** - Recovery method selector:
-  - Recovery Brush (external mask input)
-  - Motion Mask (automatic motion-based)
-- **ChannelBooleans1/1_2** - Mask generation and processing
+```
+MainInput1 ─[Cineon: CineonLog1, log → linear]─ CustomFilter1 ─┬─ DirtRemoval1 (EffectMask ← Switch1_2) ─┬─ Merge1 (over source) ─┐
+                                                               │                                         └─ Merge2 (difference) ─┴─ Switch1 ─[Cineon: CineonLog1_1, linear → log]─ MainOutput1
+                                                               └─ Deflicker1 → NoiseReduction1 → OpticalFlow1 → CustomTool1 (motion magnitude)
+MainInput2 (Mask Paint / Magic Mask) → ChannelBooleans1 ─┬──────────────────────────────── Switch1_2 input 0 "Recovery Brush"
+                                                         └─ ChannelBooleans1_2 (+ motion) ─ Switch1_2 input 1 "Motion Mask"
+```
 
-### Future Improvements
-- **Dust Polarity** is not part of the current release. Selective white/black dust cleanup will return in a future version once it works reliably with Recovery Brush, Spanish Dirt Removal, Motion Mask, and Cineon workflows.
+- `CustomFilter1` has every channel switched off and passes the image through.
+- `Deflicker1`, `NoiseReduction1` and `OpticalFlow1` (Resolve tools) only build the
+  motion mask; they never touch the repaired picture.
+- `Switch1_2` is the effect mask of `DirtRemoval1`, applied inverted by default:
+  masked (painted or moving) areas keep the source.
+- `Merge1` is the final picture; `Merge2` is a difference view of the source and
+  the repair.
 
-### View Modes
-- **Switch1** - Output selector:
-  - RGB View (final result)
-  - Difference View (diagnostic)
+## Published controls
 
-## Key Parameters
+| Control | Maps to | Default |
+| --- | --- | --- |
+| Input (MainInput1) | `CustomFilter1.Input` (Cineon: `CineonLog1.Input`) | — |
+| Sensitivity, Motion guard, Repair amount, Analyse, Remove dark spots, Remove light spots, Extra sensitivity, Limit spot size, Largest spot (px), Blend repairs, Blend amount, Shot changes, Shot-change guard, Flash guard, Extended-range input, Analysis detail | `DirtRemoval1.<control>` | the effect's defaults; the Cineon macro sets **Extended-range input** on, because the effect sees linear values above 1 |
+| Recovery/Spanish Dirt Removal | `DirtRemoval1.ApplyMaskInverted` | 1 (paint protects the source) |
+| Recovery type | `Switch1_2.Source` | 0 = Recovery Brush, 1 = Motion Mask |
+| Mask Paint/Magic Mask (MainInput2) | `ChannelBooleans1.Background` | — |
+| Motion Mask Safety | `OpticalFlow1.Advanced.NumIters` | 2 |
+| View Mode | `Switch1.Source` | 1 = Difference View; 0 = the repaired picture |
+| Difference Intensity | `Merge2.Blend` | 0.6 (Cineon 0.9) |
 
-### Motion Analysis
-- **Motion Mask Safety** - OpticalFlow NumIters (renamed from "Aggressiveness") (Default: 2)
-- Controls motion detection sensitivity
-- Positioned after Recovery type for better workflow
+The effect's controls are described in the [README](../README.md#the-advanced-dirt-removal-effect).
 
-### Dirt Removal - Linear Version Optimized
-- **motionEstType** - Motion estimation method (HS_Better)
-- **supportLength** - Temporal support window (SUPPORT_LENGTH_4)
-- **temporalThreshold** - Detection threshold (Default: 0.45)
-- **dirtSize** - Minimum defect size (Default: 0.01)
-- **motionThreshold** - Motion sensitivity (Default: 25)
+## Behaviour notes
 
-### Dirt Removal - Cineon Version Optimized
-- **motionEstType** - Motion estimation method (HS_Better)
-- **supportLength** - Temporal support window (SUPPORT_LENGTH_4)
-- **temporalThreshold** - Detection threshold (Default: 0.5)
-- **dirtSize** - Minimum defect size (Default: 0.01)
-- **motionThreshold** - Motion sensitivity (Default: 55)
-
-### Cineon Conversion (Cineon Version Only)
-- **Input CineonLog**: Mode=0 (Log→Linear), LogType=Cineon, Depth=Auto
-- **Output CineonLog**: Mode=1 (Linear→Log), LogType=Cineon, Depth=Auto
-
-### Recovery
-- **Recovery type** - Switch between manual/automatic
-- **View Mode** - RGB/Difference output selection
-
-## Controls & Published Inputs
-
-This section lists the macro's published (InstanceInput) controls and how they map to internal operators (names taken directly from `Advanced Dirt Removal v1.2.setting`). Use these names when looking at the macro's Inspector in Fusion.
-
-- `Aggressiveness` (maps to `OpticalFlow1.Advanced.NumIters`) — default: 2
-- `MainInput1` — Source image (maps to `CineonLog1.Input`) — this is the main input for MediaIn in Fusion.
-- `Recovery type` (maps to `Switch1_2.Source`) — select between "Recovery Brush" and "Motion Mask".
-- `Mask Paint/Magic Mask` (maps to `ChannelBooleans1.Background`) — external painted mask input (published as `MainInput2`).
-- `Recovery/Spanish Dirt Removal` (maps to `AutomaticDirtRemoval1.ApplyMaskInverted`) — toggles brush polarity (see Behavior Notes).
-- `View Mode` (maps to `Switch1.Source`) — toggles RGB vs Difference (diagnostic) view.
-- `Difference Intensity` (maps to `Merge2.Blend`) — default: 0.6 — adjusts visibility of difference view.
-
-**Note:** v1.2 has no user control for log conversion - Cineon log conversion is always active.
-
-Other key internal parameters published for convenience:
-- `motionEstType`, `supportLength`, `temporalThreshold` (default 0.8), `dirtSize` (default 0.01), `showRepairMask` (default 0), `motionThreshold` (default 25.2), `edgeAttenuation` (default 0)
-
-## Node wiring (logical) - v1.2
-
-The macro's internal node graph wires the automatic repair and recovery mask as follows (simplified):
-
-- `MainInput1` → `CineonLog1` (log to linear conversion, bypassed by default) → `CustomFilter1` (input conditioning)
-- `CustomFilter1` → background into `Merge1` and `Merge2`
-- `CustomFilter1` → `Deflicker1` → `NoiseReduction1` → `OpticalFlow1` → preprocessing chain
-- `OpticalFlow1` → `CustomTool1` → motion magnitude calculation for motion mask
-- `AutomaticDirtRemoval1` (ResolveFX VideoRestoration) → foreground into `Merge1`/`Merge2`
-- `Switch1_2` selects which mask is used:
-  - Option 0: `ChannelBooleans1` (Recovery Brush mask)
-  - Option 1: `ChannelBooleans1_2` (Motion Mask / motion-based mask)
-- `Switch1_2` output is used as the `EffectMask` for `AutomaticDirtRemoval1`
-- `Merge1` composites AutomaticDirtRemoval (Foreground) over Source (Background) for the final RGB result
-- `Merge2` is configured to produce a difference-style view (ApplyMode = Difference, Blend ~0.6) used by `Switch1` to offer RGB vs Difference outputs
-- `Switch1` selects between RGB (Merge1) and Difference (Merge2)
-- `Switch1` → `CineonLog2` (linear to log conversion, linked to CineonLog1.LogType) → `MainOutput1`
-
-## Behavior notes
-
-- **Cineon Log Conversion (v1.2)**: The v1.2 macro automatically handles Cineon log-encoded footage:
-  - `CineonLog1` (LogType=1) converts Cineon log to linear at the beginning of the processing chain
-  - All processing (optical flow, noise reduction, dirt removal) happens in linear color space for mathematical accuracy
-  - `CineonLog2` (LogType=1) converts back to Cineon log at the end, maintaining log encoding for grading workflows
-  - Both CineonLog nodes are hardcoded to Cineon format - no user control needed
-  - Conversion is always active - use v1.1 for non-log footage
-- **Spanish Dirt Removal (brush polarity)**: the `Recovery/Spanish Dirt Removal` control flips how painted pixels are interpreted:
-  - When polarity = Recovery (paint protects the Source), painted regions bias the composite toward the original Source (useful to restore detail that the automatic pass removed).
-  - When polarity = Spanish (paint-to-repair), painted regions instruct the VideoRestoration engine to apply repair where you paint.
-- **Hybrid workflows**: even in Motion Mask mode the user can add manual paints (the published mask input accepts painted masks), enabling a mix of automatic motion-based selection and manual correction.
-- **Difference View**: use `View Mode` / `Switch1` to toggle Difference View for fast visual inspection; this aids deciding where to add recovery paints or change mask polarity.
-- **Difference Intensity (v1.1+)**: adjust the `Difference Intensity` slider to control the visibility of the difference view, making it easier to see changes in low-contrast footage.
-- **Future Dust Polarity**: selective white/black dust cleanup is planned for a future release, but it is not included in this version.
-
-## Defaults, Versions and Notes
-
-- AutomaticDirtRemoval node advertises `resolvefxVersion = "1.0"` and is implemented with `ofx.com.blackmagicdesign.resolvefx.VideoRestoration`.
-- Many ResolveFX internals (OpticalFlow advanced mode, some motion estimation options) are only fully available in DaVinci Resolve Studio.
-- The macro's published inputs are intended to match the underlying OFX control names where relevant so users familiar with the ResolveFX UI will recognise them in Fusion.
+- **Recovery brush:** connect a Mask Paint (or Magic Mask) tool to the "Mask
+  Paint/Magic Mask" input. With Recovery polarity, painted areas keep the
+  original; with Spanish polarity, only painted areas are repaired.
+- **Motion mask:** repairs are limited to areas without motion. Painted masks
+  still combine with it.
+- **Difference view:** shows what changed; raise Difference Intensity for
+  low-contrast material.
+- **Cineon:** both CineonLog nodes are fixed to the Cineon curve. Areas the mask
+  keeps unrepaired still pass through the log → linear → log round trip.
 
 ## Requirements
 
-- **DaVinci Resolve Studio** strongly recommended for Advanced optical flow and motion-estimation modes
-- **ResolveFX Plugins**: VideoRestoration, Deflicker, NoiseReduction (bundled with Resolve/Studio)
-- **GPU memory/VRAM**: Adequate for optical flow + temporal processing on high-resolution footage
-- **Fusion page**: Required for full functionality including Recovery Brush workflows (Edit/Cut pages do not expose Mask Paint input connections)
-
-## Inputs/Outputs
-
-### Inputs (v1.2)
-- **MainInput1** - Source image (CineonLog1.Input) - automatically connects to MediaIn
-- **MainInput2** - Recovery mask (ChannelBooleans1.Background) - optional Mask Paint/Magic Mask input
-
-### Output (v1.2)
-- **MainOutput1** - Processed image (CineonLog2.Output) - with optional log conversion applied
-
-## Requirements
-
-- **DaVinci Resolve Studio** - Required for Advanced optical flow
-- **ResolveFX Plugins** - VideoRestoration, Deflicker, NoiseReduction
-- **GPU Memory** - Complex processing chain requires adequate VRAM
+- DaVinci Resolve 18 or later with the Advanced Dirt Removal OFX effect installed
+  (the installers add both).
+- The motion mask uses Resolve's Deflicker, Noise Reduction and Optical Flow
+  tools; Resolve Studio is recommended for them.
