@@ -18,10 +18,13 @@
 #include <cstring>
 #include <limits>
 #include <map>
+#include <fstream>
+#include <sys/stat.h>
 #include "../../engine/tools/sha256.h"
 #include "diagnostic_log.h"
 #ifdef _WIN32
 #include <process.h>
+#include <direct.h>
 #else
 #include <unistd.h>
 #endif
@@ -160,6 +163,7 @@ const Control controls[]={
  {"shot_changes","Shot changes",false,1,2,0,shotChoices,true,"Frames from another shot are never used for repair. Off: no extra care. Guard: repair frames next to a shot change more cautiously. Skip: leave frames next to a shot change unrepaired.","safeguards"},
  {"shot_guard","Shot-change guard",false,.75,1,0,nullptr,false,"How cautious Guard is next to a shot change.","safeguards"},
  {"flash_guard","Flash guard",true,0,1,0,nullptr,false,"Leave frames detected as single-frame flashes unrepaired.","safeguards"}};
+bool isExtraParam(const char*name);
 // ADR_HASH_LOG=<folder>: append the SHA-256 of every float32 RGB frame handed to and returned
 // by the engine (top-down, interleaved), so a render in any host, including GUI-only ones, can be
 // checked against adr_bench afterwards. Off unless the variable is set.
@@ -228,7 +232,7 @@ adr_context* context(){
  return engineContext;
 }
 struct Instance {
- OfxImageClipHandle source=nullptr,output=nullptr;
+ OfxImageClipHandle source=nullptr,output=nullptr,mask=nullptr;
  std::map<std::string,OfxParamHandle> parameters;
  adr_sequence* sequence=nullptr;
  adr_history* history=nullptr; // motion-history checkpoints for key
@@ -242,6 +246,7 @@ struct Instance {
  int prefetchTime=std::numeric_limits<int>::min();
  std::string prefetchKey;
  std::mutex lock;            // serializes this instance's actions
+ std::string recoveryId,recoveryIdFor; // auto-recovery shot folder and what it was computed for
  // Diagnostic log: instance number and the live sequence's statistics.
  int id=0;
  std::string label()const{return "instance #"+std::to_string(id);}
@@ -354,6 +359,7 @@ bool invalidatesHistory(OfxPropertySetHandle in){
   // those exact values, so even genuine parameter edits safely replay.
   // Some hosts resend every value per frame; notifications alone are not edits.
   for(auto&control:controls)if(std::strcmp(name,control.name)==0)return false;
+  if(isExtraParam(name))return false;
  }
  char*reason=nullptr;auto status=prop->propGetString(in,kOfxPropChangeReason,0,&reason);
  // Controls are non-animated and the stream already binds frame indices.
@@ -378,6 +384,254 @@ std::array<int,4> renderWindow(OfxImageEffectHandle e,OfxPropertySetHandle in,co
  require(window[0]>=bounds[0]&&window[1]>=bounds[1]&&window[2]<=bounds[2]&&window[3]<=bounds[3]&&window[0]<=window[2]&&window[1]<=window[3],"invalid render window");
  return window;
 }
+// ---- Encoding, auto recovery, recovery mask, limits and views ------------------
+// Everything after the cleaning engine: none of these controls changes the cleaning
+// itself (except Input encoding, which is part of the sequence key).
+//
+// Auto recovery: a classifier trained on restorers' decisions marks the repaired spots
+// that were real picture detail. "Calculate" stores a per-frame probability map for the
+// shot (keyed by the shot and its cleaning controls); renders turn it into a matte at
+// the chosen confidence. The Mask input edits it: unpainted areas follow the matte,
+// white strokes give the original back, black strokes keep the repair.
+const char*const encodingChoices[]={"Video","Cineon log"};
+const char*const recoveryModeChoices[]={"Off","Calculate while rendering","Use saved matte"};
+const char*const maskModeChoices[]={"Ignore mask","Recovery brush","Repair inside mask"};
+const char*const viewChoices[]={"Restored","Original","Compare wipe","True difference","Red difference","Repair eligibility","Changed pixels","Auto recovery matte"};
+struct Extra{const char*name;const char*label;const char*hint;const char*group;int kind;double initial,minimum,maximum;const char*const*choices=nullptr;int count=0;};
+enum{ExtraChoice,ExtraBool,ExtraDouble,ExtraInt,ExtraString,ExtraButton};
+const Extra extras[]={
+ {"recovery_calculate","Calculate recovery","Score every repaired spot of the shot and save the auto-recovery matte. Uses the current cleaning controls; calculate again after changing them.","auto_recovery_group",ExtraButton,0,0,0},
+ {"auto_recovery","Auto recovery","Off: none. Calculate while rendering: score each frame as it renders (when the button cannot read the shot in this host). Use saved matte: apply the calculated matte.","auto_recovery_group",ExtraChoice,0,0,2,recoveryModeChoices,3},
+ {"recovery_confidence","Confidence","Give back only spots the model is at least this sure were real picture detail. Higher gives back less.","auto_recovery_group",ExtraDouble,.8,.5,.99},
+ {"recovery_folder","Matte folder","Where calculated mattes are stored. Empty: the user's application data folder.","auto_recovery_group",ExtraString,0,0,0},
+ {"mask_mode","Mask","How the Mask input is used. Recovery brush: painted areas keep the original (with auto recovery: white gives back, black keeps the repair). Repair inside mask: Spanish dirt removal, only painted areas are repaired.","mask_group",ExtraChoice,1,0,2,maskModeChoices,3},
+ {"applied_amount","Applied repair amount","Blend between the original (0) and the repair (1).","mask_group",ExtraDouble,1,0,1},
+ {"limit_rectangle","Limit to rectangle","Repair only inside a rectangle.","mask_group",ExtraBool,0,0,1},
+ {"area_x","Area centre X","Rectangle centre, 0 = left edge, 1 = right edge.","mask_group",ExtraDouble,.5,0,1},
+ {"area_y","Area centre Y","Rectangle centre, 0 = bottom, 1 = top.","mask_group",ExtraDouble,.5,0,1},
+ {"area_width","Area width","Rectangle width as a fraction of the frame width.","mask_group",ExtraDouble,.25,0,1},
+ {"area_height","Area height","Rectangle height as a fraction of the frame height.","mask_group",ExtraDouble,.25,0,1},
+ {"area_feather","Area feather","Soft edge of the rectangle.","mask_group",ExtraDouble,.01,0,.5},
+ {"limit_frames","Limit to frame range","Repair only between two frames (both included).","mask_group",ExtraBool,0,0,1},
+ {"first_frame","First repair frame","First frame repaired when Limit to frame range is on.","mask_group",ExtraInt,0,-1000000,1000000},
+ {"last_frame","Last repair frame","Last frame repaired when Limit to frame range is on.","mask_group",ExtraInt,0,-1000000,1000000},
+ {"view","View","What the effect shows. Only Restored is meant for delivery.","view_group",ExtraChoice,0,0,7,viewChoices,8},
+ {"difference_threshold","Difference threshold (%)","Red difference: changes smaller than this are not shown in red. The engine moves unrepaired pixels by less than one 10-bit code, so 0.1% shows only real repairs.","view_group",ExtraDouble,.1,0,100},
+ {"red_intensity","Red difference intensity","Brightness of the red highlights and of Changed pixels.","view_group",ExtraDouble,8,0,100},
+ {"red_opacity","Red highlight opacity","Opacity of the red highlights.","view_group",ExtraDouble,.85,0,1},
+ {"gray_background","Grayscale background","Brightness of the grey picture behind the red highlights (0 = black).","view_group",ExtraDouble,1,0,1},
+ {"difference_gain","Difference gain","Gain of the True difference view.","view_group",ExtraDouble,4,0,100},
+ {"wipe_position","Wipe position","Compare wipe: original left of this position, result right.","view_group",ExtraDouble,.5,0,1},
+};
+bool isExtraParam(const char*name){if(!std::strcmp(name,"encoding"))return true;for(auto&x:extras)if(!std::strcmp(x.name,name))return true;return false;}
+void defineEncodingParam(OfxParamSetHandle ps){
+ OfxPropertySetHandle p;check(params->paramDefine(ps,kOfxParamTypeChoice,"encoding",&p),"define encoding");
+ ss(p,kOfxPropLabel,"Input encoding");ss(p,kOfxParamPropHint,"Video / already converted: values as delivered. Cineon log: Cineon-encoded film scans; cleaning works on linear values and the repair is put back in log, so untouched pixels keep their exact values.");
+ si(p,kOfxParamPropAnimates,0);for(int k=0;k<2;++k)ss(p,kOfxParamPropChoiceOption,encodingChoices[k],k);si(p,kOfxParamPropDefault,0);
+}
+void defineExtraParams(OfxParamSetHandle ps){
+ OfxPropertySetHandle p;
+ for(auto g:{std::make_pair("auto_recovery_group","Auto recovery"),{"mask_group","Recovery mask and limits"},{"view_group","View"}}){check(params->paramDefine(ps,kOfxParamTypeGroup,g.first,&p),"define group");ss(p,kOfxPropLabel,g.second);}
+ for(auto&x:extras){
+  const char*type=x.kind==ExtraChoice?kOfxParamTypeChoice:x.kind==ExtraBool?kOfxParamTypeBoolean:x.kind==ExtraDouble?kOfxParamTypeDouble:x.kind==ExtraInt?kOfxParamTypeInteger:x.kind==ExtraString?kOfxParamTypeString:kOfxParamTypePushButton;
+  check(params->paramDefine(ps,type,x.name,&p),"define extra control");ss(p,kOfxPropLabel,x.label);ss(p,kOfxParamPropHint,x.hint);ss(p,kOfxParamPropParent,x.group);
+  if(x.kind==ExtraButton)continue;
+  si(p,kOfxParamPropAnimates,0);
+  if(x.kind==ExtraChoice){for(int k=0;k<x.count;++k)ss(p,kOfxParamPropChoiceOption,x.choices[k],k);si(p,kOfxParamPropDefault,int(x.initial));}
+  else if(x.kind==ExtraBool)si(p,kOfxParamPropDefault,int(x.initial));
+  else if(x.kind==ExtraInt){si(p,kOfxParamPropDefault,int(x.initial));for(auto k:{kOfxParamPropMin,kOfxParamPropDisplayMin})si(p,k,int(x.minimum));for(auto k:{kOfxParamPropMax,kOfxParamPropDisplayMax})si(p,k,int(x.maximum));}
+  else if(x.kind==ExtraDouble){for(auto v:{std::make_pair(kOfxParamPropDefault,x.initial),{kOfxParamPropMin,x.minimum},{kOfxParamPropMax,x.maximum},{kOfxParamPropDisplayMin,x.minimum},{kOfxParamPropDisplayMax,x.maximum}})check(prop->propSetDouble(p,v.first,0,v.second),"extra range");}
+  else if(x.kind==ExtraString){ss(p,kOfxParamPropStringMode,kOfxParamStringIsDirectoryPath);ss(p,kOfxParamPropDefault,"");}
+ }
+}
+struct Settings{
+ int encoding=0,mode=0,maskMode=1,view=0,first=0,last=0;bool rect=false,frames=false;
+ double confidence=.8,amount=1,ax=.5,ay=.5,aw=.25,ah=.25,feather=.01,threshold=.1,redIntensity=8,redOpacity=.85,gray=1,gain=4,wipe=.5;std::string folder;
+};
+Settings readSettings(Instance&i,double time){
+ Settings s;auto I=[&](const char*n,int&v){int x;if(params->paramGetValueAtTime(i.parameters.at(n),time,&x)==kOfxStatOK)v=x;};
+ auto B=[&](const char*n,bool&v){int x;if(params->paramGetValueAtTime(i.parameters.at(n),time,&x)==kOfxStatOK)v=x!=0;};
+ auto D=[&](const char*n,double&v){double x;if(params->paramGetValueAtTime(i.parameters.at(n),time,&x)==kOfxStatOK&&std::isfinite(x))v=x;};
+ I("encoding",s.encoding);I("auto_recovery",s.mode);I("mask_mode",s.maskMode);I("view",s.view);I("first_frame",s.first);I("last_frame",s.last);
+ B("limit_rectangle",s.rect);B("limit_frames",s.frames);
+ D("recovery_confidence",s.confidence);D("applied_amount",s.amount);D("area_x",s.ax);D("area_y",s.ay);D("area_width",s.aw);D("area_height",s.ah);D("area_feather",s.feather);
+ D("difference_threshold",s.threshold);D("red_intensity",s.redIntensity);D("red_opacity",s.redOpacity);D("gray_background",s.gray);D("difference_gain",s.gain);D("wipe_position",s.wipe);
+ char*str=nullptr;if(params->paramGetValueAtTime(i.parameters.at("recovery_folder"),time,&str)==kOfxStatOK&&str)s.folder=str;
+ s.encoding=s.encoding==1;s.mode=std::max(0,std::min(2,s.mode));s.maskMode=std::max(0,std::min(2,s.maskMode));s.view=std::max(0,std::min(7,s.view));s.confidence=std::max(.5,std::min(.99,s.confidence));
+ return s;
+}
+// Cineon log (black 95, white 685, film gamma 0.6) <-> linear; values as code / 1023.
+const double cineonOffset=std::pow(10.0,(95.0-685.0)*0.002/0.6),cineonGain=1.0/(1.0-cineonOffset);
+inline float cineonToLinear(float v){return float(cineonGain*std::pow(10.0,(double(v)*1023.0-685.0)*0.002/0.6)-(cineonGain-1.0));}
+inline float linearToCineon(float v){return float((685.0+std::log10(std::max((double(v)+cineonGain-1.0)/cineonGain,1e-10))*0.6/0.002)/1023.0);}
+void toLinear(const std::vector<float>&in,std::vector<float>&out){out.resize(in.size());parallelRows(int(in.size()/3/1024)+1,[&](int a,int b){for(size_t k=size_t(a)*3072;k<std::min(in.size(),size_t(b)*3072);++k)out[k]=cineonToLinear(in[k]);});}
+// Cineon: the engine's change, converted back to log, added to the original log values; exactly the source where nothing changed.
+void cineonDelta(const std::vector<float>&src,const std::vector<float>&cleanedLinear,std::vector<float>&out){
+ out.resize(src.size());
+ parallelRows(int(src.size()/3/1024)+1,[&](int a,int b){for(size_t k=size_t(a)*3072;k<std::min(src.size(),size_t(b)*3072);++k){const float ref=cineonToLinear(src[k]);const float c=cleanedLinear[k];out[k]=c==ref?src[k]:src[k]+(linearToCineon(c)-linearToCineon(ref));}});
+}
+std::string defaultRecoveryFolder(){
+#ifdef _WIN32
+ const char*b=std::getenv("LOCALAPPDATA");return b?std::string(b)+"\\FabioColor\\AdvancedDirtRemoval\\Recovery":"";
+#elif defined(__APPLE__)
+ const char*h=std::getenv("HOME");return h?std::string(h)+"/Library/Application Support/FabioColor/AdvancedDirtRemoval/Recovery":"";
+#else
+ const char*x=std::getenv("XDG_DATA_HOME");const char*h=std::getenv("HOME");return x&&*x?std::string(x)+"/fabiocolor/advanced-dirt-removal/recovery":h?std::string(h)+"/.local/share/fabiocolor/advanced-dirt-removal/recovery":"";
+#endif
+}
+std::string recoveryModelPath(){
+ if(const char*m=std::getenv("ADR_RECOVERY_MODEL"))return m;
+ std::string bin=adrlog::pluginPath();  // <bundle>/Contents/<arch>/AdvancedDirtRemoval.ofx
+ for(int up=0;up<2;++up){auto k=bin.find_last_of("/\\");if(k==std::string::npos)return "";bin.resize(k);}
+ return bin+"/Resources/recovery-model.bin";
+}
+std::mutex recoveryMutex;adr_recovery* recoveryEngine=nullptr;
+adr_recovery* recoveryModel(){
+ std::lock_guard<std::mutex> g(recoveryMutex);
+ if(!recoveryEngine){char error[1024]={};const auto path=recoveryModelPath();recoveryEngine=adr_recovery_create(context(),path.c_str(),error,sizeof error);
+  require(recoveryEngine,std::string("auto recovery model unavailable (")+path+"): "+error,kOfxStatFailed);adrlog::info("auto recovery model loaded: "+path);}
+ return recoveryEngine;
+}
+bool makeDirs(const std::string&path){
+ for(size_t k=1;k<=path.size();++k)if(k==path.size()||path[k]=='/'||path[k]=='\\'){const std::string cur=path.substr(0,k);
+#ifdef _WIN32
+  _mkdir(cur.c_str());
+#else
+  mkdir(cur.c_str(),0755);
+#endif
+ }
+ struct stat st{};return stat(path.c_str(),&st)==0;
+}
+// One folder per shot: the cleaning controls, encoding, frame range, geometry and the first source frame's pixels.
+std::string recoveryShotFolder(Instance&i,OfxImageEffectHandle e,const Settings&s,const std::string&identity,const std::array<int,2>&range,int w,int h,const std::array<int,4>&bounds){
+ std::ostringstream id;id<<identity<<'|'<<range[0]<<'|'<<range[1]<<'|'<<w<<'x'<<h<<"|enc"<<s.encoding;
+ if(i.recoveryIdFor!=id.str()){
+  std::vector<float> first;readSource(i,e,range[0],w,h,bounds,first);
+  adr_tools::Sha256 sh;sh.update(id.str().data(),id.str().size());sh.update(first.data(),first.size()*sizeof(float));
+  i.recoveryId=sh.hex().substr(0,20);i.recoveryIdFor=id.str();
+ }
+ const std::string base=s.folder.empty()?defaultRecoveryFolder():s.folder;
+ require(!base.empty(),"auto recovery: no folder for the matte",kOfxStatFailed);
+ return base+"/shot-"+i.recoveryId;
+}
+std::string recoveryFile(const std::string&dir,int time){return dir+"/frame-"+std::to_string(time)+".adrp";}
+// Probability map file: "ADRP", width, height, then (run length uint32, value uint8) pairs.
+void saveProbability(const std::string&dir,int time,int w,int h,const std::vector<uint8_t>&p){
+ require(makeDirs(dir),"auto recovery: cannot create "+dir,kOfxStatFailed);
+ const std::string tmp=recoveryFile(dir,time)+".tmp";
+ {std::ofstream f(tmp,std::ios::binary);f.write("ADRP",4);int32_t g[2]={w,h};f.write(reinterpret_cast<const char*>(g),8);
+  for(size_t k=0;k<p.size();){size_t j=k;while(j<p.size()&&p[j]==p[k]&&j-k<0xffffffffu)++j;uint32_t n=uint32_t(j-k);f.write(reinterpret_cast<const char*>(&n),4);f.write(reinterpret_cast<const char*>(&p[k]),1);k=j;}
+  require(bool(f),"auto recovery: cannot write "+tmp,kOfxStatFailed);}
+ std::remove(recoveryFile(dir,time).c_str());require(std::rename(tmp.c_str(),recoveryFile(dir,time).c_str())==0,"auto recovery: cannot store the matte",kOfxStatFailed);
+}
+bool loadProbability(const std::string&dir,int time,int w,int h,std::vector<uint8_t>&p){
+ std::ifstream f(recoveryFile(dir,time),std::ios::binary);if(!f)return false;
+ char magic[4];int32_t g[2];f.read(magic,4);f.read(reinterpret_cast<char*>(g),8);if(!f||std::memcmp(magic,"ADRP",4)||g[0]!=w||g[1]!=h)return false;
+ p.assign(size_t(w)*h,0);size_t k=0;uint32_t n;uint8_t v;
+ while(k<p.size()&&f.read(reinterpret_cast<char*>(&n),4)&&f.read(reinterpret_cast<char*>(&v),1)){if(n>p.size()-k)return false;std::fill(p.begin()+k,p.begin()+k+n,v);k+=n;}
+ return k==p.size();
+}
+// The previous and next source frames, mirrored inside the shot at its ends (as in training).
+std::array<int,2> recoveryNeighbours(int f,int first,int last){
+ const int p=f-1>=first?f-1:f+2<=last?f+2:f+1<=last?f+1:f;
+ const int n=f+1<=last?f+1:f-2>=first?f-2:f-1>=first?f-1:f;
+ return {p,n};
+}
+// Scores one frame. cleaned is in the input encoding (after the Cineon delta), like the sources.
+void computeProbability(Instance&i,OfxImageEffectHandle e,int time,const std::array<int,2>&range,int w,int h,const std::array<int,4>&bounds,const std::vector<float>&cur,const float*cleaned,std::vector<uint8_t>&p){
+ const auto nb=recoveryNeighbours(time,range[0],range[1]);
+ std::vector<float> prev,next;readSource(i,e,nb[0],w,h,bounds,prev);readSource(i,e,nb[1],w,h,bounds,next);
+ p.assign(size_t(w)*h,0);char error[2048]={};const auto t0=std::chrono::steady_clock::now();
+ const int spots=adr_recovery_frame(recoveryModel(),prev.data(),cur.data(),next.data(),cleaned,w,h,size_t(w)*12,ADR_RECOVERY_INPUT_VIDEO,p.data(),error,sizeof error);
+ require(spots>=0,std::string("auto recovery: ")+error,kOfxStatFailed);
+ char line[160];std::snprintf(line,sizeof line," auto recovery frame %d: %d spots scored in %.0f ms",time,spots,std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count());adrlog::info(i.label()+line);
+}
+// The whole shot from the button: its own engine pass over the clip range, then each frame scored and saved.
+void calculateShot(OfxImageEffectHandle e,Instance&i){
+ const auto t0=std::chrono::steady_clock::now();
+ auto range=sourceRange(i);const int count=range[1]-range[0]+1;
+ std::array<int,4> bounds;int w,h;{Image first(i.source,range[0],e,"auto recovery");bounds=first.b;w=first.width();h=first.height();}
+ require(w>=256&&w<=16384&&h>=256&&h<=16384,"Advanced Dirt Removal needs full frames of 256 to 16384 pixels per side");
+ std::string identity;adr_controls c=readControls(i,range[0],identity);const Settings s=readSettings(i,range[0]);if(s.encoding)c.extended_range=1;
+ const std::string dir=recoveryShotFolder(i,e,s,identity,range,w,h,bounds);
+ adrlog::info(i.label()+" auto recovery: calculating frames "+std::to_string(range[0])+".."+std::to_string(range[1])+" into "+dir);
+ char error[2048]={};adr_sequence* seq=adr_sequence_create(context(),&c,w,h,count,error,sizeof error);require(seq,std::string("auto recovery: ")+error,kOfxStatFailed);
+ std::map<int,std::vector<float>> src;auto get=[&](int t)->const std::vector<float>&{auto&v=src[t];if(v.empty())readSource(i,e,t,w,h,bounds,v);return v;};
+ std::vector<float> out(size_t(w)*h*3),lin,enc;std::vector<uint8_t> p(size_t(w)*h);int done=0;
+ try{
+  while(adr_sequence_next_output(seq)>=0){
+   const int f=adr_sequence_pull(seq,out.data(),size_t(w)*12,error,sizeof error);require(f>=-1,std::string("auto recovery: ")+error,kOfxStatFailed);
+   if(f==-1){const int sidx=adr_sequence_next_source(seq);require(sidx>=0,"auto recovery: sequence stalled",kOfxStatFailed);
+    const auto&raw=get(range[0]+sidx);const float*push=raw.data();if(s.encoding){toLinear(raw,lin);push=lin.data();}
+    require(adr_sequence_push(seq,push,size_t(w)*12,error,sizeof error)==0,std::string("auto recovery: ")+error,kOfxStatFailed);continue;}
+   const int time=range[0]+f;const auto nb=recoveryNeighbours(time,range[0],range[1]);
+   const float*cleaned=out.data();if(s.encoding){cineonDelta(get(time),out,enc);cleaned=enc.data();}
+   const int spots=adr_recovery_frame(recoveryModel(),get(nb[0]).data(),get(time).data(),get(nb[1]).data(),cleaned,w,h,size_t(w)*12,ADR_RECOVERY_INPUT_VIDEO,p.data(),error,sizeof error);
+   require(spots>=0,std::string("auto recovery: ")+error,kOfxStatFailed);saveProbability(dir,time,w,h,p);++done;
+   for(auto it=src.begin();it!=src.end();)if(it->first<time-2)it=src.erase(it);else ++it;
+   if(done%10==0)adrlog::info(i.label()+" auto recovery: "+std::to_string(done)+"/"+std::to_string(count)+" frames");
+  }
+ }catch(...){adr_sequence_destroy(seq);throw;}
+ adr_sequence_destroy(seq);
+ const double secs=std::chrono::duration<double>(std::chrono::steady_clock::now()-t0).count();
+ char line[200];std::snprintf(line,sizeof line," auto recovery: %d frames calculated in %.0f s (%.2f s/frame)",done,secs,secs/std::max(1,done));adrlog::info(i.label()+line);
+ if(params->paramSetValue)params->paramSetValue(i.parameters.at("auto_recovery"),2);
+ if(messages)messages->message(e,kOfxMessageMessage,"adr","Auto recovery calculated for %d frames in %.0f s. Auto recovery is set to Use saved matte.",done,secs);
+}
+// The optional Mask input as coverage m and stroke colour s (white 1, black 0) per source pixel, top-down.
+bool readMask(Instance&i,int time,int w,int h,const std::array<int,4>&bounds,std::vector<float>&m,std::vector<float>&s){
+ if(!i.mask)return false;
+ OfxPropertySetHandle cp=nullptr;if(fx->clipGetPropertySet(i.mask,&cp)!=kOfxStatOK)return false;int connected=0;prop->propGetInt(cp,kOfxImageClipPropConnected,0,&connected);if(!connected)return false;
+ OfxPropertySetHandle img=nullptr;if(fx->clipGetImage(i.mask,time,nullptr,&img)!=kOfxStatOK||!img)return false;
+ struct Release{OfxPropertySetHandle h;~Release(){fx->clipReleaseImage(h);}}release{img};
+ const std::string depth=str(img,kOfxImageEffectPropPixelDepth),comp=str(img,kOfxImageEffectPropComponents);
+ const int ch=comp==kOfxImageComponentRGBA?4:comp==kOfxImageComponentRGB?3:comp==kOfxImageComponentAlpha?1:0;
+ const int bytes=depth==kOfxBitDepthFloat?4:depth==kOfxBitDepthHalf||depth==kOfxBitDepthShort?2:depth==kOfxBitDepthByte?1:0;
+ require(ch&&bytes,"Mask input: unsupported image format",kOfxStatFailed);
+ std::array<int,4> mb{};check(prop->propGetIntN(img,kOfxImagePropBounds,4,mb.data()),"mask bounds");const int stride=integer(img,kOfxImagePropRowBytes);
+ void*data=nullptr;check(prop->propGetPointer(img,kOfxImagePropData,0,&data),"mask pixels");
+ auto val=[&](const char*px,int c)->float{const char*q=px+c*bytes;if(bytes==4){float v;std::memcpy(&v,q,4);return v;}if(bytes==1)return uint8_t(*q)/255.f;uint16_t v;std::memcpy(&v,q,2);return depth==kOfxBitDepthHalf?decodeHalf(v):v/65535.f;};
+ m.assign(size_t(w)*h,0.f);s.assign(size_t(w)*h,1.f);
+ parallelRows(h,[&](int y0,int y1){for(int y=y0;y<y1;++y){const int Y=bounds[3]-1-y;if(Y<mb[1]||Y>=mb[3])continue;const char*row=static_cast<const char*>(data)+int64_t(Y-mb[1])*stride;
+  for(int x=0;x<w;++x){const int X=bounds[0]+x;if(X<mb[0]||X>=mb[2])continue;const char*px=row+int64_t(X-mb[0])*ch*bytes;
+   float a,r;if(ch==1){a=val(px,0);r=a;}else if(ch==3){a=val(px,0);r=a;}else{a=val(px,3);r=val(px,0);}
+   a=std::min(1.f,std::max(0.f,a));const size_t k=size_t(y)*w+x;m[k]=a;s[k]=a>1e-6f?std::min(1.f,std::max(0.f,r/a)):1.f;}}});
+ return true;
+}
+// Final picture: recovery gate (auto matte, mask, limits), blend, then the chosen view. Exactly the
+// repair wherever the gate is 1 and the applied amount is 1, exactly the source where it is 0.
+void finish(const Settings&s,int time,int w,int h,const std::vector<float>&src,const float*rep,const std::vector<uint8_t>&matte,bool haveMask,
+            const std::vector<float>&mm,const std::vector<float>&ms,std::vector<float>&out){
+ out.resize(size_t(w)*h*3);
+ const bool autoOn=!matte.empty();const bool frameOk=!s.frames||(time>=s.first&&time<=s.last);
+ const float thr=float(s.threshold/100.0);
+ parallelRows(h,[&](int y0,int y1){for(int y=y0;y<y1;++y)for(int x=0;x<w;++x){
+  const size_t k=size_t(y)*w+x;const float A=autoOn?float(matte[k]):0.f;const float m=haveMask?mm[k]:0.f,st=haveMask?ms[k]:1.f;
+  float gate;
+  if(s.maskMode==0)gate=1.f-A;
+  else if(s.maskMode==1)gate=1.f-(autoOn?A*(1.f-m)+st*m:m);
+  else gate=m;
+  if(s.rect){const double nx=(x+.5)/w,ny=1.0-(y+.5)/h,f=std::max(s.feather,1e-6);
+   gate*=float(std::min(std::min(std::max((s.aw/2-std::fabs(nx-s.ax))/f,0.0),1.0),std::min(std::max((s.ah/2-std::fabs(ny-s.ay))/f,0.0),1.0)));}
+  if(!frameOk)gate=0;
+  const float g=std::max(0.f,std::min(1.f,gate*float(s.amount)));
+  float res[3],sv[3];
+  for(int c=0;c<3;++c){sv[c]=src[k*3+c];const float rv=rep[k*3+c];res[c]=g<=0?sv[c]:g>=1?rv:sv[c]+(rv-sv[c])*g;}
+  float*o=&out[k*3];
+  const float d=std::max(std::fabs(res[0]-sv[0]),std::max(std::fabs(res[1]-sv[1]),std::fabs(res[2]-sv[2])));
+  switch(s.view){
+   case 0:o[0]=res[0];o[1]=res[1];o[2]=res[2];break;
+   case 1:o[0]=sv[0];o[1]=sv[1];o[2]=sv[2];break;
+   case 2:{const bool left=(x+.5)/w<s.wipe;for(int c=0;c<3;++c)o[c]=left?sv[c]:res[c];break;}
+   case 3:for(int c=0;c<3;++c)o[c]=std::fabs(res[c]-sv[c])*float(s.gain);break;
+   case 4:{const float changed=std::min(d*float(s.redIntensity),1.f);const float red=d>thr?changed:0.f;const float op=red*float(s.redOpacity);
+    const float lum=(0.2126f*sv[0]+0.7152f*sv[1]+0.0722f*sv[2])*float(s.gray);o[0]=lum*(1-op)+op;o[1]=lum*(1-op);o[2]=lum*(1-op);break;}
+   case 5:o[0]=o[1]=o[2]=g;break;
+   case 6:o[0]=o[1]=o[2]=std::min(d*float(s.redIntensity),1.f);break;
+   default:o[0]=o[1]=o[2]=A;break;
+  }
+ }});
+}
 OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
  auto&i=instance(e);
  try{
@@ -386,8 +640,8 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
   Image source(i.source,time,e,"current"),output(i.output,time,e,"output");int w=source.width(),h=source.height();
   require(w>=256&&w<=16384&&h>=256&&h<=16384,"Advanced Dirt Removal needs full frames of 256 to 16384 pixels per side");require(source.b==output.b&&source.channels==output.channels,"output geometry/components differ");
   auto window=renderWindow(e,in,source.b);
-  std::string identity;adr_controls c=readControls(i,time,identity);
-  std::ostringstream key;key<<identity<<'|'<<range[0]<<'|'<<range[1]<<'|'<<w<<'x'<<h<<'|'<<i.generation;
+  std::string identity;adr_controls c=readControls(i,time,identity);const Settings st=readSettings(i,time);if(st.encoding)c.extended_range=1;
+  std::ostringstream key;key<<identity<<'|'<<range[0]<<'|'<<range[1]<<'|'<<w<<'x'<<h<<'|'<<i.generation<<"|enc"<<st.encoding;
   if(key.str()!=i.key){if(std::getenv("ADR_DEBUG")&&!i.key.empty())std::fprintf(stderr,"adr key change instance=%p\n",(void*)&i);i.close();}
   const int index=time-range[0],count=range[1]-range[0]+1;
   const auto traceStart=std::chrono::steady_clock::now();double tFetch=0,tEngine=0;
@@ -447,6 +701,7 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
     else{readSource(i,e,range[0]+pending,w,h,source.b,rgb);pixels=rgb.data();}
     tFetch+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-tf).count();
     hashFrame("in",range[0]+pending,pixels,size_t(w)*h*3);
+    std::vector<float> raw,lin;if(st.encoding){raw.assign(pixels,pixels+size_t(w)*h*3);toLinear(raw,lin);pixels=lin.data();}
     require(adr_sequence_push(i.sequence,pixels,size_t(w)*12,error,sizeof(error))==0,std::string("Advanced Dirt Removal upload: ")+error,kOfxStatFailed);
    }
    i.cached.swap(i.scratch);i.cachedFrame=time;
@@ -457,6 +712,25 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
    char line[200];std::snprintf(line,sizeof line," frame %d (%d/%d) %s in %.1f ms (host fetch %.1f, GPU %.1f)",time,index+1,count,traceWhat[0]=='c'?"from cache":"rendered",ms,tFetch,tEngine);
    adrlog::info(i.label()+line);}
   const float* pixels=i.cached.data();
+  // Finishing: Cineon delta, auto recovery, the Mask input, limits and views. Skipped (output = the
+  // engine's picture) when none of them is active.
+  std::vector<float> finished;
+  {std::vector<float> mm,ms;const bool haveMask=readMask(i,time,w,h,source.b,mm,ms);
+   const bool active=st.encoding||st.mode||haveMask||st.rect||st.frames||st.amount<1||st.view!=0;
+   if(active){
+    std::vector<float> src;readSource(i,e,time,w,h,source.b,src);
+    std::vector<float> enc;const float*rep=pixels;if(st.encoding){cineonDelta(src,i.cached,enc);rep=enc.data();}
+    std::vector<uint8_t> matte;
+    if(st.mode){
+     const std::string dir=recoveryShotFolder(i,e,st,identity,range,w,h,source.b);
+     std::vector<uint8_t> prob;bool have=loadProbability(dir,time,w,h,prob);
+     if(!have&&st.mode==1){computeProbability(i,e,time,range,w,h,source.b,src,rep,prob);saveProbability(dir,time,w,h,prob);have=true;}
+     if(have){const uint8_t cut=uint8_t(1+std::nearbyint(st.confidence*254));matte.resize(prob.size());for(size_t k=0;k<prob.size();++k)matte[k]=prob[k]>=cut;}
+     else{adrlog::warn(i.label()+" auto recovery: no saved matte for frame "+std::to_string(time)+" in "+dir+" (calculate first)");
+      if(persistentMessages)persistentMessages->setPersistentMessage(e,kOfxMessageWarning,"adr","%s","No auto-recovery matte for this frame yet: press Calculate recovery (or choose Calculate while rendering).");}
+    }
+    finish(st,time,w,h,src,rep,matte,haveMask,mm,ms,finished);pixels=finished.data();
+   }}
   // Validate every sample before publishing any output pixel.
   std::atomic<bool> valid{true};
   parallelRows(h,[&](int y0,int y1){bool ok=true;for(size_t k=size_t(y0)*w*3;k<size_t(y1)*w*3;++k){ok&=finiteBits(pixels[k]);if(output.depth==PixelDepth::Half&&ok)try{(void)encodeHalf(pixels[k]);}catch(...){ok=false;}}if(!ok)valid=false;});
@@ -502,14 +776,20 @@ OfxStatus entry(const char*action,const void*handle,OfxPropertySetHandle in,OfxP
  try{
  // Time/control notifications already preserve history: every render keys
  // controls by their actual values. They must not block a host/UI callback.
+ if(!std::strcmp(action,kOfxActionInstanceChanged)&&in){char*type=nullptr;char*name=nullptr;
+  if(prop->propGetString(in,kOfxPropType,0,&type)==kOfxStatOK&&type&&!std::strcmp(type,kOfxTypeParameter)&&prop->propGetString(in,kOfxPropName,0,&name)==kOfxStatOK&&name&&!std::strcmp(name,"recovery_calculate")){
+   auto&i=instance(e);std::unique_lock<std::mutex> g(i.lock);
+   try{calculateShot(e,i);}catch(const std::exception&x){adrlog::error(i.label()+" auto recovery failed: "+x.what());
+    if(messages)messages->message(e,kOfxMessageError,"adr","Auto recovery could not read the shot from the button: %s. Set Recovery to \"Calculate while rendering\" and play or render the shot once.",x.what());}
+   return kOfxStatOK;}}
  if(!std::strcmp(action,kOfxActionInstanceChanged)&&!invalidatesHistory(in))return kOfxStatReplyDefault;
  if(perInstance)lock=std::unique_lock<std::mutex>(instance(e).lock);else if(!metadata)lock=std::unique_lock<std::mutex>(mutex);
  if(!std::strcmp(action,kOfxActionLoad)){require(host,"missing host");fx=(OfxImageEffectSuiteV1*)host->fetchSuite(host->host,kOfxImageEffectSuite,1);prop=(OfxPropertySuiteV1*)host->fetchSuite(host->host,kOfxPropertySuite,1);params=(OfxParameterSuiteV1*)host->fetchSuite(host->host,kOfxParameterSuite,1);messages=(OfxMessageSuiteV1*)host->fetchSuite(host->host,kOfxMessageSuite,1);persistentMessages=(OfxMessageSuiteV2*)host->fetchSuite(host->host,kOfxMessageSuite,2);require(fx&&prop&&params,"required OFX suites unavailable",kOfxStatErrMissingHostFeature);logStartup();return kOfxStatOK;}
  if(!std::strcmp(action,kOfxActionUnload)){if(engineContext){uint64_t a=0,p=0;adr_context_memory(engineContext,&a,&p);adrlog::info("unload: GPU memory peak "+std::to_string(p>>20)+" MiB");adr_context_destroy(engineContext);}else adrlog::info("unload");engineContext=nullptr;adrlog::close();return kOfxStatOK;}
  if(!std::strcmp(action,kOfxActionDescribe)){auto p=properties(e);ss(p,kOfxPropLabel,"Advanced Dirt Removal");ss(p,kOfxImageEffectPluginPropGrouping,"FabioColor");{auto status=prop->propSetString(p,kOfxPropPluginDescription,0,("Open-source temporal dirt and dust removal for film scans (Metal, CUDA, OpenCL or CPU). Works on the RGB values as delivered; review moving shots before delivery."+(adrlog::path().empty()?std::string():" Diagnostic log: "+adrlog::path())).c_str());if(status!=kOfxStatErrUnknown)check(status,"optional plugin description");}ss(p,kOfxImageEffectPropSupportedContexts,kOfxImageEffectContextFilter);ss(p,kOfxImageEffectPropSupportedPixelDepths,kOfxBitDepthFloat,0);ss(p,kOfxImageEffectPropSupportedPixelDepths,kOfxBitDepthHalf,1);ss(p,kOfxImageEffectPropSupportedPixelDepths,kOfxBitDepthShort,2);ss(p,kOfxImageEffectPluginRenderThreadSafety,kOfxImageEffectRenderInstanceSafe);si(p,kOfxImageEffectPluginPropHostFrameThreading,0);si(p,kOfxImageEffectPropSupportsTiles,0);si(p,kOfxImageEffectPropSupportsMultiResolution,0);si(p,kOfxImageEffectPropTemporalClipAccess,1);si(p,kOfxImageEffectPropSupportsMultipleClipPARs,0);si(p,kOfxImageEffectPropSupportsMultipleClipDepths,0);return kOfxStatOK;}
- if(!std::strcmp(action,kOfxImageEffectActionDescribeInContext)){require(str(in,kOfxImageEffectPropContext)==kOfxImageEffectContextFilter,"Filter context required");for(auto name:{"Source","Output"}){OfxPropertySetHandle p;check(fx->clipDefine(e,name,&p),"define clip");ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGB,0);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGBA,1);si(p,kOfxImageEffectPropSupportsTiles,0);if(!std::strcmp(name,"Source"))si(p,kOfxImageEffectPropTemporalClipAccess,1);}OfxParamSetHandle ps;check(fx->getParamSet(e,&ps),"parameters");for(auto&g:groups){OfxPropertySetHandle p;check(params->paramDefine(ps,kOfxParamTypeGroup,g.name,&p),"define group");ss(p,kOfxPropLabel,g.label);}for(auto&c:controls){OfxPropertySetHandle p;check(params->paramDefine(ps,c.boolean?kOfxParamTypeBoolean:c.choices?kOfxParamTypeChoice:c.integral?kOfxParamTypeInteger:kOfxParamTypeDouble,c.name,&p),"define control");ss(p,kOfxPropLabel,c.label);if(c.group)ss(p,kOfxParamPropParent,c.group);if(c.hint)ss(p,kOfxParamPropHint,c.hint);si(p,kOfxParamPropAnimates,0);if(c.boolean||c.integral){si(p,kOfxParamPropDefault,int(c.initial));if(c.choices){for(int index=0;index<=int(c.maximum);++index)ss(p,kOfxParamPropChoiceOption,c.choices[index],index);}else if(c.integral){for(auto key:{kOfxParamPropMin,kOfxParamPropDisplayMin})si(p,key,c.minimum);for(auto key:{kOfxParamPropMax,kOfxParamPropDisplayMax})si(p,key,int(c.maximum));}}else{for(auto v:{std::make_pair(kOfxParamPropDefault,c.initial),{kOfxParamPropMin,0.},{kOfxParamPropMax,c.maximum},{kOfxParamPropDisplayMin,0.},{kOfxParamPropDisplayMax,c.maximum}})check(prop->propSetDouble(p,v.first,0,v.second),"control range");}}
+ if(!std::strcmp(action,kOfxImageEffectActionDescribeInContext)){require(str(in,kOfxImageEffectPropContext)==kOfxImageEffectContextFilter,"Filter context required");for(auto name:{"Source","Output"}){OfxPropertySetHandle p;check(fx->clipDefine(e,name,&p),"define clip");ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGB,0);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGBA,1);si(p,kOfxImageEffectPropSupportsTiles,0);if(!std::strcmp(name,"Source"))si(p,kOfxImageEffectPropTemporalClipAccess,1);}{OfxPropertySetHandle p;check(fx->clipDefine(e,"Mask",&p),"define mask clip");ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentAlpha,0);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGBA,1);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGB,2);si(p,kOfxImageClipPropOptional,1);si(p,kOfxImageClipPropIsMask,1);si(p,kOfxImageEffectPropSupportsTiles,0);}OfxParamSetHandle ps;check(fx->getParamSet(e,&ps),"parameters");defineEncodingParam(ps);std::set<std::string> definedGroups;for(auto&c:controls){if(c.group&&definedGroups.insert(c.group).second)for(auto&g:groups)if(!std::strcmp(g.name,c.group)){OfxPropertySetHandle gp;check(params->paramDefine(ps,kOfxParamTypeGroup,g.name,&gp),"define group");ss(gp,kOfxPropLabel,g.label);}OfxPropertySetHandle p;check(params->paramDefine(ps,c.boolean?kOfxParamTypeBoolean:c.choices?kOfxParamTypeChoice:c.integral?kOfxParamTypeInteger:kOfxParamTypeDouble,c.name,&p),"define control");ss(p,kOfxPropLabel,c.label);if(c.group)ss(p,kOfxParamPropParent,c.group);if(c.hint)ss(p,kOfxParamPropHint,c.hint);si(p,kOfxParamPropAnimates,0);if(c.boolean||c.integral){si(p,kOfxParamPropDefault,int(c.initial));if(c.choices){for(int index=0;index<=int(c.maximum);++index)ss(p,kOfxParamPropChoiceOption,c.choices[index],index);}else if(c.integral){for(auto key:{kOfxParamPropMin,kOfxParamPropDisplayMin})si(p,key,c.minimum);for(auto key:{kOfxParamPropMax,kOfxParamPropDisplayMax})si(p,key,int(c.maximum));}}else{for(auto v:{std::make_pair(kOfxParamPropDefault,c.initial),{kOfxParamPropMin,0.},{kOfxParamPropMax,c.maximum},{kOfxParamPropDisplayMin,0.},{kOfxParamPropDisplayMax,c.maximum}})check(prop->propSetDouble(p,v.first,0,v.second),"control range");}}defineExtraParams(ps);
  return kOfxStatOK;}
- if(!std::strcmp(action,kOfxActionCreateInstance)){auto i=std::make_unique<Instance>();check(fx->clipGetHandle(e,"Source",&i->source,nullptr),"source clip");check(fx->clipGetHandle(e,"Output",&i->output,nullptr),"output clip");OfxParamSetHandle ps;check(fx->getParamSet(e,&ps),"parameters");for(auto&c:controls)check(params->paramGetHandle(ps,c.name,&i->parameters[c.name],nullptr),"control handle");check(prop->propSetPointer(properties(e),kOfxPropInstanceData,0,i.get()),"instance data");static int created=0;i->id=++created;trackInstance(e);adrlog::info(i->label()+" created");i.release();return kOfxStatOK;}
+ if(!std::strcmp(action,kOfxActionCreateInstance)){auto i=std::make_unique<Instance>();check(fx->clipGetHandle(e,"Source",&i->source,nullptr),"source clip");check(fx->clipGetHandle(e,"Output",&i->output,nullptr),"output clip");OfxParamSetHandle ps;check(fx->getParamSet(e,&ps),"parameters");for(auto&c:controls)check(params->paramGetHandle(ps,c.name,&i->parameters[c.name],nullptr),"control handle");check(params->paramGetHandle(ps,"encoding",&i->parameters["encoding"],nullptr),"encoding handle");for(auto&x:extras)if(x.kind!=ExtraButton)check(params->paramGetHandle(ps,x.name,&i->parameters[x.name],nullptr),"extra handle");if(fx->clipGetHandle(e,"Mask",&i->mask,nullptr)!=kOfxStatOK)i->mask=nullptr;check(prop->propSetPointer(properties(e),kOfxPropInstanceData,0,i.get()),"instance data");static int created=0;i->id=++created;trackInstance(e);adrlog::info(i->label()+" created");i.release();return kOfxStatOK;}
  if(!std::strcmp(action,kOfxActionDestroyInstance)){auto&i=instance(e);i.close();adrlog::info(i.label()+" destroyed");untrackInstance(e);delete &i;check(prop->propSetPointer(properties(e),kOfxPropInstanceData,0,nullptr),"clear instance");return kOfxStatOK;}
  if(!std::strcmp(action,kOfxActionInstanceChanged)){auto&i=instance(e);if(invalidatesHistory(in)){++i.generation;if(i.sequence){char*type=nullptr;char*name=nullptr;char*why=nullptr;if(in){prop->propGetString(in,kOfxPropType,0,&type);prop->propGetString(in,kOfxPropName,0,&name);prop->propGetString(in,kOfxPropChangeReason,0,&why);}adrlog::info(i.label()+" history reset: host reported a change ("+(type?type:"?")+" "+(name?name:"?")+", "+(why?why:"?")+")");}i.close();}return kOfxStatReplyDefault;}
  if(!std::strcmp(action,kOfxActionPurgeCaches)){auto&i=instance(e);adrlog::info(i.label()+" host asked to purge caches");i.purge();return kOfxStatOK;}

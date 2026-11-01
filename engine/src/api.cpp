@@ -9,6 +9,7 @@
 
 #include "adr/adr.h"
 #include "kernels/kernel_source.h"
+#include "stages/nn_recovery.h"
 #include "rcpss.h"
 #include "tensor.h"
 #if ADR_HAVE_SEQUENCE
@@ -239,6 +240,64 @@ ADR_API int adr_sequence_pull(adr_sequence* s, float* rgb, size_t row_bytes, cha
 
 ADR_API void adr_controls_default(adr_controls* c) {
   *c = adr_controls{1, 0, 1, 1, 1.f, .5f, .75f, 0, .25f, 1, .75f, 1, .5f, 0, 0, 0, 25};
+}
+
+}  // extern "C"
+
+struct adr_recovery {
+  adr_context* context;
+  std::shared_ptr<adr::RecoveryModel> model;
+};
+
+extern "C" {
+
+ADR_API adr_recovery* adr_recovery_create(adr_context* context, const char* model_path, char* error, int error_bytes) {
+  try {
+    std::lock_guard<std::mutex> lock(context->mutex);
+    auto r = std::make_unique<adr_recovery>();
+    r->context = context;
+    r->model = adr::load_recovery_model(*context->device, model_path ? model_path : "");
+    return r.release();
+  } catch (const std::exception& e) {
+    set_error(error, error_bytes, e.what());
+    return nullptr;
+  }
+}
+
+ADR_API void adr_recovery_destroy(adr_recovery* recovery) {
+  if (!recovery) return;
+  std::lock_guard<std::mutex> lock(recovery->context->mutex);
+  delete recovery;
+}
+
+ADR_API int adr_recovery_frame(adr_recovery* recovery, const float* prev, const float* current, const float* next,
+                               const float* cleaned, int width, int height, size_t row_bytes, int input_encoding,
+                               unsigned char* probability, char* error, int error_bytes) {
+  try {
+    adr::require(recovery && prev && current && next && cleaned && probability, "auto recovery: missing input");
+    adr::require(width > 0 && height > 0 && row_bytes >= size_t(width) * 12 && row_bytes % 4 == 0,
+                 "auto recovery: invalid geometry");
+    std::lock_guard<std::mutex> lock(recovery->context->mutex);
+    const adr::RecoveryFrame f = adr::recovery_frame(*recovery->context->device, *recovery->model, prev, current, next,
+                                                     cleaned, width, height, row_bytes / 4, input_encoding, probability);
+    return f.scored;
+  } catch (const std::exception& e) {
+    set_error(error, error_bytes, e.what());
+    return -1;
+  }
+}
+
+ADR_API int adr_recovery_classify(adr_recovery* recovery, const unsigned char* crops, int count, float* probabilities,
+                                  char* error, int error_bytes) {
+  try {
+    std::lock_guard<std::mutex> lock(recovery->context->mutex);
+    const auto p = adr::recovery_forward(*recovery->context->device, *recovery->model, crops, count);
+    std::copy(p.begin(), p.end(), probabilities);
+    return 0;
+  } catch (const std::exception& e) {
+    set_error(error, error_bytes, e.what());
+    return -1;
+  }
 }
 
 }  // extern "C"

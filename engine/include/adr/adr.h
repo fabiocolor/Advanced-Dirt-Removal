@@ -99,6 +99,27 @@ ADR_API int adr_sequence_skip(adr_sequence* sequence, char* error, int error_byt
 ADR_API int adr_sequence_pull(adr_sequence* sequence, float* rgb, size_t row_bytes, char* error,
                             int error_bytes);
 
+/* ---- Auto recovery ---- */
+/* A small classifier, trained on restorers' decisions, that estimates for every
+ * spot the cleaning changed whether it was real picture detail to give back.
+ * model_path: the recovery model file shipped with the plugin. */
+typedef struct adr_recovery adr_recovery;
+ADR_API adr_recovery* adr_recovery_create(adr_context* context, const char* model_path, char* error, int error_bytes);
+ADR_API void adr_recovery_destroy(adr_recovery* recovery);
+/* Input encoding of the RGB values. */
+enum { ADR_RECOVERY_INPUT_VIDEO = 0, ADR_RECOVERY_INPUT_CINEON_LINEAR = 1 };
+/* prev/current/next: source frames; cleaned: the engine's output for current. Top-down float32 RGB rows,
+ * row_bytes apart. probability: width*height bytes, 0 where nothing was repaired, otherwise
+ * 1 + round(p * 254) for the recovery probability p of the spot covering the pixel.
+ * Returns the number of spots scored, or -1 on error. */
+ADR_API int adr_recovery_frame(adr_recovery* recovery, const float* prev, const float* current, const float* next,
+                               const float* cleaned, int width, int height, size_t row_bytes, int input_encoding,
+                               unsigned char* probability, char* error, int error_bytes);
+
+/* Development: classify count prepared crops (count x 13 x 160 x 160 bytes) into probabilities. */
+ADR_API int adr_recovery_classify(adr_recovery* recovery, const unsigned char* crops, int count, float* probabilities,
+                                  char* error, int error_bytes);
+
 /* ---- Development API: run one stage on host arrays. ---- */
 enum { ADR_U8 = 0, ADR_I8 = 1, ADR_I16 = 2, ADR_U16 = 3, ADR_I32 = 4, ADR_F32 = 5 };
 typedef struct adr_array {

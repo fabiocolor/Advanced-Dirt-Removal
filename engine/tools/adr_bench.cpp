@@ -4,6 +4,8 @@
 //                  [--backend auto] [--repeat 3] [--expect <sha256>] [--frame-hashes out.txt]
 //                  [--control name=value ...] [--output out.f32]
 //   adr_bench --synthetic SEED --width W --height H --frames N [--write-input clip.u16|clip.f32] [...]
+//   ... --recovery-model recovery-model.bin --recovery-out DIR [--recovery-frames A:B] [--recovery-input video|cineon]
+//       also writes each frame's auto-recovery probability map (DIR/probability-NNNN.u8, width*height bytes).
 //
 // Input: raw little-endian top-down RGB, uint16 (converted exactly as
 // float32(code)/float32(65535)) or float32 when the file name ends in .f32.
@@ -110,7 +112,9 @@ void synthetic_frame(uint64_t seed, int f, int n, int w, int h, std::vector<uint
 }  // namespace
 
 int main(int argc, char** argv) {
-  std::string input, backend = "auto", expect, frame_hashes, output_path, write_input;
+  std::string input, backend = "auto", expect, frame_hashes, output_path, write_input, recovery_model, recovery_out;
+  std::string recovery_crops;
+  int recovery_first = 0, recovery_last = -1, recovery_input = ADR_RECOVERY_INPUT_VIDEO;
   int w = 0, h = 0, n = 0, repeat = 1;
   bool synthetic = false;
   uint64_t seed = 0;
@@ -133,9 +137,31 @@ int main(int argc, char** argv) {
     else if (a == "--frame-hashes") frame_hashes = next();
     else if (a == "--output") output_path = next();
     else if (a == "--write-input") write_input = next();
+    else if (a == "--recovery-model") recovery_model = next();
+    else if (a == "--recovery-out") recovery_out = next();
+    else if (a == "--recovery-crops") recovery_crops = next();
+    else if (a == "--recovery-frames") { std::string v = next(); recovery_first = std::atoi(v.c_str()); recovery_last = std::atoi(v.substr(v.find(':') + 1).c_str()); }
+    else if (a == "--recovery-input") recovery_input = next() == "cineon" ? ADR_RECOVERY_INPUT_CINEON_LINEAR : ADR_RECOVERY_INPUT_VIDEO;
     else if (a == "--control") {
       if (!set_control(controls, next())) { std::cerr << "bad control\n"; return 2; }
     } else { std::cerr << "unknown argument " << a << "\n"; return 2; }
+  }
+  if (!recovery_crops.empty()) {  // classify prepared crops: --recovery-crops crops.u8 --frames COUNT --recovery-model M
+    std::ifstream in(recovery_crops, std::ios::binary);
+    std::vector<unsigned char> crops(size_t(n) * 13 * 160 * 160);
+    in.read(reinterpret_cast<char*>(crops.data()), std::streamsize(crops.size()));
+    char error[4096] = {};
+    adr_context* context = adr_context_create(backend.c_str(), error, sizeof(error));
+    adr_recovery* rec = context ? adr_recovery_create(context, recovery_model.c_str(), error, sizeof(error)) : nullptr;
+    if (!rec || !in) { std::cerr << "recovery: " << error << "\n"; return 1; }
+    std::vector<float> probs(static_cast<size_t>(n));
+    const double t0 = now();
+    if (adr_recovery_classify(rec, crops.data(), n, probs.data(), error, sizeof(error))) { std::cerr << error << "\n"; return 1; }
+    std::cerr << "classified " << n << " crops in " << now() - t0 << " s on " << adr_context_device_name(context) << "\n";
+    for (float p : probs) std::cout << p << "\n";
+    adr_recovery_destroy(rec);
+    adr_context_destroy(context);
+    return 0;
   }
   if ((input.empty() && !synthetic) || w <= 0 || h <= 0 || n <= 0) {
     std::cerr << "usage: adr_bench --input film.u16|film.f32 | --synthetic SEED  --width W --height H --frames N\n";
@@ -232,6 +258,26 @@ int main(int argc, char** argv) {
     if (!frame_hashes.empty() && r == 0) {
       std::ofstream fh(frame_hashes);
       for (auto& x : hashes) fh << x << "\n";
+    }
+    if (!recovery_model.empty() && r == 0) {
+      adr_recovery* rec = adr_recovery_create(context, recovery_model.c_str(), error, sizeof(error));
+      if (!rec) { std::cerr << "recovery: " << error << "\n"; return 1; }
+      if (recovery_last < 0) recovery_last = n - 1;
+      std::vector<unsigned char> probability(size_t(w) * h);
+      json << (r ? "" : "") << "\n  , {\"recovery\": [";
+      for (int f = recovery_first; f <= recovery_last; ++f) {
+        const double rs = now();
+        const int scored = adr_recovery_frame(rec, frames[std::max(f - 1, 0)].data(), frames[f].data(),
+                                              frames[std::min(f + 1, n - 1)].data(), results[f].data(), w, h, size_t(w) * 12,
+                                              recovery_input, probability.data(), error, sizeof(error));
+        if (scored < 0) { std::cerr << "recovery frame: " << error << "\n"; return 1; }
+        char name[64];
+        std::snprintf(name, sizeof(name), "/probability-%04d.u8", f);
+        std::ofstream(recovery_out + name, std::ios::binary).write(reinterpret_cast<const char*>(probability.data()), std::streamsize(probability.size()));
+        json << (f > recovery_first ? ", " : "") << "{\"frame\": " << f << ", \"spots\": " << scored << ", \"seconds\": " << now() - rs << "}";
+      }
+      json << "]}";
+      adr_recovery_destroy(rec);
     }
   }
   uint64_t allocated = 0, peak = 0;

@@ -1,8 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# Build the macOS installer for Advanced Dirt Removal: the OFX effect
-# (/Library/OFX/Plugins) and the Fusion macros (system Fusion Macros folder).
+# Build the macOS installer for the Advanced Dirt Removal OFX effect (/Library/OFX/Plugins).
 #   bash installers/mac/build_pkg.sh [version] [path/to/AdvancedDirtRemoval.ofx.bundle]
 # Without a bundle path it builds a universal Release bundle with CMake first.
 # Set ADR_PKG_SIGN_IDENTITY to a "Developer ID Installer" identity to sign.
@@ -21,7 +20,6 @@ VERSION="${1:-2.0.0}"
 BUNDLE="${2:-}"
 BUNDLE_NAME="AdvancedDirtRemoval.ofx.bundle"
 
-MACRO="Advanced Dirt Removal.setting"
 
 if [ -z "$BUNDLE" ]; then
   cmake -S "$REPO_ROOT" -B "$REPO_ROOT/build/release-macos" -DCMAKE_BUILD_TYPE=Release -DADR_WITH_OPENCL=ON \
@@ -32,9 +30,8 @@ fi
 [ -d "$BUNDLE" ] || { echo "Bundle not found: $BUNDLE" >&2; exit 1; }
 codesign --verify --deep --strict "$BUNDLE"
 
-mkdir -p "$PAYLOAD_DIR/Library/OFX/Plugins" "$PAYLOAD_DIR/tmp/AdvancedDirtRemoval_payload"
+mkdir -p "$PAYLOAD_DIR/Library/OFX/Plugins"
 ditto "$BUNDLE" "$PAYLOAD_DIR/Library/OFX/Plugins/$BUNDLE_NAME"
-cp "$REPO_ROOT/$MACRO" "$PAYLOAD_DIR/tmp/AdvancedDirtRemoval_payload/"
 # No extended attributes in the payload (they would become ._ files).
 xattr -cr "$PAYLOAD_DIR"
 codesign --verify --deep --strict "$PAYLOAD_DIR/Library/OFX/Plugins/$BUNDLE_NAME"

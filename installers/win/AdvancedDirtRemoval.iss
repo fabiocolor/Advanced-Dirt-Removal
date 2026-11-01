@@ -1,5 +1,5 @@
 ; Advanced Dirt Removal - Inno Setup script
-; Installs the OFX effect for all OFX hosts and the Fusion macros for DaVinci Resolve.
+; Installs the Advanced Dirt Removal OFX effect for all OFX hosts.
 ; Build from repo root (after building the plugin, see docs/BUILD.md):
 ;   iscc /DMyAppVersion=2.0.0 /DBundleDir=..\..\build\release-win\AdvancedDirtRemoval.ofx.bundle installers\win\AdvancedDirtRemoval.iss
 ; or run installers\win\build_installer.ps1, which builds both.
@@ -14,11 +14,6 @@
 #endif
 #define MyAppId "B8A6D2C1-7C2D-4E5A-9C7B-1F2F46B6E9F2"
 #define BundleName "AdvancedDirtRemoval.ofx.bundle"
-#define AllUsersMacros "Blackmagic Design\DaVinci Resolve\Fusion\Macros"
-#define UserMacros "Blackmagic Design\DaVinci Resolve\Support\Fusion\Macros"
-#define MacroFile1 "Advanced Dirt Removal.setting"
-; 1.x also installed a separate Cineon macro; the 2.0 macro handles both encodings.
-#define MacroFile2 "Advanced Dirt Removal Cineon.setting"
 
 [Setup]
 AppId={{{#MyAppId}}}
@@ -46,14 +41,8 @@ LicenseFile=..\..\LICENSE
 Source: "..\..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 ; The OFX bundle, exactly as built (Contents\Win64\AdvancedDirtRemoval.ofx and Resources).
 Source: "{#BundleDir}\*"; DestDir: "{commoncf64}\OFX\Plugins\{#BundleName}"; Flags: ignoreversion recursesubdirs createallsubdirs
-; Fusion macros for every user of this computer.
-Source: "..\..\{#MacroFile1}"; DestDir: "{commonappdata}\{#AllUsersMacros}"; Flags: ignoreversion
 
 [InstallDelete]
-; Version 1.x installed the macros per user; remove those copies so Resolve does not list them twice.
-Type: files; Name: "{userappdata}\{#UserMacros}\{#MacroFile1}"
-Type: files; Name: "{userappdata}\{#UserMacros}\{#MacroFile2}"
-Type: files; Name: "{commonappdata}\{#AllUsersMacros}\{#MacroFile2}"
 ; Replace the whole bundle on upgrade.
 Type: filesandordirs; Name: "{commoncf64}\OFX\Plugins\{#BundleName}"
 

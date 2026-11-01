@@ -72,12 +72,14 @@ configure_file(Info.plist.in "${OFX_CONTENTS}/Info.plist" @ONLY)
 configure_file(vendor/openfx/LICENSE.md "${OFX_CONTENTS}/Resources/OpenFX-LICENSE.md" COPYONLY)
 configure_file(vendor/openfx/UPSTREAM.json "${OFX_CONTENTS}/Resources/OpenFX-UPSTREAM.json" COPYONLY)
 configure_file(../LICENSE "${OFX_CONTENTS}/Resources/LICENSE.txt" COPYONLY)
+# Auto-recovery classifier weights (see tools/convert_recovery_model.py).
+configure_file(resources/recovery-model.bin "${OFX_CONTENTS}/Resources/recovery-model.bin" COPYONLY)
 if(APPLE)
   # Ad-hoc sign the whole bundle (both architectures); hosts on Apple silicon
   # refuse unsigned code. Pass a Developer ID identity for distribution.
   set(ADR_CODESIGN_IDENTITY "-" CACHE STRING "codesign identity for the OFX bundle")
   set_property(TARGET AdvancedDirtRemoval APPEND PROPERTY LINK_DEPENDS
-    "${OFX_CONTENTS}/Info.plist" "${OFX_CONTENTS}/Resources/LICENSE.txt")
+    "${OFX_CONTENTS}/Info.plist" "${OFX_CONTENTS}/Resources/LICENSE.txt" "${OFX_CONTENTS}/Resources/recovery-model.bin")
   add_custom_command(TARGET AdvancedDirtRemoval POST_BUILD
     COMMAND codesign --force --timestamp=none --sign "${ADR_CODESIGN_IDENTITY}" "${CMAKE_BINARY_DIR}/${ADR_BUNDLE}"
     COMMENT "Signing ${ADR_BUNDLE}" VERBATIM)
