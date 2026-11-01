@@ -396,20 +396,19 @@ std::array<int,4> renderWindow(OfxImageEffectHandle e,OfxPropertySetHandle in,co
 // white strokes give the original back, black strokes keep the repair.
 const char*const encodingChoices[]={"Video","Cineon log"};
 const char*const recoveryModeChoices[]={"Off","Calculate while rendering","Use saved matte"};
-const char*const maskModeChoices[]={"Recovery brush","Spanish dirt removal"};
-const char*const viewChoices[]={"Restored","Original","Compare wipe","True difference","Red difference","Repair eligibility","Changed pixels","Auto recovery matte"};
+const char*const viewChoices[]={"Red difference","Original","Wipe","True difference","Changed pixels","Repair eligibility","Auto recovery matte"};
+// Comparison choice -> internal view (0 restored, 1 original, 2 wipe, 3 true difference, 4 red, 5 eligibility, 6 changed, 7 matte).
+const int viewOfChoice[]={4,1,2,3,6,5,7};
 struct Extra{const char*name;const char*label;const char*hint;const char*group;int kind;double initial,minimum,maximum;const char*const*choices=nullptr;int count=0;};
 enum{ExtraChoice,ExtraBool,ExtraDouble,ExtraInt,ExtraString,ExtraButton};
 const Extra extras[]={
+ {"spanish","Spanish dirt removal","Off (default): the Mask input is a recovery brush, painted areas keep the original. On: only painted areas are repaired. With auto recovery, white strokes give back the original and black strokes keep the repair.","auto_recovery_group",ExtraBool,0,0,1},
  {"recovery_calculate","Calculate recovery","Score every repaired spot of the shot and save the auto-recovery matte. Uses the current cleaning controls; calculate again after changing them.","auto_recovery_group",ExtraButton,0,0,0},
  {"auto_recovery","Auto recovery","Off: none. Calculate while rendering: score each frame as it renders (when the button cannot read the shot in this host). Use saved matte: apply the calculated matte.","auto_recovery_group",ExtraChoice,0,0,2,recoveryModeChoices,3},
  {"recovery_confidence","Confidence","Give back only spots the model is at least this sure were real picture detail. Higher gives back less.","auto_recovery_group",ExtraDouble,.8,.5,.99},
  {"recovery_folder","Matte folder","Where calculated mattes are stored. Empty: the user's application data folder.","auto_recovery_group",ExtraString,0,0,0},
- {"mask_mode","Mask","How the Mask input (Mask Paint or Magic Mask) is used. Recovery brush: painted areas keep the original. Spanish dirt removal: only painted areas are repaired. With auto recovery, white strokes give back the original and black strokes keep the repair.","recovery_page",ExtraChoice,0,0,1,maskModeChoices,2},
- {"show_red","Show repairs in red","Quick check: grey picture with every repair in red. Turn off to see the restored picture.",nullptr,ExtraBool,0,0,1},
- {"show_original","Show original","Quick check: the untouched source.",nullptr,ExtraBool,0,0,1},
- {"show_wipe","Compare (wipe)","Quick check: original on the left, result on the right (wipe position in View options).",nullptr,ExtraBool,0,0,1},
- {"view","View","What the effect shows. Only Restored is meant for delivery.","view_group",ExtraChoice,0,0,7,viewChoices,8},
+ {"compare","Compare","Show the comparison chosen in View options instead of the restored picture.",nullptr,ExtraBool,0,0,1},
+ {"view","Comparison","Shown while Compare is on.","view_group",ExtraChoice,0,0,6,viewChoices,7},
  {"difference_threshold","Difference threshold (%)","Red difference: changes smaller than this are not shown in red. The engine moves unrepaired pixels by less than one 10-bit code, so 0.1% shows only real repairs.","view_group",ExtraDouble,.1,0,100},
  {"red_intensity","Red difference intensity","Brightness of the red highlights and of Changed pixels.","view_group",ExtraDouble,8,0,100},
  {"red_opacity","Red highlight opacity","Opacity of the red highlights.","view_group",ExtraDouble,.85,0,1},
@@ -425,10 +424,10 @@ void defineEncodingParam(OfxParamSetHandle ps){
 }
 void defineExtraParams(OfxParamSetHandle ps,bool topLevel){
  OfxPropertySetHandle p;
- if(!topLevel)for(auto g:{std::make_pair("auto_recovery_group","Auto recovery"),{"view_group","View options"}}){check(params->paramDefine(ps,kOfxParamTypeGroup,g.first,&p),"define group");ss(p,kOfxPropLabel,g.second);si(p,kOfxParamPropGroupOpen,!std::strcmp(g.first,"auto_recovery_group"));}
+ if(!topLevel)for(auto g:{std::make_pair("auto_recovery_group","Recovery"),{"view_group","View options"}}){check(params->paramDefine(ps,kOfxParamTypeGroup,g.first,&p),"define group");ss(p,kOfxPropLabel,g.second);si(p,kOfxParamPropGroupOpen,!std::strcmp(g.first,"auto_recovery_group"));}
  for(auto&x:extras){
   const char*type=x.kind==ExtraChoice?kOfxParamTypeChoice:x.kind==ExtraBool?kOfxParamTypeBoolean:x.kind==ExtraDouble?kOfxParamTypeDouble:x.kind==ExtraInt?kOfxParamTypeInteger:x.kind==ExtraString?kOfxParamTypeString:kOfxParamTypePushButton;
-  const bool top=!x.group||!std::strcmp(x.group,"recovery_page");if(top!=topLevel)continue;
+  const bool top=!x.group;if(top!=topLevel)continue;
   check(params->paramDefine(ps,type,x.name,&p),"define extra control");ss(p,kOfxPropLabel,x.label);ss(p,kOfxParamPropHint,x.hint);if(!top)ss(p,kOfxParamPropParent,x.group);
   if(x.kind==ExtraButton)continue;
   si(p,kOfxParamPropAnimates,0);
@@ -441,9 +440,9 @@ void defineExtraParams(OfxParamSetHandle ps,bool topLevel){
 }
 // Inspector tabs (OFX pages). Children are listed in display order.
 void definePages(OfxParamSetHandle ps){
- std::vector<std::string> cleaning={"encoding","enabled","show_red","show_original","show_wipe","mask_mode"};
+ std::vector<std::string> cleaning={"encoding","enabled","compare"};
  for(auto&c:controls)if(std::strcmp(c.name,"enabled"))cleaning.push_back(c.name);
- const std::vector<std::string> recovery={"recovery_calculate","auto_recovery","recovery_confidence","recovery_folder"};
+ const std::vector<std::string> recovery={"spanish","recovery_calculate","auto_recovery","recovery_confidence","recovery_folder"};
  const std::vector<std::string> view={"view","difference_threshold","red_intensity","red_opacity","gray_background","difference_gain","wipe_position"};
  struct Page{const char*name;const char*label;const std::vector<std::string>*kids;};
  const Page pages[]={{"page_cleaning","Cleaning",&cleaning},{"page_recovery","Recovery",&recovery},{"page_view","View",&view}};
@@ -460,11 +459,11 @@ Settings readSettings(Instance&i,double time){
  Settings s;auto I=[&](const char*n,int&v){int x;if(params->paramGetValueAtTime(i.parameters.at(n),time,&x)==kOfxStatOK)v=x;};
  auto B=[&](const char*n,bool&v){int x;if(params->paramGetValueAtTime(i.parameters.at(n),time,&x)==kOfxStatOK)v=x!=0;};
  auto D=[&](const char*n,double&v){double x;if(params->paramGetValueAtTime(i.parameters.at(n),time,&x)==kOfxStatOK&&std::isfinite(x))v=x;};
- I("encoding",s.encoding);I("auto_recovery",s.mode);I("mask_mode",s.maskMode);I("view",s.view);
- bool red=false,original=false,wipe=false;B("show_red",red);B("show_original",original);B("show_wipe",wipe);
+ I("encoding",s.encoding);I("auto_recovery",s.mode);int choice=0;I("view",choice);
+ bool compare=false,spanish=false;B("compare",compare);B("spanish",spanish);
  D("recovery_confidence",s.confidence);
  D("difference_threshold",s.threshold);D("red_intensity",s.redIntensity);D("red_opacity",s.redOpacity);D("gray_background",s.gray);D("difference_gain",s.gain);D("wipe_position",s.wipe);
- s.maskMode=s.maskMode==1?2:1;if(red)s.view=4;else if(wipe)s.view=2;else if(original)s.view=1;
+ s.maskMode=spanish?2:1;s.view=compare?viewOfChoice[std::max(0,std::min(6,choice))]:0;
  char*str=nullptr;if(params->paramGetValueAtTime(i.parameters.at("recovery_folder"),time,&str)==kOfxStatOK&&str)s.folder=str;
  s.encoding=s.encoding==1;s.mode=std::max(0,std::min(2,s.mode));s.view=std::max(0,std::min(7,s.view));s.confidence=std::max(.5,std::min(.99,s.confidence));
  return s;
