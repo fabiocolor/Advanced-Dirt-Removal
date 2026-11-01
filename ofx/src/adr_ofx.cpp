@@ -397,13 +397,14 @@ std::array<int,4> renderWindow(OfxImageEffectHandle e,OfxPropertySetHandle in,co
 const char*const spanishRecoveryError="Auto recovery cannot be used with Spanish dirt removal. Set Auto recovery to Off, or turn Spanish dirt removal off.";
 const char*const encodingChoices[]={"Video","Cineon log"};
 const char*const recoveryModeChoices[]={"Off","On"};
+const char*const maskModeChoices[]={"Recovery","Spanish dirt removal"};
 const char*const viewChoices[]={"Restored","Red difference","True difference","Auto recovery matte"};
 // View choice -> internal view (0 restored, 1 original, 2 wipe, 3 true difference, 4 red, 5 eligibility, 6 changed, 7 matte).
 const int viewOfChoice[]={0,4,3,7};
 struct Extra{const char*name;const char*label;const char*hint;const char*group;int kind;double initial,minimum,maximum;const char*const*choices=nullptr;int count=0;};
 enum{ExtraChoice,ExtraBool,ExtraDouble,ExtraInt,ExtraString,ExtraButton};
 const Extra extras[]={
- {"spanish","Spanish dirt removal","Off (default): the Mask input is a recovery brush, painted areas keep the original. On: only painted areas are repaired. With auto recovery, white strokes give back the original and black strokes keep the repair.","auto_recovery_group",ExtraBool,0,0,1},
+ {"mask_mode","Mask","How the Mask input (Mask Paint or Magic Mask) is used. Recovery (default): painted areas keep the original; with auto recovery, white strokes give back the original and black strokes keep the repair. Spanish dirt removal: only painted areas are repaired.","auto_recovery_group",ExtraChoice,0,0,1,maskModeChoices,2},
  {"recovery_calculate","Calculate recovery","Calculate the auto-recovery matte for the whole shot now (otherwise frames are calculated as they render).","auto_recovery_group",ExtraButton,0,0,0},
  {"auto_recovery","Auto recovery","On: give back repaired spots the model judges to be real picture detail. The matte is calculated once per shot and cleaning settings, and recalculated automatically when Input encoding or any cleaning control changes (Calculate recovery does the whole shot at once).","auto_recovery_group",ExtraChoice,0,0,1,recoveryModeChoices,2},
  {"recovery_confidence","Confidence","Give back only spots the model is at least this sure were real picture detail. Higher gives back less.","auto_recovery_group",ExtraDouble,.8,.5,.99},
@@ -441,7 +442,7 @@ void defineExtraParams(OfxParamSetHandle ps,bool topLevel){
 void definePages(OfxParamSetHandle ps){
  std::vector<std::string> cleaning={"encoding","view"};
  for(auto&c:controls)if(std::strcmp(c.name,"enabled"))cleaning.push_back(c.name);
- const std::vector<std::string> recovery={"spanish","recovery_calculate","auto_recovery","recovery_confidence","recovery_folder"};
+ const std::vector<std::string> recovery={"mask_mode","recovery_calculate","auto_recovery","recovery_confidence","recovery_folder"};
  const std::vector<std::string> view={"difference_threshold","red_intensity","red_opacity","gray_background","difference_gain"};
  struct Page{const char*name;const char*label;const std::vector<std::string>*kids;};
  const Page pages[]={{"page_cleaning","Cleaning",&cleaning},{"page_recovery","Recovery",&recovery},{"page_view","View",&view}};
@@ -453,7 +454,7 @@ void definePages(OfxParamSetHandle ps){
 // Spanish dirt removal makes auto recovery irrelevant: grey its controls out while it is on.
 void updateRecoveryEnabled(Instance&i){
  if(!params->paramGetPropertySet)return;
- int spanish=0;if(params->paramGetValue(i.parameters.at("spanish"),&spanish)!=kOfxStatOK)return;
+ int spanish=0;if(params->paramGetValue(i.parameters.at("mask_mode"),&spanish)!=kOfxStatOK)return;
  for(auto n:{"recovery_calculate","recovery_confidence","recovery_folder"}){OfxPropertySetHandle ph=nullptr;
   if(params->paramGetPropertySet(i.parameters.at(n),&ph)==kOfxStatOK&&ph)prop->propSetInt(ph,kOfxParamPropEnabled,0,spanish?0:1);}
 }
@@ -463,10 +464,9 @@ struct Settings{
 };
 Settings readSettings(Instance&i,double time){
  Settings s;auto I=[&](const char*n,int&v){int x;if(params->paramGetValueAtTime(i.parameters.at(n),time,&x)==kOfxStatOK)v=x;};
- auto B=[&](const char*n,bool&v){int x;if(params->paramGetValueAtTime(i.parameters.at(n),time,&x)==kOfxStatOK)v=x!=0;};
  auto D=[&](const char*n,double&v){double x;if(params->paramGetValueAtTime(i.parameters.at(n),time,&x)==kOfxStatOK&&std::isfinite(x))v=x;};
  I("encoding",s.encoding);I("auto_recovery",s.mode);int choice=0;I("view",choice);
- bool spanish=false;B("spanish",spanish);
+ int maskChoice=0;I("mask_mode",maskChoice);const bool spanish=maskChoice==1;
  D("recovery_confidence",s.confidence);
  D("difference_threshold",s.threshold);D("red_intensity",s.redIntensity);D("red_opacity",s.redOpacity);D("gray_background",s.gray);D("difference_gain",s.gain);
  s.maskMode=spanish?2:1;s.view=viewOfChoice[std::max(0,std::min(3,choice))];
@@ -562,7 +562,7 @@ void computeProbability(Instance&i,OfxImageEffectHandle e,int time,const std::ar
 }
 // The whole shot from the button: its own engine pass over the clip range, then each frame scored and saved.
 void calculateShot(OfxImageEffectHandle e,Instance&i){
- {int spanish=0;if(params->paramGetValue(i.parameters.at("spanish"),&spanish)==kOfxStatOK&&spanish){if(messages)messages->message(e,kOfxMessageError,"adr","%s",spanishRecoveryError);return;}}
+ {int spanish=0;if(params->paramGetValue(i.parameters.at("mask_mode"),&spanish)==kOfxStatOK&&spanish==1){if(messages)messages->message(e,kOfxMessageError,"adr","%s",spanishRecoveryError);return;}}
  const auto t0=std::chrono::steady_clock::now();
  auto range=sourceRange(i);const int count=range[1]-range[0]+1;
  std::array<int,4> bounds;int w,h;{Image first(i.source,range[0],e,"auto recovery");bounds=first.b;w=first.width();h=first.height();}
@@ -791,7 +791,7 @@ OfxStatus entry(const char*action,const void*handle,OfxPropertySetHandle in,OfxP
  // Time/control notifications already preserve history: every render keys
  // controls by their actual values. They must not block a host/UI callback.
  if(!std::strcmp(action,kOfxActionInstanceChanged)&&in){char*type=nullptr;char*name=nullptr;
-  if(prop->propGetString(in,kOfxPropType,0,&type)==kOfxStatOK&&type&&!std::strcmp(type,kOfxTypeParameter)&&prop->propGetString(in,kOfxPropName,0,&name)==kOfxStatOK&&name&&!std::strcmp(name,"spanish")){auto&i=instance(e);std::unique_lock<std::mutex> g(i.lock);updateRecoveryEnabled(i);return kOfxStatOK;}
+  if(prop->propGetString(in,kOfxPropType,0,&type)==kOfxStatOK&&type&&!std::strcmp(type,kOfxTypeParameter)&&prop->propGetString(in,kOfxPropName,0,&name)==kOfxStatOK&&name&&!std::strcmp(name,"mask_mode")){auto&i=instance(e);std::unique_lock<std::mutex> g(i.lock);updateRecoveryEnabled(i);return kOfxStatOK;}
   if(prop->propGetString(in,kOfxPropType,0,&type)==kOfxStatOK&&type&&!std::strcmp(type,kOfxTypeParameter)&&prop->propGetString(in,kOfxPropName,0,&name)==kOfxStatOK&&name&&!std::strcmp(name,"recovery_calculate")){
    auto&i=instance(e);std::unique_lock<std::mutex> g(i.lock);
    try{calculateShot(e,i);}catch(const std::exception&x){adrlog::error(i.label()+" auto recovery failed: "+x.what());
