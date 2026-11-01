@@ -1,64 +1,81 @@
 # What has been tested
 
-**Tested** means the effect ran on that combination and its output was compared
-byte for byte with the expected result. **Built** means it compiles for that
-target but has not been run there. Anything not listed has not been tried.
-Please report results from other hosts, systems and GPUs in
-[GitHub Issues](https://github.com/fabiocolor/Advanced-Dirt-Removal/issues),
+**Tested** means the plugin ran on that combination and its output was compared
+with the expected result: byte for byte, or, for the views, recovery and Cineon
+modes, pixel for pixel with an independent computation of what they must
+produce. **Built** means it compiles for that target but has not been run there.
+Anything not listed has not been tried. Please report results from other hosts,
+systems and GPUs in [GitHub Issues](https://github.com/fabiocolor/Advanced-Dirt-Removal/issues),
 with the diagnostic log.
 
-Version 2.0.0 (development), November 2026.
+Version 2.0.0 (development), November 2026. Real-footage tests use a 56-frame
+2368×1712 film scan (float EXR).
+
+## macOS: every feature, in DaVinci Resolve and Nuke
+
+Apple M5 Pro, macOS 27, Metal. DaVinci Resolve Studio 21.1 (Fusion page) and
+Nuke 17.1, both driven by script with the plugin from this repository.
+
+| Feature | Resolve 21.1, Fusion page | Nuke 17.1 |
+| --- | --- | --- |
+| Defaults: output identical to the engine | 8 frames, and 2 frames rendered alone after a seek | all 56 frames |
+| Every cleaning control away from its default, and the effect bypassed (25 settings) | default and a Sensitivity change | 25/25 settings, all 56 frames identical to the engine's command-line tool with the same values; bypass identical to the source |
+| View: Red difference, defaults | exact | exact |
+| View: Red difference, all four view options changed | exact | not run |
+| View: True difference (gain 10) | exact | exact |
+| View: Auto recovery matte | exact | exact |
+| Auto recovery: Calculate recovery button | whole shot (56 frames) saved, button returns in 0.3 s, auto recovery switched on | whole shot saved, auto recovery switched on |
+| Auto recovery calculated while rendering (no button) | yes | yes |
+| Auto recovery result: matte pixels are the source, the rest the repair | exact (confidence 0.8 and 0.95) | exact (0.8) |
+| Confidence change does not recalculate | yes | not run |
+| Changing a cleaning control recalculates the matte | yes | not run |
+| Recovery mask without auto recovery | Mask Paint strokes: exact | alpha-only Rectangle: exact |
+| Recovery mask editing the auto matte (white gives back, black keeps the repair) | Mask Paint strokes: exact | not run |
+| Spanish dirt removal | Mask Paint strokes: exact | Rectangle: exact |
+| Spanish dirt removal with auto recovery on | render error shown | render error shown; renders again once fixed |
+| Alpha-only mask | Ellipse: exact | Rectangle: exact |
+| Mask made at half resolution | mapped onto the full frame by position: exact | n/a (Nuke uses pixel positions) |
+| Input encoding: Cineon log | exact against the independent linear-clean-and-log-delta computation | exact |
+| Cineon log with auto recovery | renders, saves its own matte | not run |
+| Matte folder empty: user application data folder | yes | not run |
+| Auto-recovery maps identical between the two hosts | yes | yes |
+
+On this scan every cleaning control changes the picture except Flash guard
+(the scan has no single-frame flashes, so its effect is covered by the synthetic
+engine cases only).
+
+Times on this Mac: cleaning about 0.1 s per frame; auto recovery about 1.5 to 3 s
+per frame (a 56-frame shot in 90 to 155 s).
 
 ## Engine and plugin by system and GPU
 
 | System | GPU / backend | Status |
 | --- | --- | --- |
-| macOS 27, Apple M5 Pro (arm64) | Metal | Tested: 58 engine cases, OFX contract test, two real film scans × 29 settings |
-| macOS 27, Apple M5 Pro (arm64) | OpenCL | Tested: same as Metal |
-| macOS 27, Apple M5 Pro (arm64) | CPU fallback | Tested: 58 engine cases, OFX contract test |
-| macOS, x86-64 build | Metal, OpenCL, CPU | Tested under Rosetta 2 on the M5 Pro only (58 cases on CPU); not yet on an Intel Mac |
-| Windows 11 x64 | CUDA, OpenCL, CPU | Built from this source: not yet. Earlier development builds of the same engine were tested on NVIDIA RTX 3090 and RTX 4500 Ada (CUDA, OpenCL) and AMD Radeon RX 5700 XT and Pro W5500 (OpenCL) |
-| Linux x86-64 (Ubuntu 24.04) | CUDA, OpenCL, CPU | Built from this source: not yet. Earlier development builds were tested on an NVIDIA RTX 3090 (CUDA, OpenCL) |
+| macOS 27, Apple M5 Pro (arm64) | Metal, OpenCL, CPU fallback | Tested: 58 engine cases on each, and the OFX contract test on each (`tools/check_release.py build`); auto-recovery network on Metal and CPU gives the same maps |
+| macOS, x86-64 slice of the universal build | Metal, OpenCL, CPU | Cleaning engine tested under Rosetta 2 on the M5 Pro during development (58 cases on CPU); not re-run since auto recovery was added; not yet on an Intel Mac |
+| Windows 11 x64 | CUDA, OpenCL, CPU | Built from this source: not yet. Earlier development builds of the cleaning engine were tested on NVIDIA RTX 3090 and RTX 4500 Ada (CUDA, OpenCL) and AMD Radeon RX 5700 XT and Pro W5500 (OpenCL) |
+| Linux x86-64 (Ubuntu 24.04) | CUDA, OpenCL, CPU | Built from this source: not yet. Earlier development builds of the cleaning engine were tested on an NVIDIA RTX 3090 (CUDA, OpenCL) |
 
 ## Hosts
 
 | Host | System | Status |
 | --- | --- | --- |
-| Nuke 17.1 | macOS, Metal | Tested: real 56-frame film scan, four settings, every frame identical to the engine |
-| DaVinci Resolve Studio 21.1 | macOS, Metal | Tested: Fusion page, real 56-frame film scan, three settings, every frame identical to the engine; bypass identical to the source |
-| DaVinci Resolve Studio 21.1 | Windows, CUDA | Earlier development build tested; this build: not yet |
-| DaVinci Resolve 20 (free) | Windows, AMD OpenCL | Earlier development build tested up to 2.4K (the free version caps at UHD) |
-| Nuke 17 | Windows | Earlier development build tested; this build: not yet |
+| DaVinci Resolve Studio 21.1, Fusion page | macOS, Metal | Tested: every feature (table above) |
+| DaVinci Resolve, Color and Edit pages | any | Not tested |
+| Nuke 17.1 | macOS, Metal | Tested: every feature (table above) |
+| DaVinci Resolve Studio 21, free 20 | Windows | Earlier development builds of the cleaning effect only; 2.0: not yet |
+| Nuke 17 | Windows | Earlier development build of the cleaning effect only; 2.0: not yet |
 | Resolve, Nuke | Linux | Not tested |
 | Other OFX hosts (Fusion Studio, Flame, Baselight and others) | any | Not tested |
 | Adobe Premiere Pro, After Effects | any | Not supported yet (they do not load OFX plugins; an adapter is planned) |
 
-## Fusion macro
+## Installers
 
-The 2.0 macro is the unified video/Cineon macro on the new effect. Tested in
-DaVinci Resolve Studio 21.1 on macOS (Metal) with a real 56-frame film scan:
-
-| Check | Result |
+| Installer | Status |
 | --- | --- |
-| Restored view, defaults, video encoding (56 frames) | identical to the effect alone |
-| Restored view, Cineon encoding (12 frames) | effect runs on linear values and its repair is added back in log; finite output, pixels without repairs equal to the source |
-| Red difference view (12 frames) | grey wherever nothing changed; red only on changed pixels |
-| Full Mask Paint, Mask Paint recovery (12 frames) | identical to the source |
-| Full Mask Paint, Apply repair inside mask (12 frames) | identical to the effect alone |
-| Rectangle limit (12 frames) | source outside, repair inside |
-| Frame-range limit (12 frames) | only the chosen frames repaired |
-
-The macro's recovery, Cineon and view graph is the one that was reviewed on
-real footage with Resolve's built-in dirt removal before 2.0; with the new effect
-it has been checked functionally (table above) and spot-checked on a Cineon scan
-(processing in linear removed a vertical scratch that processing the log values
-directly left faint), not yet reviewed for picture quality on many films.
-
-The 1.x optical-flow motion mask was compared on fast hand motion before it was
-removed: it held back about a third of the false repairs on the hands at 12 times
-the render time, while raising the effect's Motion guard held back slightly more
-at about twice the time. Neither saves a fast-blurred fingertip; use the brush. Resolve on Windows and Linux, and Resolve 18
-to 20, have not been tested with 2.0.
+| macOS `.pkg` | Built from this source and inspected (universal plugin, model file, scripts); not yet installed on a clean machine |
+| Windows Inno Setup | Script written; not yet built from this source |
+| Linux tarball | Script written; not yet built from this source |
 
 ## How the checks are run
 
@@ -67,4 +84,9 @@ each available backend against `tests/engine_hashes.json`: 29 control settings
 (every control away from its default, plus combinations) on two synthetic clips,
 one with odd dimensions. It then drives the plugin through a minimal OFX host
 (`ofx/tests/contract_host.cpp`): exact RGB output, alpha, row padding, seeking,
-parameter edits, a missing frame, and the render-lock behaviour hosts depend on.
+parameter edits, a missing frame, a time outside the clip, and the render-lock
+behaviour hosts depend on.
+
+The host feature tests drive Resolve and Nuke by script and compare every
+rendered pixel with NumPy; they need the test footage and are kept with the
+maintainer's test material.

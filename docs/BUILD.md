@@ -12,7 +12,9 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release --parallel
 ```
 
-The plugin is written to `build/AdvancedDirtRemoval.ofx.bundle`. Copy the whole
+The plugin is written to `build/AdvancedDirtRemoval.ofx.bundle`, with the
+auto-recovery model (`ofx/resources/recovery-model.bin`) in its `Resources`
+folder. Copy the whole
 bundle to your host's OFX plugin folder (see [INSTALL.md](INSTALL.md)).
 
 ## Options
@@ -47,6 +49,16 @@ The plugin tries Metal, CUDA, OpenCL and then the CPU, and uses the first that
 starts. Set `ADR_BACKEND` to force one, optionally with a device index:
 `ADR_BACKEND=opencl:1`. The engine writes a diagnostic log (backend, device,
 timings and any error); `ADR_LOG=off` disables it.
+
+## The auto-recovery model
+
+`ofx/resources/recovery-model.bin` holds the weights of the auto-recovery
+classifier (a ResNet-18 with 13 input channels and one output, about 22 MB):
+batch normalisation folded into each convolution, weights in float16, biases in
+float32. The plugin runs it with the same kernels on every backend; no machine
+learning framework is needed at build or run time.
+`tools/convert_recovery_model.py` (needs PyTorch) writes this file from a
+training checkpoint and documents the format.
 
 ## Determinism
 

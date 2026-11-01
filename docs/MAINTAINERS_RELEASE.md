@@ -9,8 +9,10 @@ There is no CI service. Every release is built and checked locally.
 1. `python3 tools/check_release.py build` on each platform you ship
    (`--backends metal,opencl,cpu` on macOS, `--backends cuda,opencl,cpu` on
    Windows and Linux). All cases must pass.
-2. Render a real clip in at least Resolve and Nuke and note the result in
-   [TESTED.md](TESTED.md).
+2. Render a real clip in at least Resolve and Nuke, check every feature in the
+   [user guide](USER_GUIDE.md) (views, recovery mask, auto recovery and its
+   button, Spanish dirt removal and its error, Cineon log) and note the result
+   in [TESTED.md](TESTED.md).
 3. `python3 tools/check_release.py scan --history` with the local
    `.sanitize-denylist` (never committed), plus the built packages:
    `python3 tools/check_release.py scan installers/mac/build build/release-win`.
@@ -25,7 +27,7 @@ There is no CI service. Every release is built and checked locally.
 
 Release assets: the macOS `.pkg` and Windows `.exe` each in a ZIP
 (`AdvancedDirtRemoval-<version>-macos.zip`, `AdvancedDirtRemoval-Setup-<version>-win64.zip`),
-the Linux tarball, `Advanced Dirt Removal.setting` and `INSTALL.md`.
+the Linux tarball and `INSTALL.md`.
 
 macOS: the bundle is ad hoc signed by default. For distribution build with
 `-DADR_CODESIGN_IDENTITY="Developer ID Application: ..."`, sign the package with
