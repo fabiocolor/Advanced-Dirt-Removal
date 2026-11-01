@@ -41,18 +41,23 @@ DaVinci Resolve Studio 21.1 on macOS (Metal) with a real 56-frame film scan:
 | Check | Result |
 | --- | --- |
 | Restored view, defaults, video encoding (56 frames) | identical to the effect alone |
-| Restored view, Cineon encoding (12 frames) | identical to the effect alone |
+| Restored view, Cineon encoding (12 frames) | effect runs on linear values and its repair is added back in log; finite output, pixels without repairs equal to the source |
 | Red difference view (12 frames) | grey wherever nothing changed; red only on changed pixels |
 | Full Mask Paint, Mask Paint recovery (12 frames) | identical to the source |
 | Full Mask Paint, Apply repair inside mask (12 frames) | identical to the effect alone |
 | Rectangle limit (12 frames) | source outside, repair inside |
 | Frame-range limit (12 frames) | only the chosen frames repaired |
-| Protect moving areas (12 frames) | renders; every pixel between source and repair |
 
-The macro's recovery, motion-protection and view graph is the one that was
-reviewed on real footage with Resolve's built-in dirt removal before 2.0; with
-the new effect it has been checked functionally (table above), not yet reviewed
-for picture quality on many films. Resolve on Windows and Linux, and Resolve 18
+The macro's recovery, Cineon and view graph is the one that was reviewed on
+real footage with Resolve's built-in dirt removal before 2.0; with the new effect
+it has been checked functionally (table above) and spot-checked on a Cineon scan
+(processing in linear removed a vertical scratch that processing the log values
+directly left faint), not yet reviewed for picture quality on many films.
+
+The 1.x optical-flow motion mask was compared on fast hand motion before it was
+removed: it held back about a third of the false repairs on the hands at 12 times
+the render time, while raising the effect's Motion guard held back slightly more
+at about twice the time. Neither saves a fast-blurred fingertip; use the brush. Resolve on Windows and Linux, and Resolve 18
 to 20, have not been tested with 2.0.
 
 ## How the checks are run

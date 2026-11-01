@@ -92,17 +92,18 @@ by file before keeping it:
   (detection, then repair, then guards). Values are read by name, so output is
   unaffected. Owner to confirm.
 
-## Open decisions for the owner
+## Owner decisions (2026-11-01)
 
-1. Public history: two already-published 1.x commits name another product in a
-   feature comparison. Leave them, or rewrite history and force-push.
-2. Control order in the effect: regrouped (detection, repair, guards). Keep or
-   restore the earlier order.
-3. Macro: the effect now runs on Cineon values directly (as in the engine's real
-   film-scan checks); confirm on your Cineon material.
-4. The effect moves pixels it does not repair by less than one 10-bit code
-   (inherited, validated behaviour). Keep, or add an option that passes such
-   pixels through untouched?
+1. Old public history mentioning another product: leave it.
+2. Effect controls grouped as Detection, Processing and Safeguards (done).
+3. One macro for both footage types; the user picks the input encoding. Cineon
+   mode runs the effect on linear values (Extended-range input on) and adds the
+   repair back in log, as the tested workshop macro did (done).
+4. Sub-10-bit changes the engine makes to unrepaired pixels are acceptable; no
+   pass-through option.
+5. The optical-flow motion mask is dropped (the effect's Motion guard and the
+   brush cover moving detail); masks, the brush and Spanish dirt removal stay
+   (done).
 
 ## Plan and milestones (week of 2026-11-02)
 
@@ -130,10 +131,10 @@ by file before keeping it:
    tested local workshop macro (one macro for video and Cineon, direct Mask
    Paint recovery, recovery modes, red difference and other views, motion
    protection, rectangle and frame-range limits) is now the repository's macro,
-   with the new effect in place of the built-in dirt removal; the effect runs on
-   the values as delivered, Input encoding only tunes motion protection. Red
-   difference threshold defaults to 0.1%. All functional checks pass in Resolve
-   (docs/TESTED.md). The 1.x Linear and Cineon macros are replaced.
+   with the new effect in place of the built-in dirt removal (Cineon mode works
+   in linear and adds the repair back in log), without the optical-flow motion
+   mask. Red difference threshold defaults to 0.1%. All functional checks pass
+   in Resolve (docs/TESTED.md). The 1.x Linear and Cineon macros are replaced.
 10. **M8 – Other machines.** Windows CUDA + AMD OpenCL and a Linux host; update
    TESTED.
 11. **M9 – Premiere / After Effects.** Adapter design and a first build (the

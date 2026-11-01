@@ -17,8 +17,8 @@ Advanced Dirt Removal has two parts:
   Intel and NVIDIA) and falls back to the CPU. It works in DaVinci Resolve, Nuke
   and other OFX hosts on macOS, Windows and Linux.
 - **The Fusion macro** for DaVinci Resolve: a recovery workflow around the
-  effect, for video and Cineon scans, with a recovery brush, optional motion
-  protection, a red difference view and other comparison views.
+  effect, for video and Cineon scans, with a recovery brush, Spanish dirt
+  removal, a red difference view and other comparison views.
 
 > **New in 2.0:** the macro now uses the Advanced Dirt Removal effect instead of
 > Resolve's built-in Automatic Dirt Removal, and the effect also works on its own
@@ -70,25 +70,29 @@ dirt.
 | Control | Default | What it does |
 | --- | --- | --- |
 | Enabled | on | Off passes the source through unchanged. |
+| **Detection** | | |
 | Analyse | Luma | Luma finds spots in brightness; RGB also finds spots that differ only in colour. |
 | Remove dark spots | on | Repair spots darker than their surroundings (dust on a print, emulsion specks). |
 | Remove light spots | on | Repair spots brighter than their surroundings (dirt on a negative, scratches through to the base). |
 | Sensitivity | 0.75 | How readily a temporary change is treated as dirt. Higher finds fainter spots and risks repairing real detail. |
 | Extra sensitivity | off | For heavily damaged material. Can remove real detail. |
-| Repair amount | 1.0 | How strongly detected spots are replaced from neighbouring frames (0 to 2). |
 | Analysis detail | 0.5 | Balance of fine against coarse analysis when separating dirt from grain and noise. |
 | Limit spot size | off | Ignore spots larger than Largest spot. |
 | Largest spot (px) | 25 | Largest spot diameter repaired when Limit spot size is on. |
+| Extended-range input | off | Analyse values below 0 or above 1 (scene-referred or log-to-linear material) instead of the normal display range. |
+| **Processing** | | |
+| Repair amount | 1.0 | How strongly detected spots are replaced from neighbouring frames (0 to 2). |
 | Blend repairs | on | Soften the edges of repairs so they blend with grain. |
 | Blend amount | 0.5 | How much repair edges are softened. |
+| **Safeguards** | | |
 | Motion guard | 0.25 | Protect moving detail. Higher protects more and cleans less in motion. |
 | Shot changes | Guard | Frames from another shot are never used. Off: no extra care. Guard: repair next to a shot change more cautiously. Skip: leave those frames unrepaired. |
 | Shot-change guard | 0.75 | How cautious Guard is next to a shot change. |
 | Flash guard | off | Leave frames detected as single-frame flashes unrepaired. |
-| Extended-range input | off | Analyse values below 0 or above 1 (scene-referred or log-to-linear material) instead of the normal display range. |
 
-Start with the defaults. If real detail is being removed, lower **Sensitivity**
-or raise **Motion guard**; if dirt remains, raise **Sensitivity** or try
+The controls are grouped as Detection, Processing and Safeguards. Start with the
+defaults. If real detail is being removed, lower **Sensitivity** or raise
+**Motion guard**; if dirt remains, raise **Sensitivity** or try
 **Analyse: RGB**.
 
 Every GPU and the CPU give byte-identical results, so a render on one machine
@@ -108,19 +112,19 @@ Fusion page press `Shift+Space`, type "Advanced Dirt Removal" and connect
 `MediaIn → Advanced Dirt Removal → MediaOut`.
 
 - **Input encoding:** *Video / already converted*, or *Cineon log* if the values
-  entering the macro are still Cineon encoded. The repair itself works on the
-  values as delivered; the setting tunes the motion protection. Output keeps the
-  input encoding.
+  entering the macro are still Cineon encoded. In Cineon mode the effect works
+  on linear values (with Extended-range input on) and only its repair is added
+  back to the log input, so areas it leaves alone keep their exact original
+  values. Output keeps the input encoding.
 - **Recovery brush:** connect a Mask Paint (or Magic Mask) tool directly to the
   macro's second input and paint where the original should be kept. **Recovery
   mode** (Advanced): *Mask Paint recovery* (paint keeps the original, the
-  default), *Apply repair inside mask* (only painted areas are repaired) or
-  *Ignore mask*.
-- **Protect moving areas:** an optional motion matte (optical flow plus colour
-  change between the neighbouring frames) that holds back repairs on moving
-  detail. It is slower; tuning is under Advanced.
+  default), *Apply repair inside mask* (Spanish dirt removal: only painted areas
+  are repaired) or *Ignore mask*.
+- **Moving detail:** raise **Motion guard** where fast motion is mistaken for
+  dirt, and paint back anything that is still lost.
 - **View Mode:** Restored, Original, Compare wipe, True difference, **Red
-  difference**, Repair eligibility, Changed pixels and Motion protection.
+  difference**, Repair eligibility and Changed pixels.
 - **Red difference:** a grey picture with every repaired pixel in red.
   **Difference threshold (%)** hides changes smaller than the threshold (default
   0.1%, so only real repairs show) and **Red difference intensity** sets the
@@ -130,11 +134,9 @@ Fusion page press `Shift+Space`, type "Advanced Dirt Removal" and connect
 - The effect's controls (Sensitivity, Motion guard and the rest) are on the
   macro: everyday ones on the first page, the rest under Advanced.
 
-![Motion Mask Mode](assets/images/Motion%20Mask.png)
-*Motion protection: repairs held back on moving areas*
-
-Version 1.x had two macros (Linear and Cineon); 2.0 replaces both and the
-installers remove the old Cineon macro. Compositions saved with 1.x keep working
+Version 1.x had two macros (Linear and Cineon) and an optical-flow motion mask;
+2.0 replaces both macros, and the effect's own Motion guard replaces the motion
+mask. The installers remove the old Cineon macro. Compositions saved with 1.x keep working
 as they were. Details: [docs/TECH_SPEC.md](docs/TECH_SPEC.md).
 
 ## Build from source

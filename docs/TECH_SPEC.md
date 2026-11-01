@@ -2,49 +2,36 @@
 
 Version 2.0. One Fusion `MacroOperator`, `Advanced Dirt Removal.setting`, for
 DaVinci Resolve, used for both video and Cineon log footage. It replaces the 1.x
-Linear and Cineon macros.
+Linear and Cineon macros and their optical-flow motion mask.
 
 ## Repair path
 
 ```
-Source ── SourcePlate ──┬── DirtRemoval1 (Advanced Dirt Removal effect) ──┐
-                        │                                                  RepairResult = Source + (Repair − Source) × gate × Applied repair amount
-                        └──────────────────────────────────────────────────┘
-gate = RepairGate(Recovery mode × Mask Paint, rectangle, frame range, 1 − motion protection)
+Source ─ SourcePlate ─┬─ Video: ────────────────────────────── DirtRemoval1 ─────────────────────────────┐
+                      └─ Cineon: CineonLog1 (log → linear) ─── DirtRemoval1 ─ CineonDelta (back to log) ──┴─ OutputEncoding ─┐
+RepairResult = Source + (Repair − Source) × gate × Applied repair amount  ←───────────────────────────────────────────────────┘
+gate = RepairGate(Recovery mode × Mask Paint, rectangle, frame range)
 ```
 
-- `DirtRemoval1` is the Advanced Dirt Removal OFX effect. It works on the values
-  as delivered, in either encoding, so no colour conversion touches the repair.
+- `DirtRemoval1` is the Advanced Dirt Removal OFX effect. Its Extended-range
+  input follows **Input encoding** (on for Cineon, whose linear values exceed 1).
+- In Cineon mode `CineonDelta` adds only the effect's change, converted back to
+  log, to the original log values: `Source + log(Repair) − log(Input)`, and the
+  exact source wherever the effect changed nothing. The log → linear → log round
+  trip therefore never touches pixels the effect left alone.
 - `RepairResult` keeps the source exactly where the gate is 0, uses the repair
-  exactly where the gate is 1 and blends in between. With the defaults and no
-  mask connected the macro's Restored view is byte-identical to the effect alone.
+  exactly where it is 1, and blends in between. With the defaults, video
+  encoding and no mask, the macro is byte-identical to the effect alone.
 - **Recovery mode** (`RepairGate.NumberIn1`): *Ignore mask*; *Mask Paint
   recovery* (default: painted areas keep the original); *Apply repair inside
-  mask* (only painted areas are repaired). The mask is the alpha of the second
-  input, so Mask Paint or Magic Mask connect directly.
+  mask* (Spanish dirt removal: only painted areas are repaired). The mask is the
+  alpha of the second input, so Mask Paint or Magic Mask connect directly.
 - **Limit to rectangle** (centre, size and feather in normalised image
   coordinates) and **Limit to frame range** (Fusion frame numbers, both ends
   included) restrict the gate further.
-
-## Motion protection (optional)
-
-Off by default (**Protect moving areas**). When on:
-
-- `InputEncoding` converts Cineon log to linear for this branch only;
-  `Deflicker1 → NoiseReduction1 → OpticalFlow1` (Resolve tools) give forward
-  and backward vectors, `MotionSpeed`/`MotionAverage` turn them into a smoothed
-  speed in pixels per frame at 2K width.
-- `MotionPrevious`/`MotionNext` (clamped to the composition range) and
-  `MotionTemporal` add the colour change between the neighbouring frames, so a
-  dirt hit in the current frame alone does not count as motion.
-- `MotionProtection` combines both with smooth thresholds (**Motion
-  sensitivity**, **Ignore small motion**, **Motion transition**, **Temporal motion
-  threshold/transition**), and `MotionMask` softens the matte. White keeps the
-  original, black allows repair.
-
-It is a heuristic: it can react to grain, occlusions or gate movement and can
-miss difficult motion. Check it with **View Mode → Motion protection** and use the
-brush where needed. It adds substantial optical-flow processing time.
+- Moving detail is handled by the effect's **Motion guard** and the brush. The
+  1.x optical-flow motion mask was removed: on fast hand motion it was about 12
+  times slower and no better than raising Motion guard.
 
 ## Views (View Mode)
 
@@ -57,7 +44,6 @@ brush where needed. It adds substantial optical-flow processing time.
 | Red difference | grey picture (**Grayscale background**, 0 = black) with changes above **Difference threshold (%)** in red, scaled by **Red difference intensity** and **Red highlight opacity** |
 | Repair eligibility | the gate: white = repair allowed |
 | Changed pixels | largest channel change × Red difference intensity |
-| Motion protection | the motion matte: white = protected |
 
 Thresholds compare RGB values in the input encoding. The effect moves pixels it
 does not repair by less than one 10-bit code value, so the threshold starts at
@@ -67,14 +53,13 @@ does not repair by less than one 10-bit code value, so the threshold starts at
 
 | Page | Controls |
 | --- | --- |
-| Controls | Source, Mask Paint/Magic Mask, Input encoding, Sensitivity, Motion guard, Repair amount, Analyse, Remove dark spots, Remove light spots, Extra sensitivity, Protect moving areas, View Mode, Difference threshold (%), Red difference intensity |
-| Advanced | Limit spot size, Largest spot (px), Blend repairs, Blend amount, Shot changes, Shot-change guard, Flash guard, Extended-range input, Analysis detail, Recovery mode, Applied repair amount, motion-protection tuning, Optical flow iterations, Difference gain, Red highlight opacity, Grayscale background, Wipe position, frame-range and rectangle limits |
+| Controls | Source, Mask Paint/Magic Mask, Input encoding; Analyse, Remove dark spots, Remove light spots, Sensitivity, Extra sensitivity (detection); Repair amount (processing); Motion guard (safeguards); View Mode, Difference threshold (%), Red difference intensity |
+| Advanced | Analysis detail, Limit spot size, Largest spot (px) (detection); Blend repairs, Blend amount (processing); Shot changes, Shot-change guard, Flash guard (safeguards); Recovery mode, Applied repair amount, Difference gain, Red highlight opacity, Grayscale background, Wipe position, frame-range and rectangle limits |
 
 The effect's controls are described in the [README](../README.md#the-advanced-dirt-removal-effect).
 
 ## Requirements
 
-- DaVinci Resolve 18 or later with the Advanced Dirt Removal OFX effect installed
-  (the installers add both).
-- Motion protection uses Resolve's Deflicker, Noise Reduction and Optical Flow
-  tools; Resolve Studio is recommended for it.
+DaVinci Resolve 18 or later with the Advanced Dirt Removal OFX effect installed
+(the installers add both). The macro no longer needs Resolve Studio's
+Deflicker, Noise Reduction or Optical Flow tools.
