@@ -5,12 +5,15 @@ file(READ "${INPUT_LIST}" INPUTS)
 set(text "")
 foreach(path IN LISTS INPUTS)
   file(READ "${path}" content)
+  string(REPLACE "\r" "" content "${content}")  # same bytes from a CRLF checkout
   get_filename_component(name "${path}" NAME)
   string(APPEND text "\n/* ---- ${name} ---- */\n${content}\n")
 endforeach()
 string(SHA256 digest "${text}")
+# Embed the exact text that was hashed. file(WRITE) writes text mode on Windows (LF becomes
+# CRLF), so the bytes are taken from memory, not read back from the .txt copy.
 file(WRITE "${OUTPUT}.txt" "${text}")
-file(READ "${OUTPUT}.txt" hex HEX)
+string(HEX "${text}" hex)
 string(LENGTH "${hex}" hex_length)
 math(EXPR byte_count "${hex_length} / 2")
 string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," bytes "${hex}")

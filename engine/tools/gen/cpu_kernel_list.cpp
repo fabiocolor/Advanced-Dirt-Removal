@@ -35,6 +35,8 @@ int main(int argc, char** argv) {
   }
   std::ifstream in(argv[1], std::ios::binary);
   std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  // The .txt copy has CRLF line ends when CMake wrote it on Windows.
+  text.erase(std::remove(text.begin(), text.end(), '\r'), text.end());
   // Drop comments (keeping line breaks), then join continued lines.
   {
     std::string clean;
