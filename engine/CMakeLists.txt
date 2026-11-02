@@ -33,7 +33,8 @@ else()
 endif()
 
 if(MSVC)
-  add_compile_options(/fp:precise /utf-8)
+  # /GT: fiber-safe thread-local storage (the CPU backend runs kernels on fibers).
+  add_compile_options(/fp:precise /utf-8 /GT)
 else()
   # Deterministic float32 results: never contract a*b+c into fused multiply-add.
   add_compile_options(-ffp-contract=off)

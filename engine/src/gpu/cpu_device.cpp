@@ -89,9 +89,15 @@ namespace {
 
 constexpr size_t kFiberStack = 64 * 1024;
 
+struct Worker;
+// A fiber belongs to one worker for life. Worker 0 is driven by whichever thread
+// calls the pool (hosts render from changing threads), so fibers can run on a
+// different OS thread than the one that created them: the fiber loop and the
+// barrier never read thread-local state, which compilers may cache per thread.
 struct Fiber {
   cpu::Item item;
   bool done = true;
+  Worker* owner = nullptr;
 #if defined(_WIN32)
   void* handle = nullptr;
 #else
@@ -106,7 +112,9 @@ struct Worker {
   const cpu::KernelEntry* kernel = nullptr;
   const cpu::LaunchView* view = nullptr;
   Fiber* current = nullptr;
-#if !defined(_WIN32)
+#if defined(_WIN32)
+  void* scheduler = nullptr;  // the fiber of the thread running this worker's current group
+#else
   void* scheduler_sp = nullptr;
 #endif
 };
@@ -121,10 +129,10 @@ thread_local bool tls_barrier_misuse = false;
 void CALLBACK fiber_proc(void* arg) {
   Fiber* f = static_cast<Fiber*>(arg);
   for (;;) {
-    Worker* w = tls_worker;
+    Worker* w = f->owner;
     w->kernel->item(*w->view, f->item);
     f->done = true;
-    SwitchToFiber(tls_scheduler);
+    SwitchToFiber(w->scheduler);
   }
 }
 #endif
@@ -142,6 +150,7 @@ void resume(Worker& w, Fiber& f) {
 Fiber& fiber_at(Worker& w, size_t index) {
   while (w.fibers.size() <= index) {
     auto f = std::make_unique<Fiber>();
+    f->owner = &w;
 #if defined(_WIN32)
     f->handle = CreateFiberEx(kFiberStack, kFiberStack, 0, fiber_proc, f.get());
     if (!f->handle) throw Error("CPU backend: cannot create a fiber");
@@ -179,6 +188,7 @@ void run_barrier_group(Worker& w, const cpu::KernelEntry& kernel, const cpu::Lau
     tls_scheduler = IsThreadAFiber() ? GetCurrentFiber() : ConvertThreadToFiberEx(nullptr, 0);
     if (!tls_scheduler) throw Error("CPU backend: cannot convert the worker thread to a fiber");
   }
+  w.scheduler = tls_scheduler;
 #endif
   w.kernel = &kernel;
   w.view = &view;
@@ -383,7 +393,7 @@ void barrier() {
     return;
   }
 #if defined(_WIN32)
-  SwitchToFiber(tls_scheduler);
+  SwitchToFiber(w->scheduler);
 #else
   adr_cpu_switch(&w->current->sp, w->scheduler_sp);
 #endif
@@ -398,7 +408,7 @@ std::unique_ptr<Device> create_cpu_device(int) { return std::make_unique<CpuDevi
 extern "C" void adr_cpu_fiber_entry(void* arg) {
   auto* f = static_cast<adr::Fiber*>(arg);
   for (;;) {
-    adr::Worker* w = adr::tls_worker;
+    adr::Worker* w = f->owner;
     w->kernel->item(*w->view, f->item);
     f->done = true;
     adr_cpu_switch(&f->sp, w->scheduler_sp);
