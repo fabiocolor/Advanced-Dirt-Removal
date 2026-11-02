@@ -88,7 +88,8 @@ var
   ResultCode: Integer;
 begin
   Result := True;
-  UninstallKey := 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppId}_is1';
+  // The AppId line (unchanged since 1.x) registers the key as '{' + id + '}}_is1'.
+  UninstallKey := 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{' + '{#MyAppId}' + '}}_is1';
   if RegQueryStringValue(HKCU, UninstallKey, 'UninstallString', UninstallStr) and SplitCommand(UninstallStr, ExePath, Params) then
     Exec(ExePath, Params + ' /VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
