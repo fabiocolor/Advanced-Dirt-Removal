@@ -60,11 +60,17 @@ def stage(manifest: Path, inputs: Path, output: Path) -> dict:
                     raise ValueError(f'archive verification failed: {name}')
                 if hashlib.sha256(archive.read(source.name)).hexdigest() != asset['sha256']:
                     raise ValueError(f'archive payload changed: {name}')
+    # The auto-recovery weights also ship as their own versioned file, under their own licence.
+    shutil.copyfile(ROOT / 'ofx' / 'resources' / 'recovery-model.bin', output / f'recovery-model-{version}.bin')
+    shutil.copyfile(ROOT / 'WEIGHTS_LICENSE', output / 'WEIGHTS_LICENSE.txt')
+    shutil.copyfile(ROOT / 'LICENSE', output / 'LICENSE')
     # Standalone release attachments need links that work outside the repository.
     for name in ('INSTALL.md', 'RELEASE_NOTES.md'):
         text = (ROOT / 'docs' / name).read_text()
-        text = re.sub(r'\]\((USER_GUIDE\.md|TESTED\.md)([^)]*)\)',
-                      rf'](https://github.com/fabiocolor/Advanced-Dirt-Removal/blob/v{version}/docs/\1\2)', text)
+        base = f'https://github.com/fabiocolor/Advanced-Dirt-Removal/blob/v{version}'
+        text = re.sub(r'\]\(((?:USER_GUIDE|TESTED|BUILD|INSTALL|RELEASE_NOTES)\.md)([^)]*)\)',
+                      rf']({base}/docs/\1\2)', text)
+        text = re.sub(r'\]\(\.\./([^)]+)\)', rf']({base}/\1)', text)
         (output / name).write_text(text)
     report = {'version': version, 'publication': 'held_for_owner_approval', 'inputs': spec['assets'],
               'downloads': {p.name: {'sha256': digest(p), 'bytes': p.stat().st_size}

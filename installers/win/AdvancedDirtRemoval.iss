@@ -39,6 +39,7 @@ LicenseFile=..\..\LICENSE
 
 [Files]
 Source: "..\..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
+Source: "..\..\WEIGHTS_LICENSE"; DestDir: "{app}"; DestName: "WEIGHTS_LICENSE.txt"; Flags: ignoreversion
 ; The OFX bundle, exactly as built (Contents\Win64\AdvancedDirtRemoval.ofx and Resources).
 Source: "{#BundleDir}\*"; DestDir: "{commoncf64}\OFX\Plugins\{#BundleName}"; Flags: ignoreversion recursesubdirs createallsubdirs
 

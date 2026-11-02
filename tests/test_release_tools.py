@@ -72,8 +72,12 @@ class ReleaseTools(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / 'docs').mkdir()
-            (root / 'docs/INSTALL.md').write_text('[Guide](USER_GUIDE.md#recovery)')
+            (root / 'docs/INSTALL.md').write_text('[Guide](USER_GUIDE.md#recovery) [Read](../README.md#licence)')
             (root / 'docs/RELEASE_NOTES.md').write_text('2.0.0 [Tests](TESTED.md)')
+            (root / 'ofx/resources').mkdir(parents=True)
+            (root / 'ofx/resources/recovery-model.bin').write_bytes(b'weights')
+            (root / 'WEIGHTS_LICENSE').write_text('CC BY-NC 4.0')
+            (root / 'LICENSE').write_text('MIT')
             inputs = root / 'inputs'
             inputs.mkdir()
             assets = []
@@ -91,7 +95,12 @@ class ReleaseTools(unittest.TestCase):
                     self.assertEqual(archive.namelist(), ['installer.exe'])
                     self.assertEqual(archive.read('installer.exe'), b'windows installer')
                 self.assertEqual((output / 'installer.exe').read_bytes(), b'windows installer')
+                self.assertEqual((output / 'recovery-model-2.0.0.bin').read_bytes(), b'weights')
+                self.assertEqual((output / 'WEIGHTS_LICENSE.txt').read_text(), 'CC BY-NC 4.0')
+                self.assertEqual((output / 'LICENSE').read_text(), 'MIT')
                 self.assertIn('/blob/v2.0.0/docs/USER_GUIDE.md#recovery', (output / 'INSTALL.md').read_text())
+                self.assertIn('](https://github.com/fabiocolor/Advanced-Dirt-Removal/blob/v2.0.0/README.md#licence)',
+                              (output / 'INSTALL.md').read_text())
                 self.assertIn('/blob/v2.0.0/docs/TESTED.md', (output / 'RELEASE_NOTES.md').read_text())
                 for line in (output / 'SHA256SUMS').read_text().splitlines():
                     digest, name = line.split('  ')

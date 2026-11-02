@@ -100,9 +100,9 @@ ADR_API int adr_sequence_pull(adr_sequence* sequence, float* rgb, size_t row_byt
                             int error_bytes);
 
 /* ---- Auto recovery ---- */
-/* A small classifier, trained on restorers' decisions, that estimates for every
- * spot the cleaning changed whether it was real picture detail to give back.
- * model_path: the recovery model file shipped with the plugin. */
+/* A small classifier that estimates, for every spot the cleaning changed,
+ * whether it was picture detail to give back.
+ * model_path: the recovery model file (weights under WEIGHTS_LICENSE). */
 typedef struct adr_recovery adr_recovery;
 ADR_API adr_recovery* adr_recovery_create(adr_context* context, const char* model_path, char* error, int error_bytes);
 ADR_API void adr_recovery_destroy(adr_recovery* recovery);

@@ -62,12 +62,13 @@ timings and any error); `ADR_LOG=off` disables it.
 ## The auto-recovery model
 
 `ofx/resources/recovery-model.bin` holds the weights of the auto-recovery
-classifier (a ResNet-18 with 13 input channels and one output, about 22 MB):
-batch normalisation folded into each convolution, weights in float16, biases in
-float32. The plugin runs it with the same kernels on every backend; no machine
-learning framework is needed at build or run time.
-`tools/convert_recovery_model.py` (needs PyTorch) writes this file from a
-training checkpoint and documents the format.
+classifier (about 22 MB). The plugin runs it with the same kernels on every
+backend, so no machine learning framework is needed to build or run it.
+`tools/convert_recovery_model.py` documents the file format.
+
+The weights are not under the MIT licence. They are under CC BY-NC 4.0
+([WEIGHTS_LICENSE](../WEIGHTS_LICENSE)), versioned per release, and only for
+non-commercial use. A build includes them in the plugin bundle.
 
 ## Determinism
 

@@ -3,7 +3,7 @@
 // back. The result is a per-pixel probability map; the host thresholds it into
 // a recovery matte the user can edit.
 //
-// Inputs follow the classifier's training conditions: RGB as 10-bit codes,
+// Model input format: RGB as 10-bit codes,
 // frames narrower than 3000 pixels enlarged 2x (bicubic) so spot sizes keep
 // their meaning, a spot = 8-connected pixels whose largest channel change is
 // more than 8 codes (at least 3 pixels), and per spot 160 x 160 crops of the
