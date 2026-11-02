@@ -75,7 +75,7 @@ per frame (a 56-frame shot in 90 to 155 s).
 | Installer | Status |
 | --- | --- |
 | macOS `.pkg` | Built from this source and inspected (universal plugin, model file, scripts); not yet installed on a clean machine |
-| Windows installer (Inno Setup) | Built from this source; silent install puts files identical to the build in the OFX folder; upgrade from 1.1.3 removes the 1.x installation and its macros; uninstall restores the OFX folder exactly (Windows 11 and Windows 10). Built with `iscc` directly; `installers/win/build_installer.ps1` itself has not been run |
+| Windows installer (Inno Setup) | Built from this source; silent install puts files identical to the build in the OFX folder; upgrade from 1.1.3 removes the 1.x installation and its macros; uninstall restores the OFX folder exactly (Windows 11 and Windows 10). `installers/win/build_installer.ps1` (Visual Studio 2022 generator) also builds a working installer |
 | Linux tarball | Built in a manylinux_2_28 container (`installers/linux/build_portable.sh`); user install, plugin load and uninstall tested on Ubuntu 24.04 |
 
 ## How the checks are run

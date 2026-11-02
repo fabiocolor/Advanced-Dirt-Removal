@@ -51,11 +51,22 @@ every output frame and the auto-recovery maps compared with macOS.
 | Clean install, files identical | not run: needs an administrator password | pass | pass | pass (user install; plugin loads) |
 | Upgrade from 1.1.3 removes 1.x | n/a | pass (after a fix) | not run | n/a |
 | Uninstall leaves nothing behind | not run | pass | pass | pass (after a fix) |
-| Resolve | pass: 21.1 Fusion page, every feature | not run: the Windows test host with Resolve scripting was held by another job all night; the free Windows hosts run a facility Resolve session | not run (same) | not run: Resolve Studio 21.0.4 does not start headless on the test machine (needs a desktop session) |
-| Nuke | pass: 17.1, every feature and control | not run: no Nuke licence on the free Windows host | not run | not run: the Linux machine with Nuke was in use |
+| Resolve | pass: 21.1 Fusion page, every feature | not run: the lab Windows host was held by a transfer job; every free facility host has a production project open on the shared project database | not run (same) | not run: Resolve Studio 21.0.4 does not start headless on the test machine (needs a desktop session) |
+| Nuke | pass: 17.1, every feature and control | not run: of the hosts with a usable Nuke licence, one was busy with the storage recovery and one with a model transfer | not run | not run: the Linux machine with Nuke was in use |
 
 Fixed during this check (all local commits): the CPU fallback on Windows
 (kernel list broken by CRLF line ends; fibers resumed on another thread
 crashed after a seek), the Windows installer's removal of 1.x, the Linux
 build on glibc before 2.34 (threads and libdl), the Linux uninstall leaving
 empty folders, and a portable Linux build script.
+
+### Release files (rebuilt from commit 2464e0b, 2026-11-02)
+
+| File | SHA-256 | Rechecked |
+| --- | --- | --- |
+| `AdvancedDirtRemoval-2.0.0.pkg` (macOS, universal) | `c78659f487c03f6ec30d4e8dad57647349919ed30a6d7f2eb0eb8ecef55fd70e` | release check Metal/OpenCL/CPU; contents inspected; scan clean |
+| `AdvancedDirtRemoval-Setup-2.0.0.exe` (Windows x64) | `97a9857990f83d8757c933571a9e8486eb6ed43827d812903adfcf1b6926f888` | release check CUDA/OpenCL/CPU; clean install (files identical), upgrade from 1.1.3, uninstall; `build_installer.ps1` also works |
+| `AdvancedDirtRemoval-2.0.0-linux-x86_64.tar.gz` | `c8c1bf0d5d4e90dcdfb20be57fff03336714781d5a7fb47cb3e66f13c93fb09c` | built with `build_portable.sh`; CPU checks in glibc 2.28; CUDA/OpenCL/CPU checks and real-footage parity on Ubuntu 24.04 |
+
+The binaries contain no build-machine paths, and the sanitize scan of the
+unpacked release files finds nothing.
