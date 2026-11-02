@@ -112,10 +112,11 @@ Restart your host afterwards. The plugin goes in the standard OFX folder:
 The [user guide](docs/USER_GUIDE.md) goes through every control, the recovery
 workflow and the views.
 
-![Advanced Dirt Removal 2.0 controls in Resolve Fusion](assets/documentation/resolve-2.0-controls.png)
+![Advanced Dirt Removal 2.0 in Resolve's Fusion page on macOS](assets/documentation/macos-resolve-2.0-restored.png)
 
-The plugin in DaVinci Resolve Studio 21.1 on macOS (Fusion page). The viewer
-shows a synthetic test clip.
+The plugin in DaVinci Resolve Studio 21.1 on macOS, Fusion page, with the
+same 1943 clip: the effect's output on the left, its controls on the right.
+[Red difference in Resolve](assets/documentation/macos-resolve-2.0-red-difference.png).
 
 | Control group | Controls |
 | --- | --- |

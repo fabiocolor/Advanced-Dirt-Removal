@@ -23,7 +23,9 @@ picture area (2816 × 2160 at x = 512) and scaled to 2048 × 1570.
 | `adr-2.0-red-difference.mp4` | The same shot in the Red difference view |
 | `adr-2.0-detail-before-after.png` | 1:1 detail of one frame, source and restored |
 | `adr-2.0-red-difference.png` | One frame in the Red difference view |
-| `resolve-2.0-controls.png` | The plugin's controls in Resolve Studio 21.1 on macOS (synthetic clip) |
+| `macos-resolve-2.0-restored.png` | The plugin in Resolve Studio 21.1 on macOS (Fusion page), Restored view, with the clip above |
+| `macos-resolve-2.0-red-difference.png` | The same, View set to Red difference |
+| `resolve-2.0-controls.png` | Earlier capture: the controls in Resolve Studio 21.1 on macOS (synthetic clip) |
 | `resolve-2.0-red-difference.png` | Red difference and its view options in Resolve (synthetic clip) |
 
 The videos and the `adr-2.0-*` stills were rendered on an Apple M5 Pro (Metal)
@@ -33,6 +35,11 @@ was drawn with the formula in the [user guide](../../docs/USER_GUIDE.md#views),
 at the default view options. Nothing was retouched. You can see what the
 effect leaves alone: the long vertical scratches stay, because they are there
 for many frames, not one.
+
+The `macos-resolve-2.0-*` screenshots are unedited captures of Resolve's
+window only (scaled to 1920 wide), taken on 2 November 2026 with the installed
+2.0.0 macOS package in Resolve Studio 21.1.1.10 on the M5 Pro. They use a
+throwaway test project in the local database, deleted afterwards.
 
 The two `resolve-2.0-*` screenshots are unedited captures of Resolve Studio
 21.1.1.10 on macOS with the installed 2.0.0 package. Their viewer shows the
