@@ -6,7 +6,7 @@
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat-square)](#install)
 
 Free, open-source dirt and dust removal for film scans. I made it for archives,
-educators and small restoration projects that can't pay for the big tools.
+educators and small restoration projects.
 
 Advanced Dirt Removal is an OFX plugin with its own temporal repair engine. It
 looks for dirt, dust and sparkle that appear in one frame only, and fills those
