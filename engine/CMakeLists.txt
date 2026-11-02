@@ -78,6 +78,9 @@ target_include_directories(adr_engine_objects PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_definitions(adr_engine_objects PRIVATE ADR_BUILDING_SHARED)
 set(ADR_LINK_LIBS "")
+# The engine and the plugin use threads; glibc before 2.34 keeps them in libpthread.
+find_package(Threads REQUIRED)
+list(APPEND ADR_LINK_LIBS Threads::Threads)
 
 if(ADR_WITH_METAL)
   target_sources(adr_engine_objects PRIVATE src/gpu/metal_device.mm)
