@@ -51,7 +51,7 @@ every output frame and the auto-recovery maps compared with macOS.
 | Clean install, files identical | not run: needs an administrator password | pass | pass | pass (user install; plugin loads) |
 | Upgrade from 1.1.3 removes 1.x | n/a | pass (after a fix) | not run | n/a |
 | Uninstall leaves nothing behind | not run | pass | pass | pass (after a fix) |
-| Resolve | pass: 21.1 Fusion page, every feature | not run: Resolve on Windows needs a logged-in desktop session (it does not initialise from a service session); the lab workstation was at the login screen | not run (same) | not run: Resolve Studio 21.0.4 does not start headless on the test machine (needs a desktop session) |
+| Resolve | pass: 21.1 Fusion page, every feature | pass: Resolve Studio 21.0.4 (Fusion page) on Windows 11, RTX 3090, installed from the release installer: output identical to macOS; views, auto recovery, Spanish dirt removal and its error, Cineon checked | not run (same) | not run: Resolve Studio 21.0.4 does not start headless on the test machine (needs a desktop session) |
 | Nuke | pass: 17.1, every feature and control | pass: Nuke 17.0 (Indie) on Windows 11, RTX 3090, installed from the release installer: output identical to macOS; views, auto recovery, masks, Spanish dirt removal and its error all checked | not run | not run: the Linux machine with Nuke was in use |
 
 Fixed during this check (all local commits): the CPU fallback on Windows
