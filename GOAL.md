@@ -92,7 +92,9 @@ shipping it. The sanitizer checks unpacked payloads and newly introduced
 history separately from the accepted older public history.
 
 The macOS install and installed-plugin render checks passed on 2 November.
-Fresh 2.0 screenshots use a synthetic clip and are linked from the README.
+The README shows a before/after detail and short videos of a public-domain
+1943 US Navy film, plus the Resolve screenshots with a synthetic clip
+(`assets/documentation/README.md`).
 `tools/stage_release.py` assembles downloads only after all three installer
 hashes match the manifest; see [docs/MAINTAINERS_RELEASE.md](docs/MAINTAINERS_RELEASE.md).
 
