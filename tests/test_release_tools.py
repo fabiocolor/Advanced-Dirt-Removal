@@ -90,6 +90,7 @@ class ReleaseTools(unittest.TestCase):
                 with zipfile.ZipFile(output / 'AdvancedDirtRemoval-Setup-2.0.0-win64.zip') as archive:
                     self.assertEqual(archive.namelist(), ['installer.exe'])
                     self.assertEqual(archive.read('installer.exe'), b'windows installer')
+                self.assertEqual((output / 'installer.exe').read_bytes(), b'windows installer')
                 self.assertIn('/blob/v2.0.0/docs/USER_GUIDE.md#recovery', (output / 'INSTALL.md').read_text())
                 self.assertIn('/blob/v2.0.0/docs/TESTED.md', (output / 'RELEASE_NOTES.md').read_text())
                 for line in (output / 'SHA256SUMS').read_text().splitlines():

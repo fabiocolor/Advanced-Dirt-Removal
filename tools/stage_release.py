@@ -45,6 +45,9 @@ def stage(manifest: Path, inputs: Path, output: Path) -> dict:
         if platform == 'linux':
             shutil.copyfile(source, output / source.name)
         else:
+            if platform == 'windows':
+                # As in 1.x: the raw setup program is attached too, for winget.
+                shutil.copyfile(source, output / source.name)
             name = (f'AdvancedDirtRemoval-{version}-macos.zip' if platform == 'macos'
                     else f'AdvancedDirtRemoval-Setup-{version}-win64.zip')
             with zipfile.ZipFile(output / name, 'x', compression=zipfile.ZIP_DEFLATED) as archive:
