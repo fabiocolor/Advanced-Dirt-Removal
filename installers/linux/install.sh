@@ -11,6 +11,8 @@ if [ "$(id -u)" = 0 ]; then OFX_DIR=/usr/OFX/Plugins; else OFX_DIR="$HOME/OFX/Pl
 
 if [ "${1:-}" = "--uninstall" ]; then
   rm -rf "$OFX_DIR/$BUNDLE"
+  # Remove the plugin folders too if the install created them and nothing else is there.
+  rmdir "$OFX_DIR" 2>/dev/null && rmdir "$(dirname "$OFX_DIR")" 2>/dev/null || true
   echo "Advanced Dirt Removal uninstalled."
   exit 0
 fi
