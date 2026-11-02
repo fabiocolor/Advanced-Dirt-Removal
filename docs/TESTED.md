@@ -66,7 +66,8 @@ per frame (a 56-frame shot in 90 to 155 s).
 | DaVinci Resolve, Color and Edit pages | any | Not tested |
 | Nuke 17.1 | macOS, Metal | Tested: every feature (table above) |
 | DaVinci Resolve | Windows, Linux | 2.0 not tested yet (earlier development builds of the cleaning effect ran in Resolve Studio 21 and free 20 on Windows) |
-| Nuke | Windows, Linux | 2.0 not tested yet (an earlier development build of the cleaning effect ran in Nuke 17 on Windows) |
+| Nuke 17.0 (Indie) | Windows 11, RTX 3090 (CUDA) | Tested with the release installer on a 12-frame scan: every frame identical to macOS; Red difference, auto recovery (maps identical to macOS), Rectangle mask recovery, Spanish dirt removal, the Spanish + auto recovery error, and rendering again after fixing it |
+| Nuke | Linux | 2.0 not tested yet |
 | Other OFX hosts (Fusion Studio, Flame, Baselight and others) | any | Not tested |
 | Adobe Premiere Pro, After Effects | any | Not supported yet (they do not load OFX plugins; an adapter is planned) |
 
