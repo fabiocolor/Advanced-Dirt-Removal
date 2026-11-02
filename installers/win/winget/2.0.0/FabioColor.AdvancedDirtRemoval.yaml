@@ -1,0 +1,10 @@
+# DRAFT - pending approval. Not submitted to microsoft/winget-pkgs.
+# Submit only after the v2.0.0 release is live and the downloaded installer
+# matches InstallerSha256. See docs/MAINTAINERS_RELEASE.md (winget).
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.12.0.schema.json
+
+PackageIdentifier: FabioColor.AdvancedDirtRemoval
+PackageVersion: 2.0.0
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.12.0

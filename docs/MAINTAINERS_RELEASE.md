@@ -41,10 +41,35 @@ python3 -m unittest discover -s tests -p 'test_release_tools.py' -v
 | Windows | `powershell -ExecutionPolicy Bypass -File installers\win\build_installer.ps1 -Version 2.0.0` | `installers\AdvancedDirtRemoval-Setup-2.0.0.exe` |
 | Linux | `sh installers/linux/build_portable.sh 2.0.0` (Docker; glibc 2.28) | `installers/linux/build/AdvancedDirtRemoval-2.0.0-linux-x86_64.tar.gz` |
 
-Release assets: the macOS `.pkg` and Windows `.exe` each in a ZIP
-(`AdvancedDirtRemoval-<version>-macos.zip`, `AdvancedDirtRemoval-Setup-<version>-win64.zip`),
-the Linux tarball, `INSTALL.md` and a `SHA256SUMS` file. Use the version's
-section of [RELEASE_NOTES.md](RELEASE_NOTES.md) as the release description.
+Release assets, packaged the same way as 1.x:
+
+- `AdvancedDirtRemoval-<version>-macos.zip` (the `.pkg`)
+- `AdvancedDirtRemoval-Setup-<version>-win64.zip` and the plain
+  `AdvancedDirtRemoval-Setup-<version>.exe` (winget installs from the `.exe`)
+- `AdvancedDirtRemoval-<version>-linux-x86_64.tar.gz`
+- `recovery-model-<version>.bin` and `WEIGHTS_LICENSE.txt`: the auto-recovery
+  weights as their own versioned file, under CC BY-NC 4.0
+- `LICENSE` (MIT, for the code), `INSTALL.md`, `RELEASE_NOTES.md`,
+  `release-manifest.json` and `SHA256SUMS`
+
+Use the version's section of [RELEASE_NOTES.md](RELEASE_NOTES.md) as the
+release description. `tools/stage_release.py` writes all of these.
+
+### Model weights
+
+The weights in `ofx/resources/recovery-model.bin` are versioned per release
+and licensed separately from the code (CC BY-NC 4.0, `WEIGHTS_LICENSE`). When
+they change, add the new version and SHA-256 to `WEIGHTS_LICENSE` and
+`ofx/resources/README.md`, and treat it as a processing change: new evidence,
+new installers. Don't publish training code, data, recipes or provenance
+details for the model.
+
+Builds from this source put `WEIGHTS_LICENSE.txt` inside the plugin bundle and
+next to the Windows and Linux installs. The 2.0.0 candidate installers pinned
+in [`release/2.0.0.json`](../release/2.0.0.json) were built before that, so
+for 2.0.0 the weights licence reaches users as a release attachment and in
+the repository. Embedding it in the 2.0.0 installers means rebuilding them and
+repeating their checks.
 
 ### Assemble the checked candidate
 
@@ -82,16 +107,25 @@ Update winget only after its installer URL is live and its downloaded bytes
 match the checksum. Check that it installs 2.0.0 before removing the warning
 that winget still provides 1.1.3.
 
-macOS: the bundle is ad hoc signed by default, and an unsigned package is
-blocked by Gatekeeper until the user allows it in System Settings → Privacy &
-Security. For distribution build with
-`-DADR_CODESIGN_IDENTITY="Developer ID Application: ..."`, sign the package with
-`ADR_PKG_SIGN_IDENTITY="Developer ID Installer: ..."` and notarize it.
+Releases are unsigned by decision: no Apple Developer ID, no notarization and
+no Windows code-signing certificate. The macOS bundle is ad hoc signed (Apple
+silicon hosts need that) and the package is unsigned, so Gatekeeper and
+SmartScreen warn on first use. [INSTALL.md](INSTALL.md) has the steps for
+users. If that ever changes, the build already accepts
+`-DADR_CODESIGN_IDENTITY="Developer ID Application: ..."` and
+`ADR_PKG_SIGN_IDENTITY="Developer ID Installer: ..."`, followed by
+notarization.
 
 ## winget
 
+A draft 2.0.0 manifest is in
+[`installers/win/winget/2.0.0`](../installers/win/winget/2.0.0), marked as
+pending approval. Submit it to microsoft/winget-pkgs only after the release is
+live, and check that the downloaded `.exe` matches `InstallerSha256` and
+installs 2.0.0.
+
 The 2.0 installer is a machine-wide install (the OFX folder needs administrator
-rights); 1.x was per user. Update the `FabioColor.AdvancedDirtRemoval` manifest:
+rights); 1.x was per user. The manifest therefore uses:
 
 - `Scope: machine`, `ElevationRequirement: elevatesSelf`
 - `ProductCode: {B8A6D2C1-7C2D-4E5A-9C7B-1F2F46B6E9F2}}_is1` (the AppId line,
@@ -100,5 +134,5 @@ rights); 1.x was per user. Update the `FabioColor.AdvancedDirtRemoval` manifest:
   - `Silent: /VERYSILENT /SUPPRESSMSGBOXES /NOCANCEL /NORESTART /SP-`
   - `SilentWithProgress: /SILENT /SUPPRESSMSGBOXES /NOCANCEL /NORESTART /SP-`
 
-The former GitHub Actions release workflow is kept for reference only in
-`.ci-archive/github-actions/` and is not run.
+There are no GitHub Actions or CI workflows. The old release workflow is kept
+for reference only in `.ci-archive/github-actions/` and never runs.

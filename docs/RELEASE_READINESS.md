@@ -47,6 +47,27 @@ The build revisions in the manifest are intentional. Rebuilding an installer
 creates a new candidate requiring the relevant checks and a manifest update.
 Do not replace tested downloads with an unchecked rebuild from the final tag.
 
+## Docs, licensing and media pass (2 November, evening)
+
+- Docs rewritten in plain language and checked against [STYLE.md](STYLE.md):
+  README, INSTALL, USER_GUIDE, RELEASE_NOTES, a new top-level CHANGELOG.
+- Install steps for unsigned releases on each platform: Gatekeeper (Open
+  Anyway, right-click → Open, `xattr`), SmartScreen (More info → Run anyway)
+  and Linux. Releases stay unsigned by decision.
+- The auto-recovery weights are now licensed separately from the code:
+  CC BY-NC 4.0 in `WEIGHTS_LICENSE`, weights version 2.0.0
+  (`cce1862a…`). The code stays MIT. New builds carry `WEIGHTS_LICENSE.txt` in
+  the bundle. The pinned 2.0.0 installers predate this, so the weights licence
+  reaches 2.0.0 users as a release attachment (see
+  [MAINTAINERS_RELEASE.md](MAINTAINERS_RELEASE.md#model-weights)).
+- `stage_release.py` now also attaches the plain Windows `.exe` (as in 1.x),
+  `recovery-model-2.0.0.bin`, `WEIGHTS_LICENSE.txt` and `LICENSE`. The staged
+  candidate in `release-candidate-r2` predates this; stage a new candidate
+  directory before publishing.
+- Draft winget manifest in `installers/win/winget/2.0.0`, pending approval.
+- `check_release.py build` passes on the M5 Pro (Metal, OpenCL, CPU) after the
+  build change; no processing code changed.
+
 ## Remaining launch actions
 
 1. Fabio reviews the candidate and explicitly approves the first public push

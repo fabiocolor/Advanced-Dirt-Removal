@@ -1,9 +1,10 @@
 # Advanced Dirt Removal 2.0: user guide
 
-Advanced Dirt Removal is one OFX effect. It finds dirt, dust and sparkle that
-appear in a single frame and repairs them from the neighbouring frames. It also
-includes a way to give back detail that should not have been repaired, the
-recovery mask and auto recovery, and views for checking what changed.
+Advanced Dirt Removal is one OFX effect. It looks for dirt, dust and sparkle
+that appear in a single frame and fills them from the neighbouring frames. So it
+masks damage with picture from nearby frames; it doesn't invent detail. It also
+has ways to give back detail that shouldn't have been repaired (the recovery
+mask and auto recovery), and views to check what changed.
 
 - [Adding the effect](#adding-the-effect)
 - [Input encoding](#input-encoding)
@@ -28,7 +29,7 @@ inputs: **Source** (the clip) and an optional **Mask**.
 - **Other OFX hosts:** look for the FabioColor group.
 
 Give the effect the complete, unedited shot. It uses the two frames before and
-the two after the frame being repaired, and it plays the shot through from its
+the two after the frame being repaired. It also plays the shot through from its
 first frame, so the first render of a shot takes longer than later ones.
 The effect needs whole frames of 256 to 16,384 pixels per side. It works on the
 RGB values as the host delivers them (float, half or 16-bit) and copies alpha
@@ -50,7 +51,7 @@ The first control. Pick what the values entering the effect are:
 
 On the **Cleaning** page (in hosts that show pages), in three groups. Start with
 the defaults. If real detail is being removed, lower **Sensitivity** or raise
-**Motion guard**; if dirt remains, raise **Sensitivity** or try **Analyse: RGB**.
+**Motion guard**. If dirt remains, raise **Sensitivity** or try **Analyse: RGB**.
 
 | Control | Default | What it does |
 | --- | --- | --- |
@@ -80,7 +81,7 @@ shot again, and auto recovery calculates a new matte for the new settings.
 ## Recovery
 
 Automatic repair sometimes removes things that belong to the picture: a
-fast-moving hand, a spark, a highlight. Recovery gives the original back there.
+fast-moving hand, a spark, a highlight. Recovery puts the original back there.
 The **Recovery** group holds:
 
 | Control | Default | What it does |
@@ -100,9 +101,12 @@ has no alpha), so a Mask Paint, Magic Mask, roto shape or plain alpha all work.
 
 ### Auto recovery
 
-A small neural network, trained on restorers' decisions about which repaired
-spots were real picture detail, looks at every spot the effect repaired and gives
-it a probability. Spots at or above **Confidence** are given back.
+A small neural network looks at every spot the effect repaired and gives it a
+probability of being real picture detail. Spots at or above **Confidence** are
+given back. It gets a lot right, but only up to a point: some real detail stays
+repaired and some dirt comes back. Check the matte and paint over the mistakes.
+The model's weights are under CC BY-NC 4.0, not the MIT licence of the code
+([WEIGHTS_LICENSE](../WEIGHTS_LICENSE)).
 
 - **Calculate recovery** works through the whole shot and saves one probability
   map per frame. The button returns immediately; the calculation runs with the
@@ -179,8 +183,8 @@ Mask input) the output is exactly the cleaned frame.
 ## Diagnostics, speed and limits
 
 - **Same result everywhere.** Every GPU backend (Metal, CUDA, OpenCL) and the CPU
-  fallback give byte-identical results, so a render on one machine matches a
-  render on any other. Auto-recovery maps are also identical between hosts.
+  fallback give identical output, so a render on one machine matches a render
+  on another. Auto-recovery maps are identical between hosts too.
 - **Speed.** On an Apple M5 Pro (Metal) a 2368×1712 frame cleans in about 0.1 s.
   The CPU fallback works without a GPU but is much slower.
 - **Backend.** The effect tries Metal, CUDA, OpenCL, then the CPU, and uses the
@@ -215,9 +219,8 @@ Mask input) the output is exactly the cleaned frame.
 
 Version 1.x was a Fusion macro for DaVinci Resolve that wrapped Resolve's
 built-in dirt removal. Version 2.0 is a stand-alone effect with its own repair
-engine that works in any OFX host, and everything the macro did is now built in:
-the encoding choice, the recovery brush, Spanish dirt removal and the red
-difference view. The optical-flow motion mask of 1.x is replaced by **Motion
+engine, for OFX hosts. Everything the macro did is built in now: the encoding
+choice, the recovery brush, Spanish dirt removal and the red difference view. The optical-flow motion mask of 1.x is replaced by **Motion
 guard** and auto recovery. On macOS and Linux, installing 2.0 leaves a 1.x
 macro in place; on Windows the installer replaces the 1.x installation
 ([INSTALL.md](INSTALL.md)).

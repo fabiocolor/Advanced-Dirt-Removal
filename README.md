@@ -1,67 +1,91 @@
 # Advanced Dirt Removal
 
 [![Version](https://img.shields.io/badge/version-2.0.0-blue?style=flat-square)](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases)
-[![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
+[![Code licence](https://img.shields.io/badge/code-MIT-green?style=flat-square)](LICENSE)
+[![Weights licence](https://img.shields.io/badge/model%20weights-CC%20BY--NC%204.0-orange?style=flat-square)](WEIGHTS_LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat-square)](#install)
-[![Download](https://img.shields.io/badge/Download-Latest%20Release-brightgreen?style=for-the-badge&logo=download)](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases/latest)
 
-Free, open-source dirt and dust removal for film scans, made for archives,
-educators and restoration projects.
+Free, open-source dirt and dust removal for film scans. I made it for archives,
+educators and small restoration projects that can't pay for the big tools.
 
 Advanced Dirt Removal is an OFX plugin with its own temporal repair engine. It
-finds dirt, dust and sparkle that appear in one frame only and repairs them from
-the neighbouring frames, with motion compensation. It runs on the GPU (Apple
-Metal, NVIDIA CUDA, OpenCL for AMD, Intel and NVIDIA) and falls back to the CPU,
-with byte-identical results on all of them.
+looks for dirt, dust and sparkle that appear in one frame only, and fills those
+spots from the frames before and after, with motion compensation. So it masks
+the damage using picture that is really there in the neighbouring frames. It
+doesn't invent detail, and it can't fix damage that stays in the same place for
+several frames, like a long scratch or a hair in the gate.
 
-Everything is in one effect:
+It runs on the GPU (Apple Metal, NVIDIA CUDA, and OpenCL for AMD, Intel and
+NVIDIA) and falls back to the CPU. You get the same result on all of them, so a
+render on one machine matches a render on another.
 
-- **Input encoding:** Video, or Cineon log for film scans (cleaned in linear,
-  untouched pixels keep their exact log values).
-- **Recovery mask:** paint where the original should be kept.
-- **Auto recovery:** a built-in model gives back repaired spots that were real
-  picture detail. One button calculates a matte for the whole shot, saved to
-  disk; paint on top of it to add or remove areas.
+<!-- MEDIA:before-after -->
+
+## What's in it
+
+One effect does everything:
+
+- **Input encoding:** Video, or Cineon log for film scans. Cineon is cleaned in
+  linear, and pixels it doesn't touch keep their exact log values.
+- **Recovery mask:** paint where you want the original back.
+- **Auto recovery:** a small built-in model looks at every repaired spot and
+  gives back the ones that look like real picture detail. It works up to a
+  point, so check it and paint over what it gets wrong.
 - **Spanish dirt removal:** repair only where you paint.
 - **Views:** Restored, Red difference (every repair in red on a grey picture),
   True difference and the auto-recovery matte.
 
-> **New in 2.0:** version 1.x was a Fusion macro around DaVinci Resolve's
+<!-- MEDIA:red-difference -->
+
+> **New in 2.0.** Version 1.x was a Fusion macro around DaVinci Resolve's
 > built-in dirt removal. 2.0 is a stand-alone plugin with its own engine, for
-> DaVinci Resolve, Nuke and other OFX hosts on macOS, Windows and Linux.
-> [docs/TESTED.md](docs/TESTED.md) lists exactly which hosts, systems and GPUs
-> have been tested, and [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md) what is
-> new.
+> Resolve, Nuke and other OFX hosts on macOS, Windows and Linux. What changed:
+> [CHANGELOG.md](CHANGELOG.md). What has been tested: [docs/TESTED.md](docs/TESTED.md).
 
-**2.0.0 release candidate:** publication is pending. The existing public
-downloads and winget package still contain 1.1.3 until the 2.0 release is
-published. The source and instructions below describe 2.0.
-
-![Advanced Dirt Removal 2.0 controls in Resolve Fusion](assets/documentation/resolve-2.0-controls.png)
-
-The current plugin in Resolve Studio 21.1. The viewer contains a generated
-synthetic test clip; this screenshot documents the controls, not film quality.
+**2.0.0 is not published yet.** Until it is, the releases page and winget still
+give you 1.1.3. Everything below describes 2.0.
 
 ## Install
 
-**macOS:** download `AdvancedDirtRemoval-<version>.pkg` from the
-[latest release](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases/latest)
-and open it.
+The installers are unsigned. I don't pay for an Apple Developer ID or a Windows
+code-signing certificate, so the first time you'll get a warning. This is
+how to get past it. Full details, manual installation and uninstalling are in
+[docs/INSTALL.md](docs/INSTALL.md).
 
-**Windows:**
+**macOS.** Download `AdvancedDirtRemoval-<version>-macos.zip` from the
+[releases page](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases),
+unzip it and open the `.pkg`. macOS will block it the first time:
 
-```powershell
-winget install FabioColor.AdvancedDirtRemoval
+- macOS 15 and later: System Settings → Privacy & Security → **Open Anyway**.
+- macOS 14 and earlier: right-click the `.pkg` → **Open** → **Open**.
+
+Or remove the quarantine flag in Terminal and open it normally:
+
+```sh
+xattr -dr com.apple.quarantine ~/Downloads/AdvancedDirtRemoval-<version>.pkg
 ```
 
-or download the installer from the latest release.
+**Windows.** Download `AdvancedDirtRemoval-Setup-<version>.exe` (or the
+`-win64.zip` and extract it) and run it. When SmartScreen says "Windows
+protected your PC", click **More info** → **Run anyway**. It needs
+administrator rights for the shared OFX folder.
 
-**Linux:** download `AdvancedDirtRemoval-<version>-linux-x86_64.tar.gz`, extract
-it and run `sudo ./install.sh`.
+winget: a 2.0.0 manifest is drafted in
+[`installers/win/winget/2.0.0`](installers/win/winget/2.0.0) and is pending
+approval. As it is right now, `winget install FabioColor.AdvancedDirtRemoval`
+still installs 1.1.3.
 
-The installers put the plugin in the standard OFX plugin folder. Restart your
-host afterwards. Manual installation, folder locations and uninstalling:
-[docs/INSTALL.md](docs/INSTALL.md).
+**Linux.**
+
+```sh
+tar -xzf AdvancedDirtRemoval-<version>-linux-x86_64.tar.gz
+cd AdvancedDirtRemoval-<version>-linux-x86_64
+sudo ./install.sh
+```
+
+Restart your host afterwards. The plugin goes in the standard OFX folder:
+`/Library/OFX/Plugins` (macOS), `C:\Program Files\Common Files\OFX\Plugins`
+(Windows) or `/usr/OFX/Plugins` (Linux).
 
 ## Quick start
 
@@ -69,20 +93,17 @@ host afterwards. Manual installation, folder locations and uninstalling:
    unedited shot:
    - **DaVinci Resolve:** Fusion page → Add Tool → OpenFX → FabioColor.
    - **Nuke:** Tab → "Advanced Dirt Removal".
-2. Set **Input encoding** to *Cineon log* for Cineon scans; leave *Video*
+2. Set **Input encoding** to *Cineon log* for Cineon scans. Leave *Video*
    otherwise.
-3. Check the result with **View: Red difference**.
-4. Where a real detail was repaired, press **Calculate recovery** for auto
+3. Check what it did with **View: Red difference**.
+4. Where it repaired real detail, press **Calculate recovery** for auto
    recovery, and/or connect a paint or mask tool to the **Mask** input and paint
    the original back.
 
-The [user guide](docs/USER_GUIDE.md) describes every control, the recovery
+The [user guide](docs/USER_GUIDE.md) goes through every control, the recovery
 workflow and the views.
 
-![Red Difference in the 2.0 plugin](assets/documentation/resolve-2.0-red-difference.png)
-
-Red Difference marks repairs on the same synthetic clip. These are unedited
-screenshots of the installed macOS package.
+<!-- MEDIA:screenshots -->
 
 | Control group | Controls |
 | --- | --- |
@@ -93,9 +114,20 @@ screenshots of the installed macOS package.
 | Recovery | Mask (Recovery / Spanish dirt removal), Calculate recovery, Auto recovery, Confidence, Matte folder |
 | View options | Difference threshold, Red difference intensity, Red highlight opacity, Grayscale background, Difference gain |
 
-The plugin keeps a diagnostic log (backend, device, timing, errors); its
+## Limits
+
+- Very fast motion can look like dirt. Raise **Motion guard**, use auto
+  recovery and paint back what is left. Always review moving shots.
+- Damage that stays for more than a frame or two isn't touched.
+- Interlaced material isn't supported. Deinterlace first.
+- Tested hosts are DaVinci Resolve Studio 21 (Fusion page) and Nuke 17 on
+  macOS, Windows and Linux. The Resolve Color and Edit pages, other OFX hosts
+  and Intel Macs haven't been tested yet. Premiere Pro and After Effects don't
+  load OFX plugins, so they aren't supported yet.
+
+The plugin keeps a diagnostic log (backend, device, timing, errors). Its
 location is in the [user guide](docs/USER_GUIDE.md#diagnostics-speed-and-limits).
-Please attach it to issue reports.
+Please attach it when you report a problem.
 
 ## Build from source
 
@@ -105,21 +137,32 @@ cmake --build build --config Release --parallel
 python3 tools/check_release.py build
 ```
 
-Options for CUDA, OpenCL and the CPU fallback, and the local checks:
-[docs/BUILD.md](docs/BUILD.md). There is no CI service; releases are built and
-checked locally.
+Options for CUDA, OpenCL and the CPU fallback are in [docs/BUILD.md](docs/BUILD.md).
+There is no CI service. Releases are built and checked locally.
 
 ## Support
 
 - Issues: [GitHub Issues](https://github.com/fabiocolor/Advanced-Dirt-Removal/issues)
 - Discussions: [GitHub Discussions](https://github.com/fabiocolor/Advanced-Dirt-Removal/discussions)
 
-## License
+Results from hosts, systems and GPUs I haven't tested are very welcome.
 
-MIT; see [LICENSE](LICENSE), including the auto-recovery model weights in
-`ofx/resources`. The OpenFX headers in `ofx/vendor/openfx` are under
-their own BSD 3-Clause licence ([ofx/vendor/openfx/LICENSE.md](ofx/vendor/openfx/LICENSE.md)).
+## Licence
+
+The code and the model weights have different licences.
+
+- **Source code:** MIT. See [LICENSE](LICENSE).
+- **Auto-recovery model weights** (`ofx/resources/recovery-model.bin`, also
+  installed inside the plugin): CC BY-NC 4.0, for non-commercial use only. See
+  [WEIGHTS_LICENSE](WEIGHTS_LICENSE). The weights are versioned per release and
+  each release also attaches them as a separate file.
+- **OpenFX headers** in `ofx/vendor/openfx`: BSD 3-Clause, see
+  [ofx/vendor/openfx/LICENSE.md](ofx/vendor/openfx/LICENSE.md).
+
+Commercial licensing available — contact Fabio.
+You can reach me through [GitHub](https://github.com/fabiocolor) or the
+[Discussions](https://github.com/fabiocolor/Advanced-Dirt-Removal/discussions) page.
 
 <div align="center">
-  <sub>Making film restoration accessible to archives, educators and preservation enthusiasts</sub>
+  <sub>Film restoration tools for archives, educators and preservation projects</sub>
 </div>

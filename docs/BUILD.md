@@ -13,8 +13,8 @@ cmake --build build --config Release --parallel
 ```
 
 The plugin is written to `build/AdvancedDirtRemoval.ofx.bundle`, with the
-auto-recovery model (`ofx/resources/recovery-model.bin`) in its `Resources`
-folder. Copy the whole
+auto-recovery model (`ofx/resources/recovery-model.bin`) and its licence
+(`WEIGHTS_LICENSE.txt`, CC BY-NC 4.0) in its `Resources` folder. Copy the whole
 bundle to your host's OFX plugin folder (see [INSTALL.md](INSTALL.md)).
 
 ## Options

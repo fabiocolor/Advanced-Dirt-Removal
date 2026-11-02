@@ -12,8 +12,9 @@ A free, open-source temporal dirt-repair plugin that anyone can build and use:
   hosts. An Adobe Premiere Pro / After Effects adapter comes later.
 - Systems: macOS, Windows and Linux. GPUs: Apple, AMD and NVIDIA (Intel through
   OpenCL).
-- MIT licence, buildable with CMake, checked locally with
-  `tools/check_release.py` (there is no CI service).
+- Code under the MIT licence; the auto-recovery model weights under CC BY-NC
+  4.0 (`WEIGHTS_LICENSE`), versioned per release. Buildable with CMake, checked
+  locally with `tools/check_release.py` (there is no CI service).
 
 ## Where things stand
 
@@ -98,8 +99,10 @@ hashes match the manifest; see [docs/MAINTAINERS_RELEASE.md](docs/MAINTAINERS_RE
 ### Before publishing (owner)
 
 - Review the assembled candidate and the documented untested host/OS scope.
-- The Mac package is unsigned (the bundle is ad hoc signed). No Developer ID
-  identity is installed on the build Mac. Signing/notarization can be added
-  when an identity is available; the unsigned installation path is documented.
+- Releases stay unsigned by decision (no Apple Developer ID, notarization or
+  Windows code-signing certificate). The macOS bundle is ad hoc signed. The
+  Gatekeeper and SmartScreen steps are in docs/INSTALL.md.
+- The winget 2.0.0 manifest is a draft in `installers/win/winget/2.0.0`,
+  pending approval; submit it after the release is live.
 - Approve the first push. The older public history keeps its earlier
   references by decision of 1 November 2026; the new commits are clean.
