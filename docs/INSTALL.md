@@ -31,7 +31,9 @@ Uninstall: Settings → Apps → Advanced Dirt Removal → Uninstall.
 ## macOS
 
 Download `AdvancedDirtRemoval-<version>.pkg` (in `AdvancedDirtRemoval-<version>-macos.zip`)
-and open it. If a previous version is installed, the installer asks whether to
+and open it. If macOS says the package cannot be opened because it is
+from an unidentified developer, open System Settings → Privacy & Security and
+choose **Open Anyway**. If a previous version is installed, the installer asks whether to
 replace it or only uninstall it.
 
 Installed to: `/Library/OFX/Plugins/AdvancedDirtRemoval.ofx.bundle`
@@ -49,6 +51,8 @@ sudo ./install.sh              # sudo ./install.sh --uninstall to remove
 
 Installed to: `/usr/OFX/Plugins/AdvancedDirtRemoval.ofx.bundle` (without `sudo`:
 `~/OFX/Plugins`; then start the host with `OFX_PLUGIN_PATH=$HOME/OFX/Plugins`).
+DaVinci Resolve looks in `/usr/OFX/Plugins`, so use `sudo` for Resolve. The
+plugin needs glibc 2.27 or newer.
 
 ## Manual installation
 
@@ -68,7 +72,8 @@ variable.
 
 - macOS 12 or later (Apple silicon or Intel), Windows 10/11 x64, or Linux x86-64
   with glibc 2.27 or newer (Rocky/Alma Linux 8 and later, Ubuntu 20.04 and later).
-- A GPU with Metal, CUDA (NVIDIA, compute capability 7.5 or newer) or OpenCL 1.2;
-  otherwise the effect runs on the CPU, much more slowly.
+- A GPU with Metal, CUDA (NVIDIA, compute capability 7.5 or newer) or OpenCL 1.2.
+  Older NVIDIA GPUs use OpenCL automatically. Without a usable GPU the effect
+  runs on the CPU, much more slowly.
 - Auto recovery stores its mattes in the user's application data folder (a few
   megabytes per shot); see the [user guide](USER_GUIDE.md#auto-recovery).

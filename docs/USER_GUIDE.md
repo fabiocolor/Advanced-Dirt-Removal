@@ -183,9 +183,11 @@ Mask input) the output is exactly the cleaned frame.
   render on any other. Auto-recovery maps are also identical between hosts.
 - **Speed.** On an Apple M5 Pro (Metal) a 2368×1712 frame cleans in about 0.1 s.
   The CPU fallback works without a GPU but is much slower.
-- **Backend.** The effect tries Metal, CUDA, OpenCL, then the CPU. Set
-  `ADR_BACKEND=metal|cuda|opencl|cpu` (optionally `opencl:1` for a device) to
-  force one.
+- **Backend.** The effect tries Metal, CUDA, OpenCL, then the CPU, and uses the
+  first that works. CUDA needs an NVIDIA GPU with compute capability 7.5
+  (Turing) or newer; older NVIDIA GPUs, such as the Quadro P5000, use OpenCL
+  automatically. Set `ADR_BACKEND=metal|cuda|opencl|cpu` (optionally
+  `opencl:1` for a device) to force one.
 - **Log.** The effect keeps a diagnostic log (backend, device, timing, errors):
   `~/Library/Logs/FabioColor/AdvancedDirtRemoval` (macOS),
   `%LOCALAPPDATA%\FabioColor\AdvancedDirtRemoval\Logs` (Windows),
@@ -197,13 +199,13 @@ Mask input) the output is exactly the cleaned frame.
 
 ## Host notes
 
-- **DaVinci Resolve, Fusion page:** tested. Fusion shows all controls on one
-  page; it does not use the effect's pages. A mask made
-  at another resolution covers the same picture (Fusion is
-  resolution-independent).
+- **DaVinci Resolve, Fusion page:** tested with Resolve Studio 21 on macOS,
+  Windows and Linux. Fusion shows all controls on one page; it does not use
+  the effect's pages. A mask made at another resolution covers the same
+  picture (Fusion is resolution-independent).
 - **DaVinci Resolve, Color page:** not tested yet. The plan is for the effect to
   work there too.
-- **Nuke:** tested. The mask is read at the same pixel position as the source
+- **Nuke:** tested with Nuke 17 on macOS, Windows and Linux. The mask is read at the same pixel position as the source
   (Nuke's usual behaviour); a mask with a smaller data window is zero outside it.
 - **Other OFX hosts:** not tested; please report results.
 - **Adobe Premiere Pro and After Effects** do not load OFX plugins. An adapter

@@ -27,9 +27,12 @@ There is no CI service. Every release is built and checked locally.
 
 Release assets: the macOS `.pkg` and Windows `.exe` each in a ZIP
 (`AdvancedDirtRemoval-<version>-macos.zip`, `AdvancedDirtRemoval-Setup-<version>-win64.zip`),
-the Linux tarball and `INSTALL.md`.
+the Linux tarball, `INSTALL.md` and a `SHA256SUMS` file. Use the version's
+section of [RELEASE_NOTES.md](RELEASE_NOTES.md) as the release description.
 
-macOS: the bundle is ad hoc signed by default. For distribution build with
+macOS: the bundle is ad hoc signed by default, and an unsigned package is
+blocked by Gatekeeper until the user allows it in System Settings → Privacy &
+Security. For distribution build with
 `-DADR_CODESIGN_IDENTITY="Developer ID Application: ..."`, sign the package with
 `ADR_PKG_SIGN_IDENTITY="Developer ID Installer: ..."` and notarize it.
 
@@ -39,6 +42,8 @@ The 2.0 installer is a machine-wide install (the OFX folder needs administrator
 rights); 1.x was per user. Update the `FabioColor.AdvancedDirtRemoval` manifest:
 
 - `Scope: machine`, `ElevationRequirement: elevatesSelf`
+- `ProductCode: {B8A6D2C1-7C2D-4E5A-9C7B-1F2F46B6E9F2}}_is1` (the AppId line,
+  unchanged since 1.x, registers this exact key; keep it so upgrades match)
 - `InstallerType: inno` with the explicit switches:
   - `Silent: /VERYSILENT /SUPPRESSMSGBOXES /NOCANCEL /NORESTART /SP-`
   - `SilentWithProgress: /SILENT /SUPPRESSMSGBOXES /NOCANCEL /NORESTART /SP-`

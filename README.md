@@ -30,7 +30,8 @@ Everything is in one effect:
 > built-in dirt removal. 2.0 is a stand-alone plugin with its own engine, for
 > DaVinci Resolve, Nuke and other OFX hosts on macOS, Windows and Linux.
 > [docs/TESTED.md](docs/TESTED.md) lists exactly which hosts, systems and GPUs
-> have been tested.
+> have been tested, and [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md) what is
+> new.
 
 ## Install
 

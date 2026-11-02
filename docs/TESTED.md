@@ -8,8 +8,9 @@ Anything not listed has not been tried. Please report results from other hosts,
 systems and GPUs in [GitHub Issues](https://github.com/fabiocolor/Advanced-Dirt-Removal/issues),
 with the diagnostic log.
 
-Version 2.0.0 (development), November 2026. Real-footage tests use a 56-frame
-2368×1712 film scan (float EXR).
+Version 2.0.0, November 2026. Real-footage tests use a 2368×1712 film scan
+(float EXR): 56 frames on macOS, a 12-frame excerpt on Windows and Linux,
+compared frame by frame with the macOS result.
 
 ## macOS: every feature, in DaVinci Resolve and Nuke
 
@@ -55,7 +56,8 @@ per frame (a 56-frame shot in 90 to 155 s).
 | macOS, x86-64 slice of the universal build | Metal, OpenCL, CPU | Cleaning engine tested under Rosetta 2 on the M5 Pro during development (58 cases on CPU); not re-run since auto recovery was added; not yet on an Intel Mac |
 | Windows 11 x64, NVIDIA RTX A5000 | CUDA, OpenCL, CPU fallback | Tested: built with MSVC 2022 and CUDA 13; 58 engine cases and the OFX contract test on each; real-footage output and auto-recovery maps identical to macOS on each |
 | Windows 10 x64, AMD Radeon RX 580 | OpenCL, CPU fallback | Tested with the same Windows build: 58 engine cases and the OFX contract test on each; real-footage output and auto-recovery maps identical to macOS |
-| Linux x86-64, Ubuntu 24.04, NVIDIA RTX 3090 | CUDA, OpenCL, CPU fallback | Tested: 58 engine cases and the OFX contract test on each, for both the Ubuntu build and the release build; real-footage output and auto-recovery maps identical to macOS |
+| Windows 10 x64, NVIDIA Quadro P5000 (Pascal) | OpenCL (automatic fallback) | Tested: CUDA needs compute capability 7.5 or newer, so the engine falls back to OpenCL by itself and matches the reference; forcing CUDA reports that no kernel image fits the device |
+| Linux x86-64, Ubuntu 24.04, NVIDIA RTX 3090 | CUDA, OpenCL, CPU fallback | Tested with the release build: 58 engine cases and the OFX contract test on each; real-footage output and auto-recovery maps identical to macOS |
 | Linux x86-64, AlmaLinux 8 (glibc 2.28) | CPU fallback | Release build made and tested in a container: 58 engine cases and the OFX contract test; the plugin needs glibc 2.27 or newer |
 
 ## Hosts
@@ -66,19 +68,17 @@ per frame (a 56-frame shot in 90 to 155 s).
 | DaVinci Resolve, Color and Edit pages | any | Not tested |
 | Nuke 17.1 | macOS, Metal | Tested: every feature (table above) |
 | DaVinci Resolve Studio 21.0.4, Fusion page | Windows 11, RTX 3090 (CUDA) | Tested with the release installer on a 12-frame scan: plugin and controls load, every frame identical to macOS, Red difference, auto recovery (maps identical to macOS), the Spanish + auto recovery error and rendering again after fixing it, Cineon log |
-| DaVinci Resolve Studio 21.0.4.5, Fusion page | Ubuntu 24.04, RTX 3090 (CUDA) | Tested with the Linux export-isolation fix on a 12-frame scan: plugin and controls load, all frames identical to macOS, Red difference, auto recovery (maps identical to macOS), invalid Spanish + auto settings and rendering again once fixed, finite Cineon log output |
+| DaVinci Resolve Studio 21.0.4, Fusion page | Ubuntu 24.04, RTX 3090 (CUDA) | Tested with the release tarball installed in `/usr/OFX/Plugins` on a 12-frame scan: plugin and controls load, every frame identical to macOS, Red difference, auto recovery (maps identical to macOS), the Spanish + auto recovery error and rendering again after fixing it, Cineon log |
 | Nuke 17.0 (Indie) | Windows 11, RTX 3090 (CUDA) | Tested with the release installer on a 12-frame scan: every frame identical to macOS; Red difference, auto recovery (maps identical to macOS), Rectangle mask recovery, Spanish dirt removal, the Spanish + auto recovery error, and rendering again after fixing it |
-| Nuke 17.1v2 (Indie) | Ubuntu 24.04, RTX 3090 (CUDA) | Tested on a 12-frame scan with the Linux export-isolation fix: every frame identical to macOS; Red difference, auto recovery (maps identical to macOS), Rectangle mask recovery, Spanish dirt removal, its invalid-settings error, and rendering again after fixing it |
+| Nuke 17.1 (Indie) | Ubuntu 24.04, RTX 3090 (CUDA) | Tested with the release tarball installed on a 12-frame scan: every frame identical to macOS; Red difference, auto recovery (maps identical to macOS), Rectangle mask recovery, Spanish dirt removal, the Spanish + auto recovery error, and rendering again after fixing it |
 | Other OFX hosts (Fusion Studio, Flame, Baselight and others) | any | Not tested |
 | Adobe Premiere Pro, After Effects | any | Not supported yet (they do not load OFX plugins; an adapter is planned) |
 
-The Linux Nuke test exposed a C++ runtime symbol collision in the earlier
-portable plugin. Linux builds now export only the two OFX entry points; the
-fixed Ubuntu build passes 58 engine cases and the OFX contract on CUDA and
-OpenCL, and the Nuke checks above. The earlier Linux release tarball must be
-rebuilt with this fix before distribution. Resolve and Nuke host checks both
-pass on the fixed Ubuntu build. These are scripted host/render checks; they do
-not establish operator visual approval or vendor support for Ubuntu.
+The first Linux Nuke render exposed a C++ runtime symbol collision between the
+plugin and the host. Linux builds now export only the two OFX entry points; the
+release tarball was rebuilt with this fix and passed every check above. Host
+results are scripted render checks with output compared by machine; they are
+not a review of picture quality on many films.
 
 ## Installers
 
@@ -86,7 +86,7 @@ not establish operator visual approval or vendor support for Ubuntu.
 | --- | --- |
 | macOS `.pkg` | Built from this source and inspected (universal plugin, model file, scripts); not yet installed on a clean machine |
 | Windows installer (Inno Setup) | Built from this source; silent install puts files identical to the build in the OFX folder; upgrade from 1.1.3 removes the 1.x installation and its macros; uninstall restores the OFX folder exactly (Windows 11 and Windows 10). `installers/win/build_installer.ps1` (Visual Studio 2022 generator) also builds a working installer |
-| Linux tarball | Built in a manylinux_2_28 container (`installers/linux/build_portable.sh`); user install, plugin load and uninstall tested on Ubuntu 24.04 |
+| Linux tarball | Built in a manylinux_2_28 container (`installers/linux/build_portable.sh`); needs glibc 2.27 or newer. Installed in the system OFX folder on Ubuntu 24.04 and used by Resolve and Nuke there; user install and uninstall also tested |
 
 ## How the checks are run
 
