@@ -53,8 +53,10 @@ per frame (a 56-frame shot in 90 to 155 s).
 | --- | --- | --- |
 | macOS 27, Apple M5 Pro (arm64) | Metal, OpenCL, CPU fallback | Tested: 58 engine cases on each, and the OFX contract test on each (`tools/check_release.py build`); auto-recovery network on Metal and CPU gives the same maps |
 | macOS, x86-64 slice of the universal build | Metal, OpenCL, CPU | Cleaning engine tested under Rosetta 2 on the M5 Pro during development (58 cases on CPU); not re-run since auto recovery was added; not yet on an Intel Mac |
-| Windows 11 x64 | CUDA, OpenCL, CPU | Built from this source: not yet. Earlier development builds of the cleaning engine were tested on NVIDIA RTX 3090 and RTX 4500 Ada (CUDA, OpenCL) and AMD Radeon RX 5700 XT and Pro W5500 (OpenCL) |
-| Linux x86-64 (Ubuntu 24.04) | CUDA, OpenCL, CPU | Built from this source: not yet. Earlier development builds of the cleaning engine were tested on an NVIDIA RTX 3090 (CUDA, OpenCL) |
+| Windows 11 x64, NVIDIA RTX A5000 | CUDA, OpenCL, CPU fallback | Tested: built with MSVC 2022 and CUDA 13; 58 engine cases and the OFX contract test on each; real-footage output and auto-recovery maps identical to macOS on each |
+| Windows 10 x64, AMD Radeon RX 580 | OpenCL, CPU fallback | Tested with the same Windows build: 58 engine cases and the OFX contract test on each; real-footage output and auto-recovery maps identical to macOS |
+| Linux x86-64, Ubuntu 24.04, NVIDIA RTX 3090 | CUDA, OpenCL, CPU fallback | Tested: 58 engine cases and the OFX contract test on each, for both the Ubuntu build and the release build; real-footage output and auto-recovery maps identical to macOS |
+| Linux x86-64, AlmaLinux 8 (glibc 2.28) | CPU fallback | Release build made and tested in a container: 58 engine cases and the OFX contract test; the plugin needs glibc 2.27 or newer |
 
 ## Hosts
 
@@ -63,9 +65,8 @@ per frame (a 56-frame shot in 90 to 155 s).
 | DaVinci Resolve Studio 21.1, Fusion page | macOS, Metal | Tested: every feature (table above) |
 | DaVinci Resolve, Color and Edit pages | any | Not tested |
 | Nuke 17.1 | macOS, Metal | Tested: every feature (table above) |
-| DaVinci Resolve Studio 21, free 20 | Windows | Earlier development builds of the cleaning effect only; 2.0: not yet |
-| Nuke 17 | Windows | Earlier development build of the cleaning effect only; 2.0: not yet |
-| Resolve, Nuke | Linux | Not tested |
+| DaVinci Resolve | Windows, Linux | 2.0 not tested yet (earlier development builds of the cleaning effect ran in Resolve Studio 21 and free 20 on Windows) |
+| Nuke | Windows, Linux | 2.0 not tested yet (an earlier development build of the cleaning effect ran in Nuke 17 on Windows) |
 | Other OFX hosts (Fusion Studio, Flame, Baselight and others) | any | Not tested |
 | Adobe Premiere Pro, After Effects | any | Not supported yet (they do not load OFX plugins; an adapter is planned) |
 
@@ -74,8 +75,8 @@ per frame (a 56-frame shot in 90 to 155 s).
 | Installer | Status |
 | --- | --- |
 | macOS `.pkg` | Built from this source and inspected (universal plugin, model file, scripts); not yet installed on a clean machine |
-| Windows Inno Setup | Script written; not yet built from this source |
-| Linux tarball | Script written; not yet built from this source |
+| Windows installer (Inno Setup) | Built from this source; silent install puts files identical to the build in the OFX folder; upgrade from 1.1.3 removes the 1.x installation and its macros; uninstall restores the OFX folder exactly (Windows 11 and Windows 10). Built with `iscc` directly; `installers/win/build_installer.ps1` itself has not been run |
+| Linux tarball | Built in a manylinux_2_28 container (`installers/linux/build_portable.sh`); user install, plugin load and uninstall tested on Ubuntu 24.04 |
 
 ## How the checks are run
 

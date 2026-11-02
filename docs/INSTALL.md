@@ -66,7 +66,8 @@ variable.
 
 ## Requirements
 
-- macOS 12 or later (Apple silicon or Intel), Windows 10/11 x64, or Linux x86-64.
+- macOS 12 or later (Apple silicon or Intel), Windows 10/11 x64, or Linux x86-64
+  with glibc 2.27 or newer (Rocky/Alma Linux 8 and later, Ubuntu 20.04 and later).
 - A GPU with Metal, CUDA (NVIDIA, compute capability 7.5 or newer) or OpenCL 1.2;
   otherwise the effect runs on the CPU, much more slowly.
 - Auto recovery stores its mattes in the user's application data folder (a few

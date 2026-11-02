@@ -39,9 +39,18 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DADR_WITH_OPENCL=ON
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DADR_WITH_CUDA=ON -DADR_WITH_OPENCL=ON
 cmake --build build --config Release
 
+# The CUDA kernels need only nvcc, not the full toolkit: NVIDIA's pip wheels work
+#   python -m pip install "nvidia-cuda-nvcc>=13,<14" "nvidia-cuda-runtime>=13,<14" "nvidia-cuda-crt>=13,<14"
+#   and set CUDA_PATH to site-packages/nvidia/cu13
+
 # Linux x86-64 (CUDA + OpenCL + CPU)
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DADR_WITH_CUDA=ON -DADR_WITH_OPENCL=ON
 ```
+
+Release builds for Linux are made with `sh installers/linux/build_portable.sh`,
+which builds in a manylinux_2_28 (AlmaLinux 8) container so the plugin loads on
+any distribution with glibc 2.27 or newer. A build on a newer distribution only
+loads on that glibc or newer.
 
 ## Choosing a backend at run time
 

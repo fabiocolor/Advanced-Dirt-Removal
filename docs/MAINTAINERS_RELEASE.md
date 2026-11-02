@@ -23,7 +23,7 @@ There is no CI service. Every release is built and checked locally.
 | --- | --- | --- |
 | macOS | `bash installers/mac/build_pkg.sh 2.0.0` | `installers/mac/build/AdvancedDirtRemoval-2.0.0.pkg` |
 | Windows | `powershell -ExecutionPolicy Bypass -File installers\win\build_installer.ps1 -Version 2.0.0` | `installers\AdvancedDirtRemoval-Setup-2.0.0.exe` |
-| Linux | `sh installers/linux/build_tarball.sh 2.0.0 -DADR_WITH_CUDA=ON -DADR_WITH_OPENCL=ON` | `installers/linux/build/AdvancedDirtRemoval-2.0.0-linux-x86_64.tar.gz` |
+| Linux | `sh installers/linux/build_portable.sh 2.0.0` (Docker; glibc 2.28) | `installers/linux/build/AdvancedDirtRemoval-2.0.0-linux-x86_64.tar.gz` |
 
 Release assets: the macOS `.pkg` and Windows `.exe` each in a ZIP
 (`AdvancedDirtRemoval-<version>-macos.zip`, `AdvancedDirtRemoval-Setup-<version>-win64.zip`),
