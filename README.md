@@ -33,6 +33,15 @@ Everything is in one effect:
 > have been tested, and [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md) what is
 > new.
 
+**2.0.0 release candidate:** publication is pending. The existing public
+downloads and winget package still contain 1.1.3 until the 2.0 release is
+published. The source and instructions below describe 2.0.
+
+![Advanced Dirt Removal 2.0 controls in Resolve Fusion](assets/documentation/resolve-2.0-controls.png)
+
+The current plugin in Resolve Studio 21.1. The viewer contains a generated
+synthetic test clip; this screenshot documents the controls, not film quality.
+
 ## Install
 
 **macOS:** download `AdvancedDirtRemoval-<version>.pkg` from the
@@ -69,6 +78,11 @@ host afterwards. Manual installation, folder locations and uninstalling:
 
 The [user guide](docs/USER_GUIDE.md) describes every control, the recovery
 workflow and the views.
+
+![Red Difference in the 2.0 plugin](assets/documentation/resolve-2.0-red-difference.png)
+
+Red Difference marks repairs on the same synthetic clip. These are unedited
+screenshots of the installed macOS package.
 
 | Control group | Controls |
 | --- | --- |

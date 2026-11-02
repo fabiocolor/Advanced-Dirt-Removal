@@ -11,6 +11,10 @@ longer need them.
 
 ## Windows
 
+The 2.0.0 release is awaiting publication. Until then, winget and the existing
+public downloads provide 1.1.3. The following installer instructions describe
+2.0; check the version before installing.
+
 ```powershell
 winget install FabioColor.AdvancedDirtRemoval
 winget upgrade FabioColor.AdvancedDirtRemoval   # later updates

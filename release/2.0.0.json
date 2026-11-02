@@ -1,0 +1,23 @@
+{
+  "version": "2.0.0",
+  "assets": [
+    {
+      "platform": "macos",
+      "filename": "AdvancedDirtRemoval-2.0.0.pkg",
+      "source_revision": "2464e0b",
+      "sha256": "c78659f487c03f6ec30d4e8dad57647349919ed30a6d7f2eb0eb8ecef55fd70e"
+    },
+    {
+      "platform": "windows",
+      "filename": "AdvancedDirtRemoval-Setup-2.0.0.exe",
+      "source_revision": "2464e0b",
+      "sha256": "97a9857990f83d8757c933571a9e8486eb6ed43827d812903adfcf1b6926f888"
+    },
+    {
+      "platform": "linux",
+      "filename": "AdvancedDirtRemoval-2.0.0-linux-x86_64.tar.gz",
+      "source_revision": "d13f028",
+      "sha256": "10ef9b50c5bc92a59bbbe1c661b0fcaf8c1af4cf782d777e27efc0752a20f315"
+    }
+  ]
+}

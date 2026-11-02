@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Local release checks for Advanced Dirt Removal (no CI service is used).
 
-  python3 tools/check_release.py scan [--history] [--denylist FILE] [PATH ...]
+  python3 tools/check_release.py scan [--history | --history-since REV] [--denylist FILE] [PATH ...]
       Fail when any file that would be published (tracked plus untracked,
       not ignored), or with --history every commit message and diff on the
-      current branch, matches a denylist pattern. Binary files are scanned as
-      bytes. The denylist is a local, untracked file (default
+      current branch, matches a denylist pattern. --history-since REV scans
+      only messages, added lines and paths after an explicitly accepted ancestor
+      (deleted text from that ancestor is not new publication content). Binary files are
+      scanned for ASCII and UTF-16 strings. The denylist is a local, untracked file (default
       .sanitize-denylist): one case-insensitive regular expression per line,
       '#' comments allowed. Extra PATHs (e.g. a built bundle) are scanned too.
 
@@ -16,12 +18,15 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
 import platform
 import re
 import subprocess
 import sys
+import tarfile
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -68,6 +73,43 @@ def scan_bytes(label: str, data: bytes, patterns: list[re.Pattern], hits: list[s
             hits.append(f'{label}:{line}: [{pattern.pattern.decode()}] {context}')
 
 
+def scan_payload(label: str, data: bytes, patterns: list[re.Pattern], hits: list[str], *, depth=0, budget=None):
+    """Scan archive members, not random strings in their compressed envelopes."""
+    if budget is None:
+        budget = [512 * 1024 * 1024]
+    scan_bytes(label, label.encode(), patterns, hits)
+    if label.lower().endswith(('.zip', '.tar', '.tar.gz', '.tgz')):
+        if depth >= 4:
+            raise ValueError(f'archive nesting limit reached: {label}; unpack and scan separately')
+
+        def member(name, size, read):
+            budget[0] -= size
+            if budget[0] < 0:
+                raise ValueError(f'archive size limit reached: {label}; unpack and scan separately')
+            scan_payload(f'{label}!/{name}', read(), patterns, hits, depth=depth + 1, budget=budget)
+
+        if label.lower().endswith('.zip'):
+            with zipfile.ZipFile(io.BytesIO(data)) as archive:
+                for item in archive.infolist():
+                    if not item.is_dir():
+                        member(item.filename, item.file_size, lambda: archive.read(item))
+        else:
+            with tarfile.open(fileobj=io.BytesIO(data), mode='r:*') as archive:
+                for item in archive:
+                    if item.isfile():
+                        member(item.name, item.size, lambda: archive.extractfile(item).read())
+                    else:
+                        scan_bytes(label, (item.name + '\n' + item.linkname).encode(), patterns, hits)
+        return
+    if b'\0' in data[:8192] or not is_utf8(data):
+        # Include Windows resources and other UTF-16 metadata as well as ASCII.
+        strings = re.findall(rb'[\x20-\x7e]{8,}', data)
+        strings += [s.decode('utf-16-le').encode() for s in re.findall(rb'(?:[\x20-\x7e]\x00){4,}', data)]
+        strings += [s.decode('utf-16-be').encode() for s in re.findall(rb'(?:\x00[\x20-\x7e]){4,}', data)]
+        data = b'\n'.join(strings)
+    scan_bytes(label, data, patterns, hits)
+
+
 def cmd_scan(a) -> int:
     patterns = load_denylist(a.denylist)
     hits: list[str] = []
@@ -82,18 +124,25 @@ def cmd_scan(a) -> int:
             label = str(f.relative_to(ROOT))
         except ValueError:
             label = str(f)
-        data = f.read_bytes()
-        if b'\0' in data[:8192] or not is_utf8(data):
-            # Binary: scan printable runs of eight or more characters, like strings(1).
-            data = b'\n'.join(re.findall(rb'[\x20-\x7e]{8,}', data))
-        scan_bytes(label, label.encode() + b'\n' + data, patterns, hits)
-    if a.history:
-        log = subprocess.run(['git', '-C', str(ROOT), 'log', '-p', '--format=commit %H%n%an <%ae>%n%B'],
+        scan_payload(label, f.read_bytes(), patterns, hits)
+    history_range = []
+    if a.history_since:
+        revision = git('rev-parse', '--verify', f'{a.history_since}^{{commit}}').strip()
+        subprocess.run(['git', '-C', str(ROOT), 'merge-base', '--is-ancestor', revision, 'HEAD'], check=True)
+        history_range = [f'{revision}..HEAD']
+    if a.history or a.history_since:
+        log = subprocess.run(['git', '-C', str(ROOT), 'log', '-p', '--unified=0', '--format=commit %H%n%an <%ae>%n%B', *history_range],
                              check=True, capture_output=True).stdout
+        if history_range:
+            # Keep messages separate: a message beginning with '-' is still new content.
+            messages = git('log', '--no-patch', '--format=commit %H%n%an <%ae>%n%B', *history_range).encode()
+            patches = git('log', '-p', '--unified=0', '--format=', *history_range).encode()
+            log = messages + b'\n' + b'\n'.join(line for line in patches.splitlines() if not line.startswith(b'-'))
         scan_bytes('history', log, patterns, hits)
     for h in hits:
         print(h)
-    print(f'scan: {len(files)} files{" and history" if a.history else ""}, {len(hits)} findings')
+    scope = f' and history {history_range[0]}' if history_range else (' and full history' if a.history else '')
+    print(f'scan: {len(files)} files{scope}, {len(hits)} findings')
     return 1 if hits else 0
 
 
@@ -149,7 +198,9 @@ def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest='command', required=True)
     s = sub.add_parser('scan')
-    s.add_argument('--history', action='store_true')
+    history = s.add_mutually_exclusive_group()
+    history.add_argument('--history', action='store_true')
+    history.add_argument('--history-since', metavar='REV', help='scan commits after an explicitly accepted ancestor')
     s.add_argument('--denylist', type=Path, default=ROOT / '.sanitize-denylist')
     s.add_argument('paths', nargs='*')
     b = sub.add_parser('build')

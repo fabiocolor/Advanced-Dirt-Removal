@@ -84,7 +84,7 @@ not a review of picture quality on many films.
 
 | Installer | Status |
 | --- | --- |
-| macOS `.pkg` | Built from this source and inspected (universal plugin, model file, scripts); not yet installed on a clean machine |
+| macOS `.pkg` | Installed successfully on the M5 Pro into an empty system OFX target; the existing 1.1.3 package receipt upgraded to 2.0.0. All 7 installed files match the expanded package, and the bundle passes strict signature verification. Resolve 21.1.1.10 loaded this installed package: a synthetic-frame render is byte-identical to the engine and Red Difference matches its definition exactly. This is a clean plugin-target test on the existing Mac; a fresh OS, Intel Mac and interactive uninstall have not been tested. |
 | Windows installer (Inno Setup) | Built from this source; silent install puts files identical to the build in the OFX folder; upgrade from 1.1.3 removes the 1.x installation and its macros; uninstall restores the OFX folder exactly (Windows 11 and Windows 10). `installers/win/build_installer.ps1` (Visual Studio 2022 generator) also builds a working installer |
 | Linux tarball | Built in a manylinux_2_28 container (`installers/linux/build_portable.sh`); needs glibc 2.27 or newer. Installed in the system OFX folder on Ubuntu 24.04 and used by Resolve and Nuke there; user install and uninstall also tested |
 

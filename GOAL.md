@@ -19,6 +19,8 @@ A free, open-source temporal dirt-repair plugin that anyone can build and use:
 
 See [docs/TESTED.md](docs/TESTED.md) for exactly what has been tested and
 [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md) for the 2.0.0 notes.
+The final candidate and remaining publication actions are recorded in
+[docs/RELEASE_READINESS.md](docs/RELEASE_READINESS.md).
 
 | Milestone | State |
 | --- | --- |
@@ -27,7 +29,7 @@ See [docs/TESTED.md](docs/TESTED.md) for exactly what has been tested and
 | macOS: every feature in Resolve (Fusion page) and Nuke | done |
 | Windows: CUDA and OpenCL (NVIDIA and AMD), Resolve and Nuke | done |
 | Linux: CUDA and OpenCL, Resolve and Nuke | done |
-| Installers for macOS, Windows and Linux | built and tested (macOS clean install pending) |
+| Installers for macOS, Windows and Linux | built and tested; macOS empty-target install and installed Resolve renders now pass |
 | Resolve Color page | planned |
 | Premiere Pro / After Effects adapter | planned (the Adobe SDK is a separate download and cannot be redistributed) |
 | First public 2.0 release | waiting for the owner's review |
@@ -49,7 +51,7 @@ and the auto-recovery maps compared with macOS.
 | Real-footage parity with macOS | reference (Metal = CPU) | pass: CUDA, OpenCL, CPU | pass: OpenCL, CPU | pass: CUDA, OpenCL |
 | Auto-recovery maps equal macOS | reference (Metal = CPU) | pass: CUDA, OpenCL, CPU | pass: OpenCL, CPU | pass: CUDA, OpenCL |
 | Installer builds | pass (.pkg, inspected) | pass (Inno Setup 6.7; `build_installer.ps1` too) | same installer | pass (`build_portable.sh`) |
-| Clean install, files identical | not run: needs an administrator password | pass | pass | pass (system OFX folder; plugin loads) |
+| Clean install, files identical | pass: empty system OFX target on existing Mac; 7/7 files identical; old 1.1.3 receipt upgraded | pass | pass | pass (system OFX folder; plugin loads) |
 | Upgrade from 1.1.3 removes 1.x | n/a | pass | not run | n/a |
 | Uninstall leaves nothing behind | not run | pass | pass | pass |
 | Resolve Studio 21 (Fusion page) | pass: 21.1, every feature | pass: 21.0.4, 9/9 checks | not run | pass: 21.0.4, 9/9 checks |
@@ -81,14 +83,23 @@ entry points.
 | `AdvancedDirtRemoval-Setup-2.0.0.exe` (Windows x64) | `2464e0b` | `97a9857990f83d8757c933571a9e8486eb6ed43827d812903adfcf1b6926f888` |
 | `AdvancedDirtRemoval-2.0.0-linux-x86_64.tar.gz` | `d13f028` | `10ef9b50c5bc92a59bbbe1c661b0fcaf8c1af4cf782d777e27efc0752a20f315` |
 
-Later commits change only the Linux link step and documentation, so the macOS
-and Windows files are current. Rebuild all three from the release tag before
-publishing. The binaries contain no build-machine paths, and the sanitize scan
-of the unpacked release files and of every new commit finds nothing.
+The exact candidate installers are pinned in [release/2.0.0.json](release/2.0.0.json).
+Later commits change only the Linux link step, documentation and release tools,
+so the macOS and Windows plugin code is current. A new build changes the
+candidate: repeat its package/hash/host checks and update the manifest before
+shipping it. The sanitizer checks unpacked payloads and newly introduced
+history separately from the accepted older public history.
+
+The macOS install and installed-plugin render checks passed on 2 November.
+Fresh 2.0 screenshots use a synthetic clip and are linked from the README.
+`tools/stage_release.py` assembles downloads only after all three installer
+hashes match the manifest; see [docs/MAINTAINERS_RELEASE.md](docs/MAINTAINERS_RELEASE.md).
 
 ### Before publishing (owner)
 
-- Install the macOS `.pkg` on a clean machine (needs an administrator password).
-- Replace the 1.x screenshots in the README with 2.0 ones.
+- Review the assembled candidate and the documented untested host/OS scope.
+- The Mac package is unsigned (the bundle is ad hoc signed). No Developer ID
+  identity is installed on the build Mac. Signing/notarization can be added
+  when an identity is available; the unsigned installation path is documented.
 - Approve the first push. The older public history keeps its earlier
   references by decision of 1 November 2026; the new commits are clean.
