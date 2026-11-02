@@ -64,6 +64,11 @@ else()
   target_link_libraries(AdvancedDirtRemoval PRIVATE ${CMAKE_DL_LIBS})
   if(UNIX AND NOT APPLE)
     target_link_options(AdvancedDirtRemoval PRIVATE -static-libstdc++ -static-libgcc -Wl,--exclude-libs,ALL)
+    # Hosts may export a different C++ runtime. Keep our template instantiations
+    # and static runtime local so OFX calls cannot mix the two implementations.
+    set(ADR_OFX_EXPORTS "${CMAKE_CURRENT_SOURCE_DIR}/exports.map")
+    target_link_options(AdvancedDirtRemoval PRIVATE "LINKER:--version-script=${ADR_OFX_EXPORTS}")
+    set_property(TARGET AdvancedDirtRemoval APPEND PROPERTY LINK_DEPENDS "${ADR_OFX_EXPORTS}")
   endif()
 endif()
 

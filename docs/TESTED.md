@@ -66,11 +66,19 @@ per frame (a 56-frame shot in 90 to 155 s).
 | DaVinci Resolve, Color and Edit pages | any | Not tested |
 | Nuke 17.1 | macOS, Metal | Tested: every feature (table above) |
 | DaVinci Resolve Studio 21.0.4, Fusion page | Windows 11, RTX 3090 (CUDA) | Tested with the release installer on a 12-frame scan: plugin and controls load, every frame identical to macOS, Red difference, auto recovery (maps identical to macOS), the Spanish + auto recovery error and rendering again after fixing it, Cineon log |
-| DaVinci Resolve | Linux | 2.0 not tested yet |
+| DaVinci Resolve Studio 21.0.4.5, Fusion page | Ubuntu 24.04, RTX 3090 (CUDA) | Tested with the Linux export-isolation fix on a 12-frame scan: plugin and controls load, all frames identical to macOS, Red difference, auto recovery (maps identical to macOS), invalid Spanish + auto settings and rendering again once fixed, finite Cineon log output |
 | Nuke 17.0 (Indie) | Windows 11, RTX 3090 (CUDA) | Tested with the release installer on a 12-frame scan: every frame identical to macOS; Red difference, auto recovery (maps identical to macOS), Rectangle mask recovery, Spanish dirt removal, the Spanish + auto recovery error, and rendering again after fixing it |
-| Nuke | Linux | 2.0 not tested yet |
+| Nuke 17.1v2 (Indie) | Ubuntu 24.04, RTX 3090 (CUDA) | Tested on a 12-frame scan with the Linux export-isolation fix: every frame identical to macOS; Red difference, auto recovery (maps identical to macOS), Rectangle mask recovery, Spanish dirt removal, its invalid-settings error, and rendering again after fixing it |
 | Other OFX hosts (Fusion Studio, Flame, Baselight and others) | any | Not tested |
 | Adobe Premiere Pro, After Effects | any | Not supported yet (they do not load OFX plugins; an adapter is planned) |
+
+The Linux Nuke test exposed a C++ runtime symbol collision in the earlier
+portable plugin. Linux builds now export only the two OFX entry points; the
+fixed Ubuntu build passes 58 engine cases and the OFX contract on CUDA and
+OpenCL, and the Nuke checks above. The earlier Linux release tarball must be
+rebuilt with this fix before distribution. Resolve and Nuke host checks both
+pass on the fixed Ubuntu build. These are scripted host/render checks; they do
+not establish operator visual approval or vendor support for Ubuntu.
 
 ## Installers
 

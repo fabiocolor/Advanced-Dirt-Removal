@@ -70,3 +70,36 @@ empty folders, and a portable Linux build script.
 
 The binaries contain no build-machine paths, and the sanitize scan of the
 unpacked release files finds nothing.
+
+
+## Linux Nuke qualification, 2 November 2026
+
+Nuke Indie 17.1v2 on Ubuntu 24.04.4, RTX 3090 (CUDA): nine host checks
+pass on the 12-frame scan. Default RGB frames and recovery maps are identical
+to the macOS reference; Red difference, Rectangle recovery mask, Spanish dirt
+removal, invalid settings and rendering after fixing them pass.
+
+The first actual Linux Nuke render exposed a C++ runtime symbol collision in
+the previous Linux release binary. The Linux OFX linker export map now limits
+exports to OfxGetNumberOfPlugins and OfxGetPlugin, keeping C++ template/runtime
+symbols local. Processing code and controls are unchanged. The fixed Ubuntu
+build passes 58/58 engine cases and the OFX contract on CUDA and OpenCL. The
+installed fixed bundle also passes the Nuke checks. Fresh Windows Nuke 17.0v3
+and Resolve Studio 21.0.4 checks pass 9/9 each with the existing Windows
+release installer; Resolve preferences are restored byte-for-byte.
+
+The earlier Linux tarball listed above is superseded for distribution: it
+needs rebuilding with the export map. The newly tested Ubuntu build does not
+establish a glibc 2.28 portable-build pass. Linux Resolve is installed but its
+2.0 host test also passes 9/9 on the fixed Ubuntu build (see below). Public release remains held; no push.
+
+The current source scan is clean. The full existing branch-history scan still
+reports 26 legacy references in earlier macro commits; history/publication
+cleanup remains a separate release gate. No history was rewritten or removed.
+
+Linux Resolve Studio 21.0.4.5 now passes 9/9 on the same 12-frame scan
+with the fixed system plugin: exact default frames, views, recovery maps and
+matte result, invalid-setting error and subsequent rendering, finite Cineon
+output. The test used a fresh local library and output under registered Media
+Storage. Test projects and output are preserved. This qualifies the scripted
+Fusion-page host/render path on Ubuntu 24.04.4 with RTX 3090 CUDA.
