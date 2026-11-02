@@ -90,7 +90,7 @@ if(ADR_BUILD_TESTS)
   enable_testing()
   add_executable(adr_ofx_contract tests/contract_host.cpp)
   target_include_directories(adr_ofx_contract PRIVATE vendor/openfx/include)
-  target_link_libraries(adr_ofx_contract PRIVATE adr_engine_static)
+  target_link_libraries(adr_ofx_contract PRIVATE adr_engine_static ${CMAKE_DL_LIBS})  # dladdr, as the plugin
   target_compile_definitions(adr_ofx_contract PRIVATE ${ADR_VERSION_DEFS})
   if(NOT MSVC)
     target_compile_options(adr_ofx_contract PRIVATE -ffp-contract=off)
