@@ -1,0 +1,479 @@
+/* Register-blocked block searches (coarse_motion_search, search_byte_motion).
+ *
+ * Each thread owns a "strip" of K horizontally adjacent candidates in one
+ * candidate row. For every block row it loads the current row and the K+B-1
+ * reference samples once and accumulates K SADs in registers. A block uses
+ * p.tpb = (candidate rows) x (strips per row) threads; p.bpg blocks share a
+ * work-group. Winners are the minimum of (cost << 10 | row-major ordinal),
+ * a strict "first smaller cost" rule.
+ *
+ * Fast path: complete blocks whose valid candidates never need the reference
+ * position clamp. Other blocks use an exact per-candidate path with the
+ * reference's clamped positions and partial-block masks. All reads are clamped
+ * inside the image. Block texture comes from a separate per-level kernel. */
+
+
+/* Unaligned 4-byte read from a row of 32-bit words: bytes [4i + o/8, 4i + o/8 + 4). */
+DEVICE_FN uint motion_funnel(uint lo, uint hi, int o) { return o ? (lo >> o) | (hi << (32 - o)) : lo; }
+
+/* Per-block search geometry shared by every strip of the block. */
+typedef struct {
+  int x, y, bw, bh, limx, limy;
+  int sx, ex, ox, sy, ey, oy;
+} MotionBlockWindow;
+
+DEVICE_FN MotionBlockWindow motion_window(int x, int y, int bw, int bh, int w, int h, int dx, int dy, int pw, int ph) {
+  MotionBlockWindow g;
+  g.x = x, g.y = y, g.bw = bw, g.bh = bh, g.limx = w - bw, g.limy = h - bh;
+  g.sx = motion_bound_start(x, dx, pw / 2, g.limx);
+  g.ex = motion_bound_end(x, dx, pw / 2, g.limx);
+  g.ox = motion_bound_offset(x, dx, pw / 2);
+  g.sy = motion_bound_start(y, dy, ph / 2, g.limy);
+  g.ey = motion_bound_end(y, dy, ph / 2, g.limy);
+  g.oy = motion_bound_offset(y, dy, ph / 2);
+  return g;
+}
+
+DEVICE_FN int motion_candidate_valid(MotionBlockWindow g, int cx, int cy, int pw, int ph) {
+  return cx < pw && g.sx + cx <= g.ex && g.sy + cy <= g.ey && g.ox + cx < pw && g.oy + cy < ph;
+}
+
+DEVICE_FN int motion_candidate_key(int sad, GLOBAL const int* penalty, MotionBlockWindow g, int cx, int cy, int pw,
+                                   int factor) {
+  const int cost = sad + ((penalty[(g.oy + cy) * pw + g.ox + cx] * factor) >> 8);
+  return (cost << MOTION_KEY_SHIFT) | (cy * pw + cx);
+}
+
+/* Packed strip search for strip width K (a literal constant per instantiation):
+ * each thread takes the minimum key over [cx0, cx0+K) of candidate row cy.
+ * coarse_motion_search on packed (H,W,4) images, and the retest search of
+ * regularize_motion_candidates: gated 1 skips blocks whose gate is zero (they
+ * keep the prior); gated 2 searches only the listed blocks.
+ * texture: per-block clamped texture from motion_packed_texture. */
+#define MOTION_PACKED_SEARCH(K)                                                                                            \
+DEVICE_FN int motion_packed_strip_##K(GLOBAL const uint* cur, GLOBAL const uint* ref, GLOBAL const int* penalty, int w,    \
+                                  int h, MotionBlockWindow g, int cx0, int cy, int pw, int ph, int factor) {               \
+  int best = MOTION_NO_KEY;                                                                                                \
+  const int ry = g.sy + cy;                                                                                                \
+  if (g.bw == 8 && g.bh == 8 && g.ex <= g.limx && g.ey <= g.limy) {                                                        \
+    uint acc[K];                                                                                                           \
+    for (int k = 0; k < K; ++k) acc[k] = 0u;                                                                               \
+    for (int yy = 0; yy < 8; ++yy) {                                                                                       \
+      GLOBAL const uint* crow = cur + (g.y + yy) * w + g.x;                                                                \
+      GLOBAL const uint* rrow = ref + adr_mini(ry + yy, h - 1) * w;                                                         \
+      uint r[K + 7];                                                                                                       \
+      for (int j = 0; j < K + 7; ++j) r[j] = rrow[adr_mini(g.sx + cx0 + j, w - 1)];                                         \
+      for (int xx = 0; xx < 8; ++xx) {                                                                                     \
+        const uint c = crow[xx];                                                                                           \
+        for (int k = 0; k < K; ++k) acc[k] += motion_absdiff_lanes(c, r[k + xx]);                                          \
+      }                                                                                                                    \
+    }                                                                                                                      \
+    for (int k = 0; k < K; ++k) {                                                                                          \
+      const int cx = cx0 + k;                                                                                              \
+      if (!motion_candidate_valid(g, cx, cy, pw, ph)) continue;                                                            \
+      best = adr_mini(best, motion_candidate_key(motion_fold(acc[k]) >> 1, penalty, g, cx, cy, pw, factor));                \
+    }                                                                                                                      \
+  } else {                                                                                                                 \
+    for (int k = 0; k < K; ++k) {                                                                                          \
+      const int cx = cx0 + k;                                                                                              \
+      if (!motion_candidate_valid(g, cx, cy, pw, ph)) continue;                                                            \
+      const int px = adr_mini(g.sx + cx, g.limx), py = adr_mini(ry, g.limy);                                                 \
+      uint lanes = 0u;                                                                                                     \
+      for (int yy = 0; yy < g.bh; ++yy)                                                                                    \
+        for (int xx = 0; xx < g.bw; ++xx)                                                                                  \
+          lanes += motion_absdiff_lanes(cur[(g.y + yy) * w + g.x + xx], ref[(py + yy) * w + px + xx]);                     \
+      best = adr_mini(best, motion_candidate_key(motion_fold(lanes) >> 1, penalty, g, cx, cy, pw, factor));                 \
+    }                                                                                                                      \
+  }                                                                                                                        \
+  return best;                                                                                                             \
+}                                                                                                                          \
+KERNEL void motion_packed_search_##K(GLOBAL const uint* current, GLOBAL const uint* reference, GLOBAL const short* prior,  \
+                                 GLOBAL const int* penalty, GLOBAL const uchar* gate, GLOBAL const uchar* texture,         \
+                                 GLOBAL const int* list, GLOBAL const int* list_count, GLOBAL short* vectors,              \
+                                 GLOBAL uchar* error, PARAMS(MotionSearchParams) KARGS) {                                  \
+  LOCAL int m_key[256];                                                                                                    \
+  const int lid = LID_X, b = lid / p.tpb, t = lid % p.tpb;                                                                 \
+  const int slot = GROUP_X * p.bpg + b;                                                                                    \
+  /* gated 2: only the blocks in list[0..list_count) (written in place). */                                                \
+  const int live = b < p.bpg && (p.gated == 2 ? slot < list_count[0] : slot < p.gh * p.gw);                                \
+  const int index = p.gated == 2 ? (live ? list[slot] : 0) : slot;                                                         \
+  const int active = live && (p.gated != 1 || gate[index] != 0);                                                           \
+  const int units = p.scale * 2;                                                                                           \
+  const int gx = live ? index % p.gw : 0, gy = live ? index / p.gw : 0;                                                    \
+  const int x = gx * 8, y = gy * 8;                                                                                        \
+  const int dx = live ? (int)prior[index * 2] / units : 0, dy = live ? (int)prior[index * 2 + 1] / units : 0;              \
+  const MotionBlockWindow g = motion_window(x, y, adr_mini(8, p.w - x), adr_mini(8, p.h - y), p.w, p.h, dx, dy, p.pw, p.ph); \
+  const int tex = live ? (int)texture[index] : 16;                                                                         \
+  const int factor = motion_factor(p.blend_amount, tex);                                                                     \
+  int best = MOTION_NO_KEY;                                                                                                \
+  if (active) {                                                                                                            \
+    const int cy = t / p.nsx, cx0 = (t % p.nsx) * K;                                                                       \
+    best = motion_packed_strip_##K(current, reference, penalty, p.w, p.h, g, cx0, cy, p.pw, p.ph, factor);                 \
+  }                                                                                                                        \
+  m_key[lid] = best;                                                                                                       \
+  BARRIER;                                                                                                                 \
+  if (t == 0 && live) {                                                                                                    \
+    if (!active) {                                                                                                         \
+      vectors[index * 2] = prior[index * 2];                                                                               \
+      vectors[index * 2 + 1] = prior[index * 2 + 1];                                                                       \
+      error[index] = 0;                                                                                                    \
+    } else {                                                                                                               \
+      int key = MOTION_NO_KEY;                                                                                             \
+      for (int k = 0; k < p.tpb; ++k) key = adr_mini(key, m_key[lid + k]);                                                  \
+      const int c = key & ((1 << MOTION_KEY_SHIFT) - 1), cx = c % p.pw, cy = c / p.pw;                                     \
+      const int sad = (key >> MOTION_KEY_SHIFT) - ((penalty[(g.oy + cy) * p.pw + g.ox + cx] * factor) >> 8);               \
+      vectors[index * 2] = (short)((g.sx + cx - x) * units);                                                               \
+      vectors[index * 2 + 1] = (short)((g.sy + cy - y) * units);                                                           \
+      const int normalized = sad * 64 / (g.bh * g.bw);                                                                     \
+      error[index] = (uchar)adr_clampi(normalized * 2 / (tex / adr_mini(4, p.scale)), 0, 255);                               \
+    }                                                                                                                      \
+  }                                                                                                                        \
+}
+
+MOTION_PACKED_SEARCH(4)
+
+/* Clamped packed block texture ((gradient*30)>>10 in [16,128]); one thread per block. */
+KERNEL void motion_packed_texture(GLOBAL const uint* current, GLOBAL uchar* texture, PARAMS(MotionSearchParams) KARGS) {
+  const int index = GID_X;
+  if (index >= p.gh * p.gw) return;
+  const int x = (index % p.gw) * 8, y = (index / p.gw) * 8;
+  const int bw = adr_mini(8, p.w - x), bh = adr_mini(8, p.h - y);
+  uint lanes = 0u;
+  for (int yy = 0; yy < bh; ++yy) {
+    GLOBAL const uint* row = current + (y + yy) * p.w + x;
+    for (int xx = 0; xx < bw; ++xx) {
+      if (yy) lanes += motion_absdiff_lanes(row[xx], row[xx - p.w]);
+      if (xx) lanes += motion_absdiff_lanes(row[xx], row[xx - 1]);
+    }
+  }
+  texture[index] = (uchar)adr_clampi((motion_fold(lanes) * 30) >> 10, 16, 128);
+}
+
+/* Byte texture on the 2x subsampled block ((gradient>>4) in [16,128]). */
+KERNEL void motion_byte_texture(GLOBAL const uchar* current, GLOBAL uchar* texture, PARAMS(MotionSearchParams) KARGS) {
+  const int index = GID_X;
+  if (index >= p.gh * p.gw) return;
+  const int B = p.block;
+  const int x = (index % p.gw) * B, y = (index / p.gw) * B;
+  const int bw = adr_mini(B, p.w - x), bh = adr_mini(B, p.h - y);
+  int gradient = 0;
+  for (int yy = 0; yy < bh; yy += 2) {
+    GLOBAL const uchar* row = current + (y + yy) * p.w + x;
+    for (int xx = 0; xx < bw; xx += 2) {
+      const int c = row[xx];
+      if (yy) gradient += adr_absi(c - (int)row[xx - 2 * p.w]);
+      if (xx) gradient += adr_absi(c - (int)row[xx - 2]);
+    }
+  }
+  texture[index] = (uchar)adr_clampi(gradient >> 4, 16, 128);
+}
+
+/* Exact byte strip for partial blocks or windows needing the position clamp. */
+DEVICE_FN int motion_byte_strip_slow(GLOBAL const uchar* cur, GLOBAL const uchar* ref, GLOBAL const int* penalty,
+                                     int w, MotionBlockWindow g, int cx0, int cy, int pw, int ph, int factor, int K) {
+  int best = MOTION_NO_KEY;
+  for (int k = 0; k < K; ++k) {
+    const int cx = cx0 + k;
+    if (!motion_candidate_valid(g, cx, cy, pw, ph)) continue;
+    const int px = adr_mini(g.sx + cx, g.limx), py = adr_mini(g.sy + cy, g.limy);
+    int sad = 0;
+    for (int yy = 0; yy < g.bh; ++yy)
+      for (int xx = 0; xx < g.bw; ++xx)
+        sad += adr_absi((int)cur[(g.y + yy) * w + g.x + xx] - (int)ref[(py + yy) * w + px + xx]);
+    best = adr_mini(best, motion_candidate_key(sad, penalty, g, cx, cy, pw, factor));
+  }
+  return best;
+}
+
+/* Per-block setup of search_byte_motion; returns the block window. */
+DEVICE_FN MotionBlockWindow motion_byte_block(GLOBAL const short* prior, MotionSearchParams p, int index, int live,
+                                              int B) {
+  const int gx = live ? index % p.gw : 0, gy = live ? index / p.gw : 0;
+  const int x = gx * B, y = gy * B;
+  const int dx = live ? (int)prior[index * 2] : 0, dy = live ? (int)prior[index * 2 + 1] : 0;
+  return motion_window(x, y, adr_mini(B, p.w - x), adr_mini(B, p.h - y), p.w, p.h, dx, dy, p.pw, p.ph);
+}
+
+/* Winner of a block from the strip keys; writes vectors and errors. */
+DEVICE_FN void motion_byte_finish(GLOBAL const short* prior, GLOBAL const int* penalty, GLOBAL const uchar* error_before,
+                                  GLOBAL short* vectors, GLOBAL uchar* error, LPTR const int* keys, MotionSearchParams p,
+                                  MotionBlockWindow g, int index, int active, int factor, int B) {
+  const int BB = B * B;
+  if (!active) {
+    vectors[index * 2] = prior[index * 2];
+    vectors[index * 2 + 1] = prior[index * 2 + 1];
+    error[index] = error_before[index];
+    return;
+  }
+  int key = MOTION_NO_KEY;
+  for (int k = 0; k < p.tpb; ++k) key = adr_mini(key, keys[k]);
+  const int c = key & ((1 << MOTION_KEY_SHIFT) - 1), cx = c % p.pw, cy = c / p.pw;
+  int sad = (key >> MOTION_KEY_SHIFT) - ((penalty[(g.oy + cy) * p.pw + g.ox + cx] * factor) >> 8);
+  vectors[index * 2] = (short)(g.sx + cx - g.x);
+  vectors[index * 2 + 1] = (short)(g.sy + cy - g.y);
+  const int area = g.bh * g.bw;
+  if (area != BB) sad = sad * (B == 16 ? 64 : BB) / area;
+  error[index] = (uchar)adr_clampi(sad / (BB / 8), 0, 255);
+}
+
+/* search_byte_motion for block B and strip width K as literal constants, so
+ * the per-row sample arrays and the K accumulators stay in registers.
+ * p.threshold >= 0 selects the device threshold; blocks whose gate does not
+ * exceed it keep the prior vectors and errors. Word loads need w % 4 == 0. */
+#define MOTION_BYTE_SEARCH(B, K)                                                                                          \
+DEVICE_FN int motion_byte_strip_##B##_##K(GLOBAL const uchar* cur, GLOBAL const uchar* ref, GLOBAL const int* penalty,    \
+                                          int w, int h, MotionBlockWindow g, int cx0, int cy, int pw, int ph,             \
+                                          int factor) {                                                                   \
+  if (g.bw != B || g.bh != B || g.ex > g.limx || g.ey > g.limy)                                                           \
+    return motion_byte_strip_slow(cur, ref, penalty, w, g, cx0, cy, pw, ph, factor, K);                                   \
+  int acc[K];                                                                                                             \
+  for (int k = 0; k < K; ++k) acc[k] = 0;                                                                                 \
+  const int ry = g.sy + cy;                                                                                               \
+  if ((w & 3) == 0) {                                                                                                     \
+    const int wpr = w >> 2, base = g.sx + cx0, o = (base & 3) * 8, w0 = base >> 2;                                        \
+    GLOBAL const uint* cw = (GLOBAL const uint*)cur;                                                                      \
+    GLOBAL const uint* rw = (GLOBAL const uint*)ref;                                                                      \
+    for (int yy = 0; yy < B; ++yy) {                                                                                      \
+      GLOBAL const uint* crow = cw + (g.y + yy) * wpr + (g.x >> 2);                                                       \
+      GLOBAL const uint* rrow = rw + adr_mini(ry + yy, h - 1) * wpr;                                                       \
+      uint words[(B + K + 2) / 4 + 2];                                                                                    \
+      for (int i = 0; i <= (B + K + 2) / 4 + 1; ++i) words[i] = rrow[adr_mini(w0 + i, wpr - 1)];                               \
+      uint shifted[(B + K + 2) / 4 + 1];                                                                                      \
+      for (int i = 0; i <= (B + K + 2) / 4; ++i) shifted[i] = o ? (words[i] >> o) | (words[i + 1] << (32 - o)) : words[i]; \
+      uint cwords[B / 4];                                                                                                 \
+      for (int i = 0; i < B / 4; ++i) cwords[i] = crow[i];                                                                \
+      for (int k = 0; k < K; ++k) {                                                                                       \
+        uint lanes = 0u;                                                                                                  \
+        for (int i = 0; i < B / 4; ++i)                                                                                   \
+          lanes += motion_absdiff_lanes(cwords[i], motion_funnel(shifted[i + (k >> 2)], shifted[i + (k >> 2) + 1], (k & 3) * 8));\
+        acc[k] += motion_fold(lanes);                                                                                     \
+      }                                                                                                                   \
+    }                                                                                                                     \
+  } else {                                                                                                                \
+    for (int yy = 0; yy < B; ++yy) {                                                                                      \
+      GLOBAL const uchar* crow = cur + (g.y + yy) * w + g.x;                                                              \
+      GLOBAL const uchar* rrow = ref + adr_mini(ry + yy, h - 1) * w;                                                       \
+      int r[B + K - 1];                                                                                                   \
+      for (int j = 0; j < B + K - 1; ++j) r[j] = rrow[adr_mini(g.sx + cx0 + j, w - 1)];                                    \
+      for (int xx = 0; xx < B; ++xx) {                                                                                    \
+        const int c = crow[xx];                                                                                           \
+        for (int k = 0; k < K; ++k) acc[k] += adr_absi(c - r[k + xx]);                                                     \
+      }                                                                                                                   \
+    }                                                                                                                     \
+  }                                                                                                                       \
+  int best = MOTION_NO_KEY;                                                                                               \
+  for (int k = 0; k < K; ++k) {                                                                                           \
+    const int cx = cx0 + k;                                                                                               \
+    if (!motion_candidate_valid(g, cx, cy, pw, ph)) continue;                                                             \
+    best = adr_mini(best, motion_candidate_key(acc[k], penalty, g, cx, cy, pw, factor));                                   \
+  }                                                                                                                       \
+  return best;                                                                                                            \
+}                                                                                                                         \
+KERNEL void motion_byte_search_##B##_##K(GLOBAL const uchar* current, GLOBAL const uchar* reference,                      \
+                                         GLOBAL const short* prior, GLOBAL const int* penalty,                            \
+                                         GLOBAL const uchar* error_before, GLOBAL const uchar* gate,                      \
+                                         GLOBAL const int* thresholds, GLOBAL const uchar* texture,                       \
+                                         GLOBAL short* vectors, GLOBAL uchar* error, PARAMS(MotionSearchParams) KARGS) {  \
+  LOCAL int m_key[256];                                                                                                   \
+  const int lid = LID_X, b = lid / p.tpb, t = lid % p.tpb;                                                                \
+  const int index = GROUP_X * p.bpg + b;                                                                                  \
+  const int live = b < p.bpg && index < p.gh * p.gw;                                                                      \
+  const int active = live && (p.threshold < 0 || (int)gate[index] > thresholds[p.threshold]);                             \
+  const MotionBlockWindow g = motion_byte_block(prior, p, index, live, B);                                                \
+  const int factor = B == 16 ? motion_factor(p.blend_amount, live ? (int)texture[index] : 16) : 1024;                       \
+  int best = MOTION_NO_KEY;                                                                                               \
+  if (active)                                                                                                             \
+    best = motion_byte_strip_##B##_##K(current, reference, penalty, p.w, p.h, g, (t % p.nsx) * K, t / p.nsx, p.pw,        \
+                                       p.ph, factor);                                                                     \
+  m_key[lid] = best;                                                                                                      \
+  BARRIER;                                                                                                                \
+  if (t == 0 && live) motion_byte_finish(prior, penalty, error_before, vectors, error, m_key + lid, p, g, index, active,  \
+                                         factor, B);                                                                      \
+}
+
+MOTION_BYTE_SEARCH(16, 3)
+MOTION_BYTE_SEARCH(16, 5)
+MOTION_BYTE_SEARCH(16, 9)
+MOTION_BYTE_SEARCH(8, 3)
+MOTION_BYTE_SEARCH(8, 5)
+MOTION_BYTE_SEARCH(8, 9)
+MOTION_BYTE_SEARCH(4, 3)
+MOTION_BYTE_SEARCH(4, 5)
+MOTION_BYTE_SEARCH(4, 9)
+
+
+/* Byte SAD of a (possibly partial) block at a clamped reference position. */
+DEVICE_FN int motion_byte_sad_any(GLOBAL const uchar* cur, GLOBAL const uchar* ref, int w, int x, int y, int bw, int bh,
+                                  int rx, int ry) {
+  int sad = 0;
+  for (int yy = 0; yy < bh; ++yy)
+    for (int xx = 0; xx < bw; ++xx) sad += adr_absi((int)cur[(y + yy) * w + x + xx] - (int)ref[(ry + yy) * w + rx + xx]);
+  return sad;
+}
+
+/* upsample_byte_motion for complete blocks of B (4 or 8) with word-aligned
+ * rows; one thread per block. Other blocks/geometries use motion_upsample. */
+#define MOTION_UPSAMPLE_BYTE(B)                                                                                    \
+  KERNEL void motion_upsample_byte_##B(GLOBAL const uint* current, GLOBAL const uint* reference,                   \
+                                       GLOBAL const short* coarse, GLOBAL short* vectors, GLOBAL uchar* error,     \
+                                       PARAMS(MotionUpsampleParams) KARGS) {                                       \
+    const int index = GID_X;                                                                                        \
+    if (index >= p.gh * p.gw) return;                                                                               \
+    const int gx = index % p.gw, gy = index / p.gw, x = gx * B, y = gy * B;                                         \
+    const int bw = adr_mini(B, p.w - x), bh = adr_mini(B, p.h - y);                                                   \
+    const int x0 = gx / 2, y0 = gy / 2;                                                                             \
+    const int xn = adr_clampi(x0 - 1 + (gx % 2) * 2, 0, p.cw - 1), yn = adr_clampi(y0 - 1 + (gy % 2) * 2, 0, p.ch - 1); \
+    const int pos[4] = {y0 * p.cw + x0, y0 * p.cw + xn, yn * p.cw + xn, yn * p.cw + x0};                             \
+    int cxs[5], cys[5];                                                                                             \
+    for (int k = 0; k < 4; ++k) {                                                                                   \
+      cxs[k] = coarse[pos[k] * 2];                                                                                  \
+      cys[k] = coarse[pos[k] * 2 + 1];                                                                              \
+    }                                                                                                               \
+    const int wx = cxs[0] * 5 + cxs[1] * 4 + cxs[2] * 4 + cxs[3] * 3;                                               \
+    const int wy = cys[0] * 5 + cys[1] * 4 + cys[2] * 4 + cys[3] * 3;                                               \
+    cxs[4] = ((adr_absi(wx) + 8) / 16) * adr_sign(wx);                                                                \
+    cys[4] = ((adr_absi(wy) + 8) / 16) * adr_sign(wy);                                                                \
+    int distance = 0;                                                                                               \
+    for (int k = 1; k < 4; ++k) {                                                                                   \
+      const int ax = adr_absi(cxs[k] - cxs[0]), ay = adr_absi(cys[k] - cys[0]);                                       \
+      distance = adr_maxi(distance, adr_maxi(ax, ay) + adr_mini(ax, ay) / 2);                                          \
+    }                                                                                                               \
+    for (int k = 1; k < 5; ++k) {                                                                                   \
+      cxs[k] = adr_mini(adr_maxi(cxs[k], -x), p.w - bw - x);                                                          \
+      cys[k] = adr_mini(adr_maxi(cys[k], -y), p.h - bh - y);                                                          \
+    }                                                                                                               \
+    const int divisor = B * B / 8;                                                                                  \
+    int best = 0, winner = 0;                                                                                       \
+    if (bw != B || bh != B) {                                                                                       \
+      for (int k = 0; k < 5; ++k) {                                                                                 \
+        const int rx = adr_mini(adr_maxi(x + cxs[k], 0), p.w - bw), ry = adr_mini(adr_maxi(y + cys[k], 0), p.h - bh);   \
+        const int sad = motion_byte_sad_any((GLOBAL const uchar*)current, (GLOBAL const uchar*)reference, p.w, x, y, \
+                                            bw, bh, rx, ry);                                                        \
+        if (k == 0) {                                                                                               \
+          best = sad;                                                                                               \
+          if (sad < p.early * divisor && distance <= p.agreement) break;                                            \
+        } else if (sad < best) {                                                                                    \
+          best = sad;                                                                                               \
+          winner = k;                                                                                               \
+        }                                                                                                           \
+      }                                                                                                             \
+      vectors[index * 2] = (short)cxs[winner];                                                                      \
+      vectors[index * 2 + 1] = (short)cys[winner];                                                                  \
+      error[index] = (uchar)adr_clampi(best / divisor, 0, 255);                                                      \
+      return;                                                                                                       \
+    }                                                                                                               \
+    const int wpr = p.w >> 2;                                                                                       \
+    uint cw[B * B / 4];                                                                                             \
+    for (int yy = 0; yy < B; ++yy)                                                                                  \
+      for (int i = 0; i < B / 4; ++i) cw[yy * (B / 4) + i] = current[(y + yy) * wpr + (x >> 2) + i];               \
+    for (int k = 0; k < 5; ++k) {                                                                                   \
+      const int rx = adr_mini(adr_maxi(x + cxs[k], 0), p.w - bw), ry = adr_mini(adr_maxi(y + cys[k], 0), p.h - bh);     \
+      const int o = (rx & 3) * 8, w0 = rx >> 2;                                                                     \
+      uint lanes = 0u;                                                                                              \
+      for (int yy = 0; yy < B; ++yy) {                                                                              \
+        GLOBAL const uint* row = reference + (ry + yy) * wpr + w0;                                                  \
+        uint words[B / 4 + 1];                                                                                      \
+        for (int i = 0; i < B / 4; ++i) words[i] = row[i];                                                          \
+        words[B / 4] = o ? row[B / 4] : 0u;                                                                         \
+        for (int i = 0; i < B / 4; ++i)                                                                             \
+          lanes += motion_absdiff_lanes(cw[yy * (B / 4) + i], motion_funnel(words[i], words[i + 1], o));            \
+      }                                                                                                             \
+      const int sad = motion_fold(lanes);                                                                           \
+      if (k == 0) {                                                                                                 \
+        best = sad;                                                                                                 \
+        if (sad < p.early * divisor && distance <= p.agreement) break;                                              \
+      } else if (sad < best) {                                                                                      \
+        best = sad;                                                                                                 \
+        winner = k;                                                                                                 \
+      }                                                                                                             \
+    }                                                                                                               \
+    vectors[index * 2] = (short)cxs[winner];                                                                        \
+    vectors[index * 2 + 1] = (short)cys[winner];                                                                    \
+    error[index] = (uchar)adr_clampi(best / divisor, 0, 255);                                                        \
+  }
+
+MOTION_UPSAMPLE_BYTE(8)
+MOTION_UPSAMPLE_BYTE(4)
+
+/* upsample_motion_candidates on packed (H,W,4) images (vector units 2*scale),
+ * fused with the block texture used by this level's searches. Eight threads
+ * per block, one block row each; bpg = 32. */
+KERNEL void motion_upsample_packed(GLOBAL const uint* current, GLOBAL const uint* reference, GLOBAL const short* coarse,
+                                   GLOBAL short* vectors, GLOBAL uchar* error, GLOBAL uchar* texture,
+                                   PARAMS(MotionUpsampleParams) KARGS) {
+  LOCAL int m_row[6 * 256];
+  const int lid = LID_X, b = lid / 8, t = lid % 8;
+  const int index = GROUP_X * 32 + b;
+  const int live = index < p.gh * p.gw;
+  const int gx = live ? index % p.gw : 0, gy = live ? index / p.gw : 0;
+  const int x = gx * 8, y = gy * 8;
+  const int bw = adr_mini(8, p.w - x), bh = adr_mini(8, p.h - y);
+  const int x0 = gx / 2, y0 = gy / 2;
+  const int xn = adr_clampi(x0 - 1 + (gx % 2) * 2, 0, p.cw - 1), yn = adr_clampi(y0 - 1 + (gy % 2) * 2, 0, p.ch - 1);
+  const int pos[4] = {y0 * p.cw + x0, y0 * p.cw + xn, yn * p.cw + xn, yn * p.cw + x0};
+  int cxs[5], cys[5];
+  for (int k = 0; k < 4; ++k) {
+    cxs[k] = live ? (int)coarse[pos[k] * 2] : 0;
+    cys[k] = live ? (int)coarse[pos[k] * 2 + 1] : 0;
+  }
+  const int wx = cxs[0] * 5 + cxs[1] * 4 + cxs[2] * 4 + cxs[3] * 3;
+  const int wy = cys[0] * 5 + cys[1] * 4 + cys[2] * 4 + cys[3] * 3;
+  cxs[4] = ((adr_absi(wx) + 8) / 16) * adr_sign(wx);
+  cys[4] = ((adr_absi(wy) + 8) / 16) * adr_sign(wy);
+  int distance = 0;
+  for (int k = 1; k < 4; ++k) {
+    const int ax = adr_absi(cxs[k] - cxs[0]), ay = adr_absi(cys[k] - cys[0]);
+    distance = adr_maxi(distance, adr_maxi(ax, ay) + adr_mini(ax, ay) / 2);
+  }
+  const int row_live = live && t < bh;
+  uint c[8];
+  uint lanes = 0u;
+  for (int xx = 0; xx < 8; ++xx) c[xx] = (row_live && xx < bw) ? current[(y + t) * p.w + x + xx] : 0u;
+  if (row_live) {
+    for (int xx = 0; xx < bw; ++xx) {
+      if (xx) lanes += motion_absdiff_lanes(c[xx], c[xx - 1]);
+      if (t) lanes += motion_absdiff_lanes(c[xx], current[(y + t - 1) * p.w + x + xx]);
+    }
+  }
+  m_row[5 * 256 + lid] = motion_fold(lanes);
+  /* Nearest candidate first; the others only when it is not kept early. */
+  for (int k = 0; k < 5; ++k) {
+    if (k == 1) {
+      BARRIER;
+      int sad0 = 0;
+      for (int r = 0; r < 8; ++r) sad0 += m_row[b * 8 + r];
+      if (!live || (sad0 < p.early * 32 && distance <= p.agreement)) break;
+    }
+    int sad = 0;
+    if (row_live) {
+      const int rx = adr_mini(adr_maxi(x + cxs[k] / p.units, 0), p.w - bw);
+      const int ry = adr_mini(adr_maxi(y + cys[k] / p.units, 0), p.h - bh);
+      GLOBAL const uint* row = reference + (ry + t) * p.w + rx;
+      uint acc = 0u;
+      for (int xx = 0; xx < bw; ++xx) acc += motion_absdiff_lanes(c[xx], row[xx]);
+      sad = motion_fold(acc);
+    }
+    m_row[k * 256 + lid] = sad;
+  }
+  BARRIER;
+  if (t == 0 && live) {
+    int total[6];
+    for (int k = 0; k < 6; ++k) {
+      total[k] = 0;
+      for (int r = 0; r < 8; ++r) total[k] += m_row[k * 256 + lid + r];
+    }
+    texture[index] = (uchar)adr_clampi((total[5] * 30) >> 10, 16, 128);
+    int best = total[0], winner = 0;
+    if (!(best < p.early * 32 && distance <= p.agreement)) {
+      for (int k = 1; k < 5; ++k) {
+        if (total[k] < best) {
+          best = total[k];
+          winner = k;
+        }
+      }
+    }
+    vectors[index * 2] = (short)cxs[winner];
+    vectors[index * 2 + 1] = (short)cys[winner];
+    error[index] = (uchar)adr_clampi(best / 32, 0, 255);
+  }
+}

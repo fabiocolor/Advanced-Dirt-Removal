@@ -1,151 +1,96 @@
 ; Advanced Dirt Removal - Inno Setup script
-; Build from repo root: iscc installers\win\AdvancedDirtRemoval.iss
-; Requires Inno Setup: https://jrsoftware.org/isinfo.php
+; Installs the Advanced Dirt Removal OFX effect for all OFX hosts.
+; Build from repo root (after building the plugin, see docs/BUILD.md):
+;   iscc /DMyAppVersion=2.0.0 /DBundleDir=..\..\build\release-win\AdvancedDirtRemoval.ofx.bundle installers\win\AdvancedDirtRemoval.iss
+; or run installers\win\build_installer.ps1, which builds both.
+; Requires Inno Setup 6: https://jrsoftware.org/isinfo.php
 
 #define MyAppName "Advanced Dirt Removal"
 #ifndef MyAppVersion
-#define MyAppVersion "1.1.0"
+#define MyAppVersion "2.0.0"
+#endif
+#ifndef BundleDir
+#define BundleDir "..\..\build\release-win\AdvancedDirtRemoval.ofx.bundle"
 #endif
 #define MyAppId "B8A6D2C1-7C2D-4E5A-9C7B-1F2F46B6E9F2"
-#define ResolveMacrosPath "Blackmagic Design\DaVinci Resolve\Support\Fusion\Macros"
-#define MacroFile1 "Advanced Dirt Removal.setting"
-#define MacroFile2 "Advanced Dirt Removal Cineon.setting"
+#define BundleName "AdvancedDirtRemoval.ofx.bundle"
 
 [Setup]
 AppId={{{#MyAppId}}}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher=Fabio Color
-DefaultDirName={userappdata}\{#ResolveMacrosPath}
-DefaultGroupName={#MyAppName}
+AppPublisherURL=https://github.com/fabiocolor/Advanced-Dirt-Removal
+; {app} holds only the uninstaller and the licence; the effect itself goes to the OFX folder.
+DefaultDirName={commonpf64}\{#MyAppName}
 DisableDirPage=yes
 DisableProgramGroupPage=yes
-PrivilegesRequired=lowest
+CreateAppDir=yes
+UsePreviousAppDir=no
+PrivilegesRequired=admin
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
 OutputBaseFilename=AdvancedDirtRemoval-Setup-{#MyAppVersion}
 OutputDir=..
 Compression=lzma2
 SolidCompression=yes
 UninstallDisplayName={#MyAppName}
+LicenseFile=..\..\LICENSE
 
 [Files]
-Source: "..\..\Advanced Dirt Removal.setting"; DestDir: "{userappdata}\{#ResolveMacrosPath}"; DestName: "{#MacroFile1}"; Flags: ignoreversion
-Source: "..\..\Advanced Dirt Removal Cineon.setting"; DestDir: "{userappdata}\{#ResolveMacrosPath}"; DestName: "{#MacroFile2}"; Flags: ignoreversion
+Source: "..\..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
+Source: "..\..\WEIGHTS_LICENSE"; DestDir: "{app}"; DestName: "WEIGHTS_LICENSE.txt"; Flags: ignoreversion
+; The OFX bundle, exactly as built (Contents\Win64\AdvancedDirtRemoval.ofx and Resources).
+Source: "{#BundleDir}\*"; DestDir: "{commoncf64}\OFX\Plugins\{#BundleName}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-[Icons]
-Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
+[InstallDelete]
+; Replace the whole bundle on upgrade.
+Type: filesandordirs; Name: "{commoncf64}\OFX\Plugins\{#BundleName}"
+
+[UninstallDelete]
+Type: dirifempty; Name: "{commoncf64}\OFX\Plugins\{#BundleName}"
 
 [Code]
-function RunUninstall(const UninstallStr: string; const SilentMode: Boolean): Boolean;
+{ Version 1.x was a per-user install with the same AppId. Remove it silently
+  first so Apps & features shows a single entry. }
+function SplitCommand(const Cmd: string; var ExePath: string; var Params: string): Boolean;
 var
-  ExePath: string;
-  Params: string;
-  PosSpace: Integer;
-  ResultCode: Integer;
-  Cmd: string;
-  ShowCmd: Integer;
+  S: string;
+  P: Integer;
 begin
-  Result := False;
-  Cmd := Trim(UninstallStr);
+  S := Trim(Cmd);
   ExePath := '';
   Params := '';
-
-  if (Length(Cmd) >= 2) and (Cmd[1] = '"') then
+  if (Length(S) >= 2) and (S[1] = '"') then
   begin
-    PosSpace := 2;
-    while (PosSpace <= Length(Cmd)) and (Cmd[PosSpace] <> '"') do
-      PosSpace := PosSpace + 1;
-    if PosSpace <= Length(Cmd) then
-    begin
-      ExePath := Copy(Cmd, 2, PosSpace - 2);
-      Params := Trim(Copy(Cmd, PosSpace + 1, MaxInt));
-    end;
-  end;
-
-  if ExePath = '' then
+    P := 2;
+    while (P <= Length(S)) and (S[P] <> '"') do
+      P := P + 1;
+    ExePath := Copy(S, 2, P - 2);
+    Params := Trim(Copy(S, P + 1, MaxInt));
+  end
+  else
   begin
-    PosSpace := Pos(' ', Cmd);
-    if PosSpace > 0 then
+    P := Pos(' ', S);
+    if P > 0 then
     begin
-      ExePath := Copy(Cmd, 1, PosSpace - 1);
-      Params := Trim(Copy(Cmd, PosSpace + 1, MaxInt));
+      ExePath := Copy(S, 1, P - 1);
+      Params := Trim(Copy(S, P + 1, MaxInt));
     end
     else
-      ExePath := Cmd;
+      ExePath := S;
   end;
-
-  if (ExePath <> '') and FileExists(ExePath) then
-  begin
-    if SilentMode then
-      ShowCmd := SW_HIDE
-    else
-      ShowCmd := SW_SHOW;
-
-    if Exec(ExePath, Params, '', ShowCmd, ewWaitUntilTerminated, ResultCode) then
-      Result := True;
-  end;
+  Result := (ExePath <> '') and FileExists(ExePath);
 end;
 
 function InitializeSetup(): Boolean;
 var
-  UninstallKey: string;
-  UninstallStr: string;
-  MacroPath: string;
-  MacroPath2: string;
-  HasInstaller: Boolean;
-  HasFile: Boolean;
-  Choice: Integer;
+  UninstallKey, UninstallStr, ExePath, Params: string;
+  ResultCode: Integer;
 begin
   Result := True;
-
-  UninstallKey := 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\' + '{#MyAppId}_is1';
-  MacroPath := ExpandConstant('{userappdata}') + '\Blackmagic Design\DaVinci Resolve\Support\Fusion\Macros\{#MacroFile1}';
-  MacroPath2 := ExpandConstant('{userappdata}') + '\Blackmagic Design\DaVinci Resolve\Support\Fusion\Macros\{#MacroFile2}';
-
-  HasInstaller := RegQueryStringValue(HKCU, UninstallKey, 'UninstallString', UninstallStr) and (UninstallStr <> '');
-  HasFile := FileExists(MacroPath) or FileExists(MacroPath2);
-
-  if HasInstaller or HasFile then
-  begin
-    if WizardSilent then
-    begin
-      { Keep unattended installs non-interactive and deterministic. }
-      Result := True;
-      Exit;
-    end;
-
-    Choice := MsgBox('A previous version of Advanced Dirt Removal is already installed.' #13#10 #13#10 +
-      'Choose an option:' #13#10 +
-      '- Yes: Replace and install' #13#10 +
-      '- No: Uninstall only' #13#10 +
-      '- Cancel: Exit setup', mbConfirmation, MB_YESNOCANCEL);
-
-    if Choice = IDYES then
-    begin
-      if FileExists(MacroPath) then
-        if DeleteFile(MacroPath) then;
-      if FileExists(MacroPath2) then
-        if DeleteFile(MacroPath2) then;
-      Result := True;
-    end
-    else if Choice = IDNO then
-    begin
-      if HasInstaller then
-      begin
-        if not RunUninstall(UninstallStr, False) then
-          MsgBox('Uninstall may have failed. You can also remove it from Settings > Apps.', mbError, MB_OK);
-      end
-      else
-      begin
-        if FileExists(MacroPath) then
-          if not DeleteFile(MacroPath) then
-            MsgBox('Could not remove the macro file. You may need to run as administrator.', mbError, MB_OK);
-        if FileExists(MacroPath2) then
-          if not DeleteFile(MacroPath2) then
-            MsgBox('Could not remove the macro file. You may need to run as administrator.', mbError, MB_OK);
-      end;
-      Result := False;
-    end
-    else
-      Result := False;
-  end;
+  // The AppId line (unchanged since 1.x) registers the key as '{' + id + '}}_is1'.
+  UninstallKey := 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{' + '{#MyAppId}' + '}}_is1';
+  if RegQueryStringValue(HKCU, UninstallKey, 'UninstallString', UninstallStr) and SplitCommand(UninstallStr, ExePath, Params) then
+    Exec(ExePath, Params + ' /VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;

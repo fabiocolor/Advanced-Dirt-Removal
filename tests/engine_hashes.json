@@ -1,0 +1,783 @@
+{
+ "about": "Expected float32 RGB output SHA-256 of adr_bench --synthetic clips. Every backend (Metal, CUDA, OpenCL, CPU) must reproduce these bytes exactly.",
+ "cases": [
+  {
+   "name": "default@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [],
+   "sha256": "b98c91cdca33e82927ad5f5f7df40953abf7f054fb34839b1afc583d5ed7e035"
+  },
+  {
+   "name": "rgb@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [
+    "analyse=1"
+   ],
+   "sha256": "ab2fd831b588a4027aa2adb7143fef27e27c61244d78fa5e5884fc8e3f2991d8"
+  },
+  {
+   "name": "sensitivity-0@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [
+    "sensitivity=0.0"
+   ],
+   "sha256": "4472739dd141ca21e7646a3632170f84706f3fb84c8b0407bc351d41d6aa48ce"
+  },
+  {
+   "name": "sensitivity-1@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [
+    "sensitivity=1.0"
+   ],
+   "sha256": "ea9d3c2ce5cbd1aa51b02b2973f4389c1df2458a36109bdaaca7b2f5722d7e47"
+  },
+  {
+   "name": "extra-sensitivity@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [
+    "extra_sensitivity=1"
+   ],
+   "sha256": "82f92a3a449150b13d4fad6ee49195e8314cd6b0fe134b5145197251edadc3a6"
+  },
+  {
+   "name": "motion-guard-0@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [
+    "motion_guard=0.0"
+   ],
+   "sha256": "53a1333a9bdc7642fca1cbf1c6a44449ffca1b7179652309f460fbb30a30740f"
+  },
+  {
+   "name": "motion-guard-1@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [
+    "motion_guard=1.0"
+   ],
+   "sha256": "734a34a467f431d90898fbb1c40dbc4d9956492135c621cea286ef1363ad6f96"
+  },
+  {
+   "name": "repair-amount-0.5@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [
+    "repair_amount=0.5"
+   ],
+   "sha256": "7d9708a014e7ab2f2857137fa96183253af4ef65b1af7765db823c92ba783cb1"
+  },
+  {
+   "name": "repair-amount-2@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [
+    "repair_amount=2.0"
+   ],
+   "sha256": "52aaec2743fafe25592fbcd4d28f91dabfd2205522d8fb2e80f35fa076bf46bd"
+  },
+  {
+   "name": "analysis-detail-0@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [
+    "analysis_detail=0.0"
+   ],
+   "sha256": "269a6d87b869b92a6126898b5c755a99a9591380ae0f1b9031f394a8e0d89d53"
+  },
+  {
+   "name": "analysis-detail-1@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [
+    "analysis_detail=1.0"
+   ],
+   "sha256": "748be2c0875465d2d3b354f5010f20cff8c0e9e29fd4d17b19d84f326c4907de"
+  },
+  {
+   "name": "dark-spots-off@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [
+    "remove_dark=0"
+   ],
+   "sha256": "14a49343d89fb99694990ec676ca7deeba29759746fe851f7ecca8f13540132c"
+  },
+  {
+   "name": "light-spots-off@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [
+    "remove_light=0"
+   ],
+   "sha256": "96153fbbf4752d941d111b8443c47529e5e374d3e1e354d6dcf3e2e0c61185d7"
+  },
+  {
+   "name": "shot-guard-0@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [
+    "shot_guard=0.0"
+   ],
+   "sha256": "20e8e6c2191c6d134807747c86545917306d54035fdc111219dadd6fc2aec2ec"
+  },
+  {
+   "name": "shot-guard-1@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [
+    "shot_guard=1.0"
+   ],
+   "sha256": "ec09dc657d22c2dc105673984de5f7e15fe5ad7be1c2a92a58631a6d216e49c6"
+  },
+  {
+   "name": "shot-changes-off@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [
+    "shot_changes=0"
+   ],
+   "sha256": "7df3ae928faf644495d1b4adc43f9b43087c266037f5b9f0c9757e3f9afacdaa"
+  },
+  {
+   "name": "shot-changes-skip@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [
+    "shot_changes=2"
+   ],
+   "sha256": "a6cd7404ba3d42a966b9a28eb9f8531e3f759fba2d8e8a53d3a6b737957f46c5"
+  },
+  {
+   "name": "blend-off@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [
+    "blend_repairs=0"
+   ],
+   "sha256": "94b74b4047d9fabc87c345ecac53b8288209be596a20cc0ab2f8de6bb28df58a"
+  },
+  {
+   "name": "blend-0@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [
+    "blend_amount=0.0"
+   ],
+   "sha256": "b1238a7f5a1035a8966c34dab0df8b510fbaceed6c158398b9ca9ded97ae7ea4"
+  },
+  {
+   "name": "blend-1@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [
+    "blend_amount=1.0"
+   ],
+   "sha256": "4c3f943de4b8878dd0be0fe927702df99d49d6c84d7c91ae24f2fd94c7afa6ee"
+  },
+  {
+   "name": "spot-limit-25@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [
+    "limit_spot_size=1"
+   ],
+   "sha256": "b98c91cdca33e82927ad5f5f7df40953abf7f054fb34839b1afc583d5ed7e035"
+  },
+  {
+   "name": "spot-limit-8@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [
+    "limit_spot_size=1",
+    "largest_spot=8"
+   ],
+   "sha256": "b3123d731ed6d8cf3574ed487ac2d6631e5d9676f3329b58c3e6267f8810536b"
+  },
+  {
+   "name": "spot-limit-64@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [
+    "limit_spot_size=1",
+    "largest_spot=64"
+   ],
+   "sha256": "b98c91cdca33e82927ad5f5f7df40953abf7f054fb34839b1afc583d5ed7e035"
+  },
+  {
+   "name": "flash-guard@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [
+    "flash_guard=1"
+   ],
+   "sha256": "b98c91cdca33e82927ad5f5f7df40953abf7f054fb34839b1afc583d5ed7e035"
+  },
+  {
+   "name": "extended-range@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [
+    "extended_range=1"
+   ],
+   "sha256": "e1c4ce49b7ee12b6561e0d51ed6da426ba72bfb12b536c8ac259cda02288ce26"
+  },
+  {
+   "name": "extra-sensitivity-spot-limit@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [
+    "extra_sensitivity=1",
+    "limit_spot_size=1"
+   ],
+   "sha256": "82f92a3a449150b13d4fad6ee49195e8314cd6b0fe134b5145197251edadc3a6"
+  },
+  {
+   "name": "extended-flash-spot-limit@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [
+    "extended_range=1",
+    "flash_guard=1",
+    "limit_spot_size=1"
+   ],
+   "sha256": "e1c4ce49b7ee12b6561e0d51ed6da426ba72bfb12b536c8ac259cda02288ce26"
+  },
+  {
+   "name": "rgb-heavy@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [
+    "analyse=1",
+    "extra_sensitivity=1",
+    "sensitivity=1.0",
+    "limit_spot_size=1",
+    "largest_spot=16",
+    "flash_guard=1"
+   ],
+   "sha256": "fbe60680241742ae9640cec621495f07ff7308d9caecf12efc0aa543f9a2e110"
+  },
+  {
+   "name": "luma-gentle@640x360",
+   "clip": [
+    7,
+    640,
+    360,
+    12
+   ],
+   "controls": [
+    "sensitivity=0.25",
+    "motion_guard=0.75",
+    "repair_amount=0.8",
+    "blend_amount=0.75",
+    "shot_changes=2"
+   ],
+   "sha256": "daedd3ddc4d905c132f564507760f7e0a4bd2a4d47c3bbc23dbf5e6238aaa07d"
+  },
+  {
+   "name": "default@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [],
+   "sha256": "f3bb8295bdcf8c76d9127540950bbcb3f001fefe9461312e543ec5700f2f17b0"
+  },
+  {
+   "name": "rgb@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [
+    "analyse=1"
+   ],
+   "sha256": "04428e0acf57c46b21b7ddc7c52fca284f72b31f940fd5c8a97e788587088ec4"
+  },
+  {
+   "name": "sensitivity-0@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [
+    "sensitivity=0.0"
+   ],
+   "sha256": "dea79e610b17b5589e363f1c8af71eb288165582df662f204c3e43441df800b1"
+  },
+  {
+   "name": "sensitivity-1@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [
+    "sensitivity=1.0"
+   ],
+   "sha256": "99073de7771c6e6379d4d6fbeac60efc23dc2963d757a14e2006926c377cb15b"
+  },
+  {
+   "name": "extra-sensitivity@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [
+    "extra_sensitivity=1"
+   ],
+   "sha256": "83e15feb697daccc880c87cd7f791c8640b578d691332d3a95d012978fb42cbb"
+  },
+  {
+   "name": "motion-guard-0@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [
+    "motion_guard=0.0"
+   ],
+   "sha256": "99500ed91ff1d4f6042b3413627dbf118970fc6c070f3f40dd00d4adacfef6c2"
+  },
+  {
+   "name": "motion-guard-1@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [
+    "motion_guard=1.0"
+   ],
+   "sha256": "bbcfffe043bbb8266a8035b8ee7e7b4e6701c7e976ee331a654925097e75fbbc"
+  },
+  {
+   "name": "repair-amount-0.5@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [
+    "repair_amount=0.5"
+   ],
+   "sha256": "78197b7faef72a162058448232c07c524ec43f3d27efa8732b13e499992238c8"
+  },
+  {
+   "name": "repair-amount-2@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [
+    "repair_amount=2.0"
+   ],
+   "sha256": "10803ccab91e0a70b4f984e37cabe2bd7a5b867619f9ff0f458b83621c738596"
+  },
+  {
+   "name": "analysis-detail-0@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [
+    "analysis_detail=0.0"
+   ],
+   "sha256": "9cda9abea7bcf5d01514e98c2ec91d2017dd39723e0d913dddda3eade8328976"
+  },
+  {
+   "name": "analysis-detail-1@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [
+    "analysis_detail=1.0"
+   ],
+   "sha256": "6ba723a2271a301953cabdac6562836c7195992ef00ff04470a1214083391a7a"
+  },
+  {
+   "name": "dark-spots-off@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [
+    "remove_dark=0"
+   ],
+   "sha256": "505ab2a35975b865e3a419a42d27873a68fd20297b5e2892740e645042096b01"
+  },
+  {
+   "name": "light-spots-off@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [
+    "remove_light=0"
+   ],
+   "sha256": "1de8be193731c8b5ad0925babf95fb0f9632e5b6c4ebb5f851b2dfd57278ee7d"
+  },
+  {
+   "name": "shot-guard-0@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [
+    "shot_guard=0.0"
+   ],
+   "sha256": "b751d372e3e72b52de8d15dc2e770a39826dffc2db65632ccb02f213e3c0afda"
+  },
+  {
+   "name": "shot-guard-1@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [
+    "shot_guard=1.0"
+   ],
+   "sha256": "4d7d40638f784bf613e761b33606e389d95348669a075cc610bd698cb08b4744"
+  },
+  {
+   "name": "shot-changes-off@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [
+    "shot_changes=0"
+   ],
+   "sha256": "2de945a8fa17f99063557a26783a9d8f6cde096032737dbabae2d9cf0cc55ccb"
+  },
+  {
+   "name": "shot-changes-skip@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [
+    "shot_changes=2"
+   ],
+   "sha256": "7537f9f0f708112909a6c3a244bb96c811e5b69c75214902e24bc1bbf7c7f2c3"
+  },
+  {
+   "name": "blend-off@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [
+    "blend_repairs=0"
+   ],
+   "sha256": "8a007b5e12c2b1efd5a2e2650d22c694736eaff01cfb3c6be6d9caef215d647a"
+  },
+  {
+   "name": "blend-0@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [
+    "blend_amount=0.0"
+   ],
+   "sha256": "de4cddfcdd904f4f80d2233b6e25327f80cfcc55746f5e87837dc458dbc03bbd"
+  },
+  {
+   "name": "blend-1@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [
+    "blend_amount=1.0"
+   ],
+   "sha256": "3e8abc2d285138c7430db0a3dc372dbab8bb5fdf625ca3f4ad568fc3d3bce152"
+  },
+  {
+   "name": "spot-limit-25@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [
+    "limit_spot_size=1"
+   ],
+   "sha256": "f3bb8295bdcf8c76d9127540950bbcb3f001fefe9461312e543ec5700f2f17b0"
+  },
+  {
+   "name": "spot-limit-8@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [
+    "limit_spot_size=1",
+    "largest_spot=8"
+   ],
+   "sha256": "e055a05535fadf4c94ec983ea0b94477ae019002b5ad98ab9ada07fa79ad8c0e"
+  },
+  {
+   "name": "spot-limit-64@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [
+    "limit_spot_size=1",
+    "largest_spot=64"
+   ],
+   "sha256": "f3bb8295bdcf8c76d9127540950bbcb3f001fefe9461312e543ec5700f2f17b0"
+  },
+  {
+   "name": "flash-guard@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [
+    "flash_guard=1"
+   ],
+   "sha256": "f3bb8295bdcf8c76d9127540950bbcb3f001fefe9461312e543ec5700f2f17b0"
+  },
+  {
+   "name": "extended-range@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [
+    "extended_range=1"
+   ],
+   "sha256": "9eb41b7bce9da0fa80dfcb628ade2d5ffb7684290f64978c3738e1ca777e35f5"
+  },
+  {
+   "name": "extra-sensitivity-spot-limit@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [
+    "extra_sensitivity=1",
+    "limit_spot_size=1"
+   ],
+   "sha256": "83e15feb697daccc880c87cd7f791c8640b578d691332d3a95d012978fb42cbb"
+  },
+  {
+   "name": "extended-flash-spot-limit@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [
+    "extended_range=1",
+    "flash_guard=1",
+    "limit_spot_size=1"
+   ],
+   "sha256": "9eb41b7bce9da0fa80dfcb628ade2d5ffb7684290f64978c3738e1ca777e35f5"
+  },
+  {
+   "name": "rgb-heavy@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [
+    "analyse=1",
+    "extra_sensitivity=1",
+    "sensitivity=1.0",
+    "limit_spot_size=1",
+    "largest_spot=16",
+    "flash_guard=1"
+   ],
+   "sha256": "aa46ac1e417a8ecda696685d4421044a81ee730ad60dad9ad4ac137a2583f6be"
+  },
+  {
+   "name": "luma-gentle@638x359",
+   "clip": [
+    11,
+    638,
+    359,
+    10
+   ],
+   "controls": [
+    "sensitivity=0.25",
+    "motion_guard=0.75",
+    "repair_amount=0.8",
+    "blend_amount=0.75",
+    "shot_changes=2"
+   ],
+   "sha256": "29f726465f0a79975a9b9e091598807a4806af547b675ec4d6a62c7bf7e644e9"
+  }
+ ]
+}

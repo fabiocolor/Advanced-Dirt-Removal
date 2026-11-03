@@ -35,7 +35,11 @@ $RECYCLE.BIN/
 .github/
 Developer/
 scripts/
-docs/
+# Old private planning notes (not release material)
+/docs/INSTALLERS.md
+/docs/OFX_PLUGIN_FEASIBILITY_ML.md
+/docs/OFX_PLUGIN_IMPLEMENTATION_PLAN.md
+/docs/images/
 
 # Build artifacts
 *.o
@@ -49,3 +53,11 @@ docs/
 # Keep only essential project files
 installers/mac/build/
 tests/resolve_headless/
+
+# Local build output and release checks
+/build/
+__pycache__/
+*.pyc
+/.sanitize-denylist
+installers/linux/build/
+installers/*.exe

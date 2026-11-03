@@ -1,0 +1,387 @@
+/* Float repair: half-pixel feature compensation, temporal reconstruction,
+ * preservation blend, RGB conversion and the float post-repair limiter. */
+
+/* float32 constants rounded from float64 literals (exact bit patterns). */
+#define REPAIR_RECIP255 adr_as_float(0x3b808080)  /* 0.003921568393707275 */
+#define REPAIR_K1402 adr_as_float(0x3fb374bc)     /* 1.402 */
+#define REPAIR_KM344 adr_as_float(0xbeb020c5)     /* -.344 */
+#define REPAIR_KM714 adr_as_float(0xbf36c8b4)     /* -.714 */
+#define REPAIR_K1772 adr_as_float(0x3fe2d0e5)     /* 1.772 */
+#define REPAIR_FLT_MAX adr_as_float(0x7f7fffff)
+
+DEVICE_FN float repair_px(GLOBAL const float* r, int h, int w, int x, int y) {
+  return r[adr_clampi(y, 0, h - 1) * w + adr_clampi(x, 0, w - 1)];
+}
+
+/* compensate_float_plane at (xx,yy) for vector (vx,vy), bounds +-FLT_MAX. */
+DEVICE_FN float repair_compensate_at(GLOBAL const float* ref, int h, int w, int block, int xx, int yy, int vx,
+                                     int vy) {
+  const int x2 = xx * 2 + vx, y2 = yy * 2 + vy;
+  const int x = x2 >> 1, y = y2 >> 1, fx = x2 & 1, fy = y2 & 1;
+  if (!(fx | fy)) return repair_px(ref, h, w, x, y);
+  float a[4][4];
+  for (int j = 0; j < 4; ++j)
+    for (int i = 0; i < 4; ++i) a[j][i] = repair_px(ref, h, w, x + i - 1, y + j - 1);
+  float value;
+  if (!fy) {
+    value = ((a[1][0] + a[1][3]) * (-8.0f) + (a[1][1] + a[1][2]) * 40.0f) * (1.0f / 64.0f);
+  } else if (!fx) {
+    value = ((a[0][1] + a[3][1]) * (-8.0f) + (a[1][1] + a[2][1]) * 40.0f) * (1.0f / 64.0f);
+  } else if (block == 4 || ((h | w) & 1)) {
+    /* General stencil: also used for 2x2 blocks on odd planes. */
+    const float outer_y = (-(a[0][1] + a[0][2]) - (a[3][1] + a[3][2])) * 5.0f;
+    const float outer_x = ((a[1][0] + a[1][3]) + (a[2][0] + a[2][3])) * (-5.0f);
+    const float middle = ((a[1][1] + a[1][2]) + (a[2][1] + a[2][2])) * 25.0f;
+    const float corners = ((a[0][0] + a[0][3]) + a[3][0]) + a[3][3];
+    value = (outer_y + (outer_x + (middle + corners))) * (1.0f / 64.0f);
+  } else {
+    const int bx = x - (xx & 1), by = y - (yy & 1);
+    const int edge = bx < 1 || bx >= w - 3 || by < 1 || by >= h - 3;
+    const int alt = (xx & 1) && edge;
+    float r[4];
+    for (int j = 0; j < 4; ++j) {
+      const float middle = (a[j][1] + a[j][2]) * 5.0f;
+      r[j] = alt ? (a[j][0] - middle) + a[j][3] : (a[j][0] + a[j][3]) - middle;
+    }
+    value = ((r[0] - (r[1] + r[2]) * 5.0f) + r[3]) * (1.0f / 64.0f);
+  }
+  return adr_clampf(value, -REPAIR_FLT_MAX, REPAIR_FLT_MAX);
+}
+
+DEVICE_FN int repair_vector_index(int block, int w, int xx, int yy) {
+  return ((yy / block) * ((w + block - 1) / block) + xx / block) * 2;
+}
+
+/* reconstruct_float_plane for one sample (before the repair-mask select). */
+DEVICE_FN float repair_reconstruct_value(float original, float v0, float v1, float v2, float v3, int count) {
+  if (count == 0) return original;
+  if (count == 1) return (v0 + v0) * .5f;
+  if (count == 2) return (v0 + v1) * .5f;
+  float v[4];
+  v[0] = v0;
+  v[1] = v1;
+  v[2] = v2;
+  v[3] = v3;
+  float m[6], c[6];
+  int k = 0;
+  for (int a = 0; a < count; ++a)
+    for (int b = a + 1; b < count; ++b) {
+      m[k] = (v[a] + v[b]) * .5f;
+      c[k] = adr_fabs(v[a] - v[b]) * adr_fabs(m[k] - original);
+      ++k;
+    }
+  const int swaps3[6] = {0, 1, 1, 2, 0, 1};
+  const int swaps4[24] = {1, 2, 0, 2, 0, 1, 4, 5, 3, 5, 3, 4, 0, 3, 1, 4, 2, 5, 2, 4, 1, 3, 2, 3};
+  const int steps = count == 3 ? 3 : 12;
+  for (int i = 0; i < steps; ++i) {
+    const int a = count == 3 ? swaps3[i * 2] : swaps4[i * 2];
+    const int b = count == 3 ? swaps3[i * 2 + 1] : swaps4[i * 2 + 1];
+    if (c[b] < c[a]) {
+      const float ma = m[a], ca = c[a];
+      m[a] = m[b];
+      c[a] = c[b];
+      m[b] = ma;
+      c[b] = ca;
+    }
+  }
+  const float bias = 1.0f / 1024.0f;
+  float numerator, denominator;
+  if (count == 3) {
+    numerator = (m[0] * (c[2] + bias) + m[2] * c[0]) + m[1] * c[1];
+    denominator = (c[0] + (c[2] + bias)) + c[1];
+  } else {
+    numerator = ((m[2] * c[1] + m[1] * c[2]) + m[3] * c[0]) + m[0] * (c[3] + bias);
+    denominator = (((c[0] + bias) + c[1]) + c[2]) + c[3];
+  }
+  return numerator / denominator;
+}
+
+/* blend_float_repair. in_place: division; otherwise the aligned-group
+ * reciprocal with scalar division for the unaligned row prefix/tail. */
+DEVICE_FN float repair_blend_value(float current, float repaired, int mask, int in_place, int x, int y, int w) {
+  const float m = (float)mask;
+  const float numerator = current * m + repaired * (255.0f - m);
+  if (!in_place) {
+    const int prefix = (4 - ((y * w) & 3)) & 3;
+    const int end = prefix + ((w - prefix) / 4) * 4;
+    if (x >= prefix && x < end) return numerator * REPAIR_RECIP255;
+  }
+  return numerator / 255.0f;
+}
+
+/* float_features_to_rgb channel c. */
+DEVICE_FN float repair_rgb(float y, float u, float v, int c) {
+  if (c == 0) return v * REPAIR_K1402 + y;
+  if (c == 1) return (u * REPAIR_KM344 + y) + v * REPAIR_KM714;
+  return y + u * REPAIR_K1772;
+}
+
+DEVICE_FN float repair_rgb_at(GLOBAL const float* features, int n, int i, int c) {
+  return repair_rgb(features[i], features[n + i], features[2 * n + i], c);
+}
+
+/* Order-preserving int key of a finite float (signed int comparison). */
+DEVICE_FN int repair_float_key(float v) {
+  const int b = adr_as_int(v);
+  return b >= 0 ? b : b ^ 0x7fffffff;
+}
+DEVICE_FN float repair_key_float(int k) { return adr_as_float(k >= 0 ? k : k ^ 0x7fffffff); }
+
+/* Per-frame source min/max over every channel as two order-preserving keys.
+ * bounds must be pre-filled with {INT_MAX, INT_MIN}. */
+KERNEL void repair_source_bounds(GLOBAL const float* source, GLOBAL ATOMIC_INT* bounds, PARAMS(SizeParams) KARGS) {
+  LOCAL int lo[256];
+  LOCAL int hi[256];
+  const int lid = LID_X;
+  int a = 0x7fffffff, b = (int)0x80000000;
+  for (int i = GID_X; i < p.n; i += LSIZE_X * 1024) {
+    const int k = repair_float_key(source[i]);
+    a = adr_mini(a, k);
+    b = adr_maxi(b, k);
+  }
+  lo[lid] = a;
+  hi[lid] = b;
+  BARRIER;
+  for (int s = LSIZE_X / 2; s > 0; s >>= 1) {
+    if (lid < s) {
+      lo[lid] = adr_mini(lo[lid], lo[lid + s]);
+      hi[lid] = adr_maxi(hi[lid], hi[lid + s]);
+    }
+    BARRIER;
+  }
+  if (lid == 0) {
+    ATOMIC_MIN(&bounds[0], lo[0]);
+    ATOMIC_MAX(&bounds[1], hi[0]);
+  }
+}
+
+/* Delivered repaired RGB, before post-repair smoothing.
+ * m/M are the current source frame's minimum/maximum over all channels. Values
+ * above max(1, M) are clamped down; when m >= 0, values below +0 (including -0)
+ * are clamped up to +0; when m < 0 there is no lower clamp. Comparisons select
+ * the bound only on strict inequality (x86 minss/maxss order), so -0 survives
+ * in negative frames. Internal overshoot inside the repair is kept. */
+DEVICE_FN float repair_rgb_out_at(GLOBAL const float* features, int n, int i, int c, GLOBAL const int* bounds) {
+  const float m = repair_key_float(bounds[0]), M = repair_key_float(bounds[1]);
+  const float hi = M > 1.0f ? M : 1.0f;
+  float v = repair_rgb_at(features, n, i, c);
+  v = v < hi ? v : hi;
+  if (m < 0.0f) return v;
+  return v > 0.0f ? v : 0.0f;
+}
+
+/* RGB10 quantization or the HDR analysis code of one float sample. */
+DEVICE_FN int repair_code(float a, int hdr, GLOBAL const int* table) {
+  if (hdr) {
+    const float f = adr_clampf(a * 8191.0f + 0.5f, 0.0f, 32767.0f);
+    return table[(int)f];
+  }
+  return adr_clampi((int)(a * 1023.0f + 0.5f), 0, 1023);
+}
+
+/* ---- Isolated primitives (development stages). ---- */
+
+KERNEL void repair_compensate_float(GLOBAL const float* features, GLOBAL const short* vectors, GLOBAL float* out,
+                                    PARAMS(RepairCompensateParams) KARGS) {
+  const int xx = GID_X, yy = GID_Y;
+  if (xx >= p.w || yy >= p.h) return;
+  const int n = p.h * p.w;
+  const int vi = repair_vector_index(p.block, p.w, xx, yy);
+  const int vx = vectors[vi], vy = vectors[vi + 1];
+  for (int c = 0; c < p.channels; ++c)
+    out[c * n + yy * p.w + xx] =
+        repair_compensate_at(features + (p.channel0 + c) * n, p.h, p.w, p.block, xx, yy, vx, vy);
+}
+
+KERNEL void repair_reconstruct(GLOBAL const float* current, GLOBAL const float* references, GLOBAL const uchar* mask,
+                               GLOBAL float* out, PARAMS(RepairReconstructParams) KARGS) {
+  const int i = GID_X;
+  if (i >= p.pixels) return;
+  const float original = current[i];
+  if (p.count == 0 || (!p.force && mask[i] == 0)) {
+    out[i] = original;
+    return;
+  }
+  const int n = p.pixels;
+  const float v0 = references[i];
+  const float v1 = p.count > 1 ? references[n + i] : v0;
+  const float v2 = p.count > 2 ? references[2 * n + i] : v0;
+  const float v3 = p.count > 3 ? references[3 * n + i] : v0;
+  out[i] = repair_reconstruct_value(original, v0, v1, v2, v3, p.count);
+}
+
+KERNEL void repair_blend(GLOBAL const float* current, GLOBAL const float* repaired, GLOBAL const uchar* mask,
+                         GLOBAL float* out, PARAMS(RepairBlendParams) KARGS) {
+  const int x = GID_X, y = GID_Y;
+  if (x >= p.w || y >= p.h) return;
+  const int i = y * p.w + x;
+  out[i] = repair_blend_value(current[i], repaired[i], (int)mask[i], p.in_place, x, y, p.w);
+}
+
+/* (3,H,W) features -> (H,W,3) RGB, same orientation. */
+KERNEL void repair_features_to_rgb(GLOBAL const float* features, GLOBAL float* out, PARAMS(SizeParams) KARGS) {
+  const int i = GID_X;
+  if (i >= p.n) return;
+  for (int c = 0; c < 3; ++c) out[i * 3 + c] = repair_rgb_at(features, p.n, i, c);
+}
+
+/* gaussian_float_rgb vertical pass (axis 0). */
+KERNEL void repair_gaussian_v(GLOBAL const float* src, GLOBAL float* dst, PARAMS(RepairGaussianParams) KARGS) {
+  const int x = GID_X, y = GID_Y;
+  if (x >= p.w || y >= p.h) return;
+  float t = 0.0f;
+  t = t + src[adr_clampi(y - 2, 0, p.h - 1) * p.w + x] * p.g0;
+  t = t + src[adr_clampi(y - 1, 0, p.h - 1) * p.w + x] * p.g1;
+  t = t + src[y * p.w + x] * p.g2;
+  t = t + src[adr_clampi(y + 1, 0, p.h - 1) * p.w + x] * p.g3;
+  t = t + src[adr_clampi(y + 2, 0, p.h - 1) * p.w + x] * p.g4;
+  dst[y * p.w + x] = t;
+}
+
+/* Horizontal pass (axis 1). */
+KERNEL void repair_gaussian_h(GLOBAL const float* src, GLOBAL float* dst, PARAMS(RepairGaussianParams) KARGS) {
+  const int x = GID_X, y = GID_Y;
+  if (x >= p.w || y >= p.h) return;
+  GLOBAL const float* row = src + y * p.w;
+  float t = 0.0f;
+  t = t + row[adr_clampi(x - 2, 0, p.w - 1)] * p.g0;
+  t = t + row[adr_clampi(x - 1, 0, p.w - 1)] * p.g1;
+  t = t + row[x] * p.g2;
+  t = t + row[adr_clampi(x + 1, 0, p.w - 1)] * p.g3;
+  t = t + row[adr_clampi(x + 2, 0, p.w - 1)] * p.g4;
+  dst[y * p.w + x] = t;
+}
+
+/* ---- Assemblies. ---- */
+
+/* repair_float_frame image path: per reference compensation of the three
+ * feature planes, reconstruction under the repair mask and the separate-output
+ * preservation blend. References/vectors are bound in repair order. */
+KERNEL void repair_frame(GLOBAL const float* current, GLOBAL const float* r0, GLOBAL const float* r1,
+                         GLOBAL const float* r2, GLOBAL const float* r3, GLOBAL const short* q0,
+                         GLOBAL const short* q1, GLOBAL const short* q2, GLOBAL const short* q3,
+                         GLOBAL const uchar* repair_mask, GLOBAL const uchar* preserve, GLOBAL float* out,
+                         PARAMS(RepairFrameParams) KARGS) {
+  const int x = GID_X, y = GID_Y;
+  if (x >= p.w || y >= p.h) return;
+  const int n = p.h * p.w, i = y * p.w + x;
+  const int repair = p.count > 0 && repair_mask[i] != 0;
+  int vx0 = 0, vy0 = 0, vx1 = 0, vy1 = 0, vx2 = 0, vy2 = 0, vx3 = 0, vy3 = 0;
+  if (repair) {
+    int k = repair_vector_index(p.block0, p.w, x, y);
+    vx0 = q0[k];
+    vy0 = q0[k + 1];
+    if (p.count > 1) {
+      k = repair_vector_index(p.block1, p.w, x, y);
+      vx1 = q1[k];
+      vy1 = q1[k + 1];
+    }
+    if (p.count > 2) {
+      k = repair_vector_index(p.block2, p.w, x, y);
+      vx2 = q2[k];
+      vy2 = q2[k + 1];
+    }
+    if (p.count > 3) {
+      k = repair_vector_index(p.block3, p.w, x, y);
+      vx3 = q3[k];
+      vy3 = q3[k + 1];
+    }
+  }
+  const int mask = preserve[i];
+  for (int c = 0; c < 3; ++c) {
+    const float original = current[c * n + i];
+    float reconstructed = original;
+    if (repair) {
+      const float v0 = repair_compensate_at(r0 + c * n, p.h, p.w, p.block0, x, y, vx0, vy0);
+      const float v1 = p.count > 1 ? repair_compensate_at(r1 + c * n, p.h, p.w, p.block1, x, y, vx1, vy1) : v0;
+      const float v2 = p.count > 2 ? repair_compensate_at(r2 + c * n, p.h, p.w, p.block2, x, y, vx2, vy2) : v0;
+      const float v3 = p.count > 3 ? repair_compensate_at(r3 + c * n, p.h, p.w, p.block3, x, y, vx3, vy3) : v0;
+      reconstructed = repair_reconstruct_value(original, v0, v1, v2, v3, p.count);
+    }
+    out[c * n + i] = repair_blend_value(original, reconstructed, mask, 0, x, y, p.w);
+  }
+}
+
+/* Extract one channel of an interleaved (H,W,C) byte image. */
+KERNEL void repair_channel_bytes(GLOBAL const uchar* src, GLOBAL uchar* dst, PARAMS(RepairChannelParams) KARGS) {
+  const int i = GID_X;
+  if (i >= p.n) return;
+  dst[i] = src[i * p.channels + p.channel];
+}
+
+/* RGB-mode spread ((s0*307 + s1*460 + s2*257) // 1024) and the repair mask maximum. */
+KERNEL void repair_rgb_masks(GLOBAL const uchar* s0, GLOBAL const uchar* s1, GLOBAL const uchar* s2,
+                             GLOBAL const uchar* m0, GLOBAL const uchar* m1, GLOBAL const uchar* m2,
+                             GLOBAL uchar* spread, GLOBAL uchar* mask, PARAMS(SizeParams) KARGS) {
+  const int i = GID_X;
+  if (i >= p.n) return;
+  spread[i] = (uchar)((((int)s0[i] * 307 + (int)s1[i] * 460) + (int)s2[i] * 257) / 1024);
+  mask[i] = (uchar)adr_maxi(adr_maxi((int)m0[i], (int)m1[i]), (int)m2[i]);
+}
+
+/* finish_rgb, pass 1. Without smoothing writes the final top-down RGB.
+ * Otherwise writes contrast codes of repaired and original RGB per channel and
+ * the vertical Gaussian of the repaired RGB (3,H,W), bottom-up. */
+KERNEL void repair_finish_codes(GLOBAL const float* features, GLOBAL const float* original, GLOBAL const int* table,
+                                GLOBAL const int* bounds,
+                                GLOBAL int* rc0, GLOBAL int* rc1, GLOBAL int* rc2, GLOBAL int* oc0, GLOBAL int* oc1,
+                                GLOBAL int* oc2, GLOBAL float* vblur, GLOBAL float* out,
+                                PARAMS(RepairFinishParams) KARGS) {
+  const int x = GID_X, y = GID_Y;
+  if (x >= p.w || y >= p.h) return;
+  const int n = p.h * p.w, i = y * p.w + x;
+  const int top = (p.h - 1 - y) * p.w + x;
+  if (!p.smoothing) {
+    for (int c = 0; c < 3; ++c) out[top * 3 + c] = repair_rgb_out_at(features, n, i, c, bounds);
+    return;
+  }
+  const int ym2 = adr_clampi(y - 2, 0, p.h - 1) * p.w + x, ym1 = adr_clampi(y - 1, 0, p.h - 1) * p.w + x;
+  const int yp1 = adr_clampi(y + 1, 0, p.h - 1) * p.w + x, yp2 = adr_clampi(y + 2, 0, p.h - 1) * p.w + x;
+  for (int c = p.c0; c < p.c1; ++c) {
+    const float a = repair_rgb_out_at(features, n, i, c, bounds);
+    const int rc = repair_code(a, p.hdr, table);
+    const int oc = repair_code(original[top * 3 + c], p.hdr, table);
+    if (c == 0) {
+      rc0[i] = rc;
+      oc0[i] = oc;
+    } else if (c == 1) {
+      rc1[i] = rc;
+      oc1[i] = oc;
+    } else {
+      rc2[i] = rc;
+      oc2[i] = oc;
+    }
+    float t = 0.0f;
+    t = t + repair_rgb_out_at(features, n, ym2, c, bounds) * p.g0;
+    t = t + repair_rgb_out_at(features, n, ym1, c, bounds) * p.g1;
+    t = t + a * p.g2;
+    t = t + repair_rgb_out_at(features, n, yp1, c, bounds) * p.g3;
+    t = t + repair_rgb_out_at(features, n, yp2, c, bounds) * p.g4;
+    vblur[c * n + i] = t;
+  }
+}
+
+/* finish_rgb, pass 2: horizontal Gaussian, in-place blend with the contrast
+ * blend planes and the vertical flip into interleaved top-down RGB. */
+KERNEL void repair_finish_blend(GLOBAL const float* features, GLOBAL const float* vblur, GLOBAL const int* bounds,
+                                GLOBAL const uchar* b0,
+                                GLOBAL const uchar* b1, GLOBAL const uchar* b2, GLOBAL float* out,
+                                PARAMS(RepairFinishParams) KARGS) {
+  const int x = GID_X, y = GID_Y;
+  if (x >= p.w || y >= p.h) return;
+  const int n = p.h * p.w, i = y * p.w + x;
+  const int top = (p.h - 1 - y) * p.w + x;
+  const int xm2 = adr_clampi(x - 2, 0, p.w - 1), xm1 = adr_clampi(x - 1, 0, p.w - 1);
+  const int xp1 = adr_clampi(x + 1, 0, p.w - 1), xp2 = adr_clampi(x + 2, 0, p.w - 1);
+  for (int c = 0; c < 3; ++c) {
+    GLOBAL const float* row = vblur + c * n + y * p.w;
+    float t = 0.0f;
+    t = t + row[xm2] * p.g0;
+    t = t + row[xm1] * p.g1;
+    t = t + row[x] * p.g2;
+    t = t + row[xp1] * p.g3;
+    t = t + row[xp2] * p.g4;
+    const int mask = c == 0 ? (int)b0[i] : c == 1 ? (int)b1[i] : (int)b2[i];
+    out[top * 3 + c] = repair_blend_value(t, repair_rgb_out_at(features, n, i, c, bounds), mask, 1, x, y, p.w);
+  }
+}

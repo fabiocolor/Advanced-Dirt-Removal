@@ -1,0 +1,22 @@
+# DRAFT - pending approval. Not submitted to microsoft/winget-pkgs.
+# Submit only after the v2.0.0 release is live and the downloaded installer
+# matches InstallerSha256. See docs/MAINTAINERS_RELEASE.md (winget).
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json
+
+PackageIdentifier: FabioColor.AdvancedDirtRemoval
+PackageVersion: 2.0.0
+InstallerType: inno
+Scope: machine
+ElevationRequirement: elevatesSelf
+InstallerSwitches:
+  Silent: /VERYSILENT /SUPPRESSMSGBOXES /NOCANCEL /NORESTART /SP-
+  SilentWithProgress: /SILENT /SUPPRESSMSGBOXES /NOCANCEL /NORESTART /SP-
+UpgradeBehavior: install
+# The installer's AppId registers this exact key (unchanged since 1.x).
+ProductCode: '{B8A6D2C1-7C2D-4E5A-9C7B-1F2F46B6E9F2}}_is1'
+Installers:
+- Architecture: x64
+  InstallerUrl: https://github.com/fabiocolor/Advanced-Dirt-Removal/releases/download/v2.0.0/AdvancedDirtRemoval-Setup-2.0.0.exe
+  InstallerSha256: 97A9857990F83D8757C933571A9E8486EB6ED43827D812903ADFCF1B6926F888
+ManifestType: installer
+ManifestVersion: 1.12.0

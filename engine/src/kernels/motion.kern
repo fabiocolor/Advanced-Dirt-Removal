@@ -1,0 +1,498 @@
+/* Multilevel pair motion estimation.
+ *
+ * This file holds the shared helpers and the smaller stages; the register-
+ * blocked block searches and specialised upsamplers are in motion_search.kern.
+ * Search winners are the minimum of (cost << 10 | row-major ordinal), so
+ * ties always go to the earliest candidate in row-major order. */
+
+#define MOTION_KEY_SHIFT 10
+#define MOTION_NO_KEY 0x7fffffff
+
+/* search_bounds: start, end and penalty offset per axis. */
+DEVICE_FN int motion_bound_start(int pos, int disp, int r, int limit) {
+  const int low = pos + disp - r;
+  if (low < 0) return 0;
+  const int high = adr_mini(pos + disp + r, limit);
+  if (high >= limit && limit - low < r) return limit - r;
+  return low;
+}
+
+DEVICE_FN int motion_bound_end(int pos, int disp, int r, int limit) {
+  const int low = pos + disp - r;
+  if (low < 0) return 2 * r + adr_maxi(low, -r);
+  return adr_mini(pos + disp + r, limit);
+}
+
+DEVICE_FN int motion_bound_offset(int pos, int disp, int r) {
+  const int low = pos + disp - r;
+  return low < 0 ? -adr_maxi(low, -r) : 0;
+}
+
+/* Absolute differences of four packed bytes as two 16-bit lane pairs:
+ * lane = 256 + a - b, folded to |a - b| without crossing lanes. The result
+ * holds |a0-b0|+|a1-b1| in bits 0..15 and |a2-b2|+|a3-b3| in bits 16..31;
+ * up to 128 results may be accumulated before folding. */
+DEVICE_FN uint motion_absdiff_lanes(uint a, uint b) {
+  const uint m = 0x00ff00ffu;
+  const uint dl = ((a & m) | 0x01000100u) - (b & m);
+  const uint dh = (((a >> 8) & m) | 0x01000100u) - ((b >> 8) & m);
+  const uint nl = (~dl >> 8) & 0x00010001u, nh = (~dh >> 8) & 0x00010001u;
+  return (((dl & m) ^ (nl * 0xffu)) + nl) + (((dh & m) ^ (nh * 0xffu)) + nh);
+}
+
+DEVICE_FN int motion_fold(uint lanes) { return (int)((lanes & 0xffffu) + (lanes >> 16)); }
+
+/* Sum of absolute differences of four packed bytes. */
+DEVICE_FN int motion_sad4(uint a, uint b) { return motion_fold(motion_absdiff_lanes(a, b)); }
+
+/* Penalty factor from the clamped block texture. */
+DEVICE_FN int motion_factor(int blend_amount, int tex) { return ((blend_amount * 256 - 256) * (128 - tex)) / 112 + 256; }
+
+/* SAD of one block against the reference at a clamped candidate position.
+ * Thread t of a tpb-thread segment covers pixels t, t+tpb, ... */
+DEVICE_FN int motion_block_sad(GLOBAL const uchar* current, GLOBAL const uchar* reference, int w, int x, int y,
+                               int bw, int bh, int B, int C, int rx, int ry, int t, int tpb) {
+  int sad = 0;
+  for (int i = t; i < B * B; i += tpb) {
+    const int yy = i / B, xx = i % B;
+    if (yy >= bh || xx >= bw) continue;
+    if (C == 4) {
+      sad += motion_sad4(((GLOBAL const uint*)current)[(y + yy) * w + x + xx],
+                         ((GLOBAL const uint*)reference)[(ry + yy) * w + rx + xx]);
+    } else {
+      sad += adr_absi((int)current[(y + yy) * w + x + xx] - (int)reference[(ry + yy) * w + rx + xx]);
+    }
+  }
+  return sad;
+}
+
+/* Generic upsample_motion_candidates (channels 4, packed 8x8, vector units
+ * 2*scale) and upsample_byte_motion (channels 1, block 8 or 4, unit vectors,
+ * clipped neighbour candidates). The pipeline uses motion_upsample_packed and
+ * motion_upsample_byte_*; this path serves byte rows that are not 4-byte
+ * aligned. tpb threads per block; the nearest candidate is evaluated first and
+ * the others only when it is not retained early. */
+KERNEL void motion_upsample(GLOBAL const uchar* current, GLOBAL const uchar* reference, GLOBAL const short* coarse,
+                            GLOBAL short* vectors, GLOBAL uchar* error, PARAMS(MotionUpsampleParams) KARGS) {
+  LOCAL int m_sum[4 * 256];
+  LOCAL int m_keep[256];
+  const int B = p.block, C = p.channels;
+  const int lid = LID_X, b = lid / p.tpb, t = lid % p.tpb;
+  const int index = GROUP_X * p.bpg + b;
+  const int live = index < p.gh * p.gw;
+  const int gx = live ? index % p.gw : 0, gy = live ? index / p.gw : 0;
+  const int x = gx * B, y = gy * B;
+  const int bw = adr_mini(B, p.w - x), bh = adr_mini(B, p.h - y);
+  const int x0 = gx / 2, y0 = gy / 2;
+  const int xn = adr_clampi(x0 - 1 + (gx % 2) * 2, 0, p.cw - 1), yn = adr_clampi(y0 - 1 + (gy % 2) * 2, 0, p.ch - 1);
+  int cxs[5], cys[5];
+  const int pos[4] = {y0 * p.cw + x0, y0 * p.cw + xn, yn * p.cw + xn, yn * p.cw + x0};
+  for (int k = 0; k < 4; ++k) {
+    cxs[k] = live ? (int)coarse[pos[k] * 2] : 0;
+    cys[k] = live ? (int)coarse[pos[k] * 2 + 1] : 0;
+  }
+  const int wx = cxs[0] * 5 + cxs[1] * 4 + cxs[2] * 4 + cxs[3] * 3;
+  const int wy = cys[0] * 5 + cys[1] * 4 + cys[2] * 4 + cys[3] * 3;
+  cxs[4] = ((adr_absi(wx) + 8) / 16) * adr_sign(wx);
+  cys[4] = ((adr_absi(wy) + 8) / 16) * adr_sign(wy);
+  /* Agreement compares the unclipped neighbours with the nearest candidate. */
+  int distance = 0;
+  for (int k = 1; k < 4; ++k) {
+    const int ax = adr_absi(cxs[k] - cxs[0]), ay = adr_absi(cys[k] - cys[0]);
+    distance = adr_maxi(distance, adr_maxi(ax, ay) + adr_mini(ax, ay) / 2);
+  }
+  if (C == 1) {
+    for (int k = 1; k < 5; ++k) {
+      cxs[k] = adr_mini(adr_maxi(cxs[k], -x), p.w - bw - x);
+      cys[k] = adr_mini(adr_maxi(cys[k], -y), p.h - bh - y);
+    }
+  }
+  const int divisor = C == 4 ? 32 : B * B / 8;
+  /* Nearest candidate. */
+  int sad0 = 0;
+  if (live) {
+    const int rx = adr_mini(adr_maxi(x + cxs[0] / p.units, 0), p.w - bw);
+    const int ry = adr_mini(adr_maxi(y + cys[0] / p.units, 0), p.h - bh);
+    sad0 = motion_block_sad(current, reference, p.w, x, y, bw, bh, B, C, rx, ry, t, p.tpb);
+  }
+  if (p.tpb > 1) {
+    m_keep[lid] = sad0;
+    BARRIER;
+    for (int s = p.tpb / 2; s > 0; s >>= 1) {
+      if (t < s) m_keep[lid] += m_keep[lid + s];
+      BARRIER;
+    }
+    sad0 = m_keep[b * p.tpb];
+  }
+  const int keep = !live || (sad0 < p.early * divisor && distance <= p.agreement);
+  int sums[4] = {0, 0, 0, 0};
+  if (!keep) {
+    for (int k = 1; k < 5; ++k) {
+      const int rx = adr_mini(adr_maxi(x + cxs[k] / p.units, 0), p.w - bw);
+      const int ry = adr_mini(adr_maxi(y + cys[k] / p.units, 0), p.h - bh);
+      sums[k - 1] = motion_block_sad(current, reference, p.w, x, y, bw, bh, B, C, rx, ry, t, p.tpb);
+    }
+  }
+  if (p.tpb > 1) {
+    for (int k = 0; k < 4; ++k) m_sum[k * 256 + lid] = sums[k];
+    BARRIER;
+    for (int s = p.tpb / 2; s > 0; s >>= 1) {
+      if (t < s)
+        for (int k = 0; k < 4; ++k) m_sum[k * 256 + lid] += m_sum[k * 256 + lid + s];
+      BARRIER;
+    }
+    for (int k = 0; k < 4; ++k) sums[k] = m_sum[k * 256 + b * p.tpb];
+  }
+  if (t == 0 && live) {
+    int best = sad0, winner = 0;
+    if (!keep) {
+      for (int k = 1; k < 5; ++k) {
+        if (sums[k - 1] < best) {
+          best = sums[k - 1];
+          winner = k;
+        }
+      }
+    }
+    vectors[index * 2] = (short)cxs[winner];
+    vectors[index * 2 + 1] = (short)cys[winner];
+    error[index] = (uchar)adr_clampi(best / divisor, 0, 255);
+  }
+}
+
+/* Row candidate of regularize_motion_candidates: the vector of row r closest
+ * (L1, first index) to the truncated row mean. */
+DEVICE_FN void motion_row_candidate(GLOBAL const short* prior, GLOBAL short* rows, int r, int gw) {
+  GLOBAL const short* v = prior + r * gw * 2;
+  int sx = 0, sy = 0;
+  for (int i = 0; i < gw; ++i) {
+    sx += v[i * 2];
+    sy += v[i * 2 + 1];
+  }
+  const int mx = sx / gw, my = sy / gw;
+  int best = 0x7fffffff, arg = 0;
+  for (int i = 0; i < gw; ++i) {
+    const int d = adr_absi(v[i * 2] - mx) + adr_absi(v[i * 2 + 1] - my);
+    if (d < best) {
+      best = d;
+      arg = i;
+    }
+  }
+  rows[r * 2] = v[arg * 2];
+  rows[r * 2 + 1] = v[arg * 2 + 1];
+}
+
+/* global_motion_mode: one work-group of 256 threads. Each thread scans a
+ * contiguous run of vectors and flushes equal-bin runs, so smooth fields cause
+ * few local atomics. Local histograms are zeroed portably by subtracting their
+ * contents. Ties select the lower bin (max of score << 11 | (1023 - bin)). */
+KERNEL void motion_global_mode(GLOBAL const short* source, GLOBAL short* out, GLOBAL short* rows,
+                               GLOBAL int* retest_count, PARAMS(MotionGlobalParams) KARGS) {
+  LOCAL ATOMIC_INT m_hist[2 * 1025];
+  LOCAL int m_best[2 * 256];
+  const int lid = LID_X;
+  /* Row candidates of regularize_motion_candidates (p.gh > 0): one thread per
+   * row; also resets the retest list counter of the following regularization. */
+  if (lid == 0 && p.gh) retest_count[0] = 0;
+  for (int r = lid; r < p.gh; r += 256) motion_row_candidate(source, rows, r, p.gw);
+  for (int i = lid; i < 2 * 1025; i += 256) ATOMIC_ADD(&m_hist[i], -ATOMIC_ADD(&m_hist[i], 0));
+  BARRIER;
+  const int chunk = (p.n + 255) / 256, begin = lid * chunk, end = adr_mini(p.n, begin + chunk);
+  int run_x = -1, run_y = -1, count_x = 0, count_y = 0;
+  for (int i = begin; i < end; ++i) {
+    const int bx = adr_clampi((int)source[i * 2] / p.quantum_x, -512, 512) + 512;
+    const int by = adr_clampi((int)source[i * 2 + 1] / p.quantum_y, -512, 512) + 512;
+    if (bx != run_x) {
+      if (count_x) ATOMIC_ADD(&m_hist[run_x], count_x);
+      run_x = bx;
+      count_x = 0;
+    }
+    if (by != run_y) {
+      if (count_y) ATOMIC_ADD(&m_hist[1025 + run_y], count_y);
+      run_y = by;
+      count_y = 0;
+    }
+    ++count_x;
+    ++count_y;
+  }
+  if (count_x) ATOMIC_ADD(&m_hist[run_x], count_x);
+  if (count_y) ATOMIC_ADD(&m_hist[1025 + run_y], count_y);
+  BARRIER;
+  /* Two reductions keep the 32-bit range for any field size: the highest
+   * score, then the lowest bin with that score (deterministic tie order). */
+  for (int c = 0; c < 2; ++c) {
+    LPTR ATOMIC_INT* h = m_hist + c * 1025;
+    int best = -1;
+    for (int k = lid; k < 1023; k += 256)
+      best = adr_maxi(best, ATOMIC_ADD(&h[k], 0) + 3 * ATOMIC_ADD(&h[k + 1], 0) + ATOMIC_ADD(&h[k + 2], 0));
+    m_best[c * 256 + lid] = best;
+  }
+  BARRIER;
+  for (int s = 128; s > 0; s >>= 1) {
+    if (lid < s) {
+      m_best[lid] = adr_maxi(m_best[lid], m_best[lid + s]);
+      m_best[256 + lid] = adr_maxi(m_best[256 + lid], m_best[256 + lid + s]);
+    }
+    BARRIER;
+  }
+  const int top_x = m_best[0], top_y = m_best[256];
+  BARRIER;
+  for (int c = 0; c < 2; ++c) {
+    LPTR ATOMIC_INT* h = m_hist + c * 1025;
+    const int top = c ? top_y : top_x;
+    int arg = 1023;
+    for (int k = lid; k < 1023; k += 256)
+      if (ATOMIC_ADD(&h[k], 0) + 3 * ATOMIC_ADD(&h[k + 1], 0) + ATOMIC_ADD(&h[k + 2], 0) == top) arg = adr_mini(arg, k);
+    m_best[c * 256 + lid] = arg;
+  }
+  BARRIER;
+  for (int s = 128; s > 0; s >>= 1) {
+    if (lid < s) {
+      m_best[lid] = adr_mini(m_best[lid], m_best[lid + s]);
+      m_best[256 + lid] = adr_mini(m_best[256 + lid], m_best[256 + lid + s]);
+    }
+    BARRIER;
+  }
+  if (lid < 2) {
+    const int arg = m_best[lid * 256];
+    out[lid] = (short)((arg - 511) * (lid ? p.quantum_y : p.quantum_x));
+  }
+}
+
+/* regularize_motion_candidates up to the conditional retest. The error envelope
+ * (dilate_motion_error) is evaluated from the raw block errors. tpb threads
+ * per block share its pixels. Blocks that are not retested get their final
+ * vectors here; the others are appended (in any order) to retest_list. Writes the selected
+ * vectors and the retest gate (255/0). */
+KERNEL void motion_regularize(GLOBAL const uint* current, GLOBAL const uint* reference, GLOBAL const short* prior,
+                              GLOBAL const uchar* block_error, GLOBAL const short* global_vector,
+                              GLOBAL const short* rows, GLOBAL const uchar* texture, GLOBAL short* selected,
+                              GLOBAL uchar* gate, GLOBAL short* vectors, GLOBAL int* retest_list,
+                              GLOBAL ATOMIC_INT* retest_count,
+                              PARAMS(MotionRegularizeParams) KARGS) {
+  LOCAL int m_sum[7 * 256];
+  LOCAL int m_cand[128 * 14];
+  LOCAL int m_dist[128 * 7];
+  LOCAL int m_info[128];
+  const int lid = LID_X, b = lid / p.tpb, t = lid % p.tpb;
+  const int index = GROUP_X * p.bpg + b;
+  const int live = index < p.gh * p.gw;
+  const int gx = live ? index % p.gw : 0, gy = live ? index / p.gw : 0;
+  const int x = gx * 8, y = gy * 8;
+  const int bw = adr_mini(8, p.w - x), bh = adr_mini(8, p.h - y);
+  const int units = p.scale * 2;
+  if (t == 0 && live) {
+    int nx[9], ny[9], count = 0, mx = 0, my = 0, env = 0;
+    const int vx = prior[index * 2], vy = prior[index * 2 + 1];
+    for (int dy = -1; dy <= 1; ++dy)
+      for (int dx = -1; dx <= 1; ++dx) {
+        const int xx = gx + dx, yy = gy + dy;
+        if (xx < 0 || yy < 0 || xx >= p.gw || yy >= p.gh) continue;
+        const int i = yy * p.gw + xx;
+        nx[count] = prior[i * 2];
+        ny[count] = prior[i * 2 + 1];
+        mx += nx[count];
+        my += ny[count];
+        env = adr_maxi(env, (int)block_error[i]);
+        ++count;
+      }
+    mx /= count;
+    my /= count;
+    int close = 0, farthest = 0, close_d = 0x7fffffff, far_d = -1;
+    for (int k = 0; k < count; ++k) {
+      int d = adr_absi(nx[k] - mx) + adr_absi(ny[k] - my);
+      if (d < close_d) {
+        close = k;
+        close_d = d;
+      }
+      d = adr_absi(nx[k] - vx) + adr_absi(ny[k] - vy);
+      if (d > far_d) {
+        farthest = k;
+        far_d = d;
+      }
+    }
+    mx = ((adr_absi(mx) + units / 2) / units) * adr_sign(mx) * units;
+    my = ((adr_absi(my) + units / 2) / units) * adr_sign(my) * units;
+    LPTR int* cand = m_cand + b * 14;
+    cand[0] = vx;
+    cand[1] = vy;
+    cand[2] = mx;
+    cand[3] = my;
+    cand[4] = 0;
+    cand[5] = 0;
+    cand[6] = nx[close];
+    cand[7] = ny[close];
+    cand[8] = global_vector[0];
+    cand[9] = global_vector[1];
+    cand[10] = rows[gy * 2];
+    cand[11] = rows[gy * 2 + 1];
+    cand[12] = nx[farthest];
+    cand[13] = ny[farthest];
+    for (int k = 0; k < 7; ++k) {
+      int d = 0;
+      for (int j = 0; j < count; ++j) d += adr_absi(nx[j] - cand[k * 2]) + adr_absi(ny[j] - cand[k * 2 + 1]);
+      m_dist[b * 7 + k] = d;
+    }
+    /* Candidate enables (bit k); the SAD pass skips disabled candidates and,
+     * when only candidate 0 is enabled, the reference-frame SAD is unused. */
+    const int normal = (int)texture[index] / adr_mini(4, p.scale);
+    const int extra = normal <= p.texture_threshold || env >= p.error_threshold;
+    int mask = 1 | ((mx != vx || my != vy) << 1) | ((vx != 0 || vy != 0) << 2);
+    for (int k = 3; k < 7; ++k)
+      if ((k == 6 ? env >= p.error_threshold : extra) &&
+          adr_absi(cand[k * 2] - mx) + adr_absi(cand[k * 2 + 1] - my) >= p.separation * units)
+        mask |= 1 << k;
+    m_info[b] = mask;
+  }
+  BARRIER;
+  int sums[7] = {0, 0, 0, 0, 0, 0, 0};
+  const int mask = live ? m_info[b] : 1;
+  if (live && mask != 1) {
+    const int rows_per = 8 / p.tpb, y0 = t * rows_per, y1 = adr_mini(y0 + rows_per, bh);
+    for (int k = 0; k < 7; ++k) {
+      if (!((mask >> k) & 1)) continue;
+      const int rx = x + m_cand[b * 14 + k * 2] / units, ry = y + m_cand[b * 14 + k * 2 + 1] / units;
+      if (rx < 0 || ry < 0 || rx > p.w - bw || ry > p.h - bh) continue;
+      uint lanes = 0u;
+      for (int yy = y0; yy < y1; ++yy) {
+        GLOBAL const uint* crow = current + (y + yy) * p.w + x;
+        GLOBAL const uint* rrow = reference + (ry + yy) * p.w + rx;
+        for (int xx = 0; xx < bw; ++xx) lanes += motion_absdiff_lanes(crow[xx], rrow[xx]);
+      }
+      sums[k] = motion_fold(lanes);
+    }
+  }
+  for (int k = 0; k < 7; ++k) m_sum[k * 256 + lid] = sums[k];
+  BARRIER;
+  for (int s = p.tpb / 2; s > 0; s >>= 1) {
+    if (t < s)
+      for (int k = 0; k < 7; ++k) m_sum[k * 256 + lid] += m_sum[k * 256 + lid + s];
+    BARRIER;
+  }
+  if (t == 0 && live) {
+    const int base = b * p.tpb;
+    LPTR const int* cand = m_cand + b * 14;
+    const int area = bw * bh;
+    const int normal = (int)texture[index] / adr_mini(4, p.scale);
+    const int vx = cand[0], vy = cand[1];
+    int enabled[7];
+    for (int k = 0; k < 7; ++k) enabled[k] = (mask >> k) & 1;
+    int largest = 0;
+    for (int k = 0; k < 7; ++k)
+      if (enabled[k]) largest = adr_maxi(largest, m_dist[b * 7 + k]);
+    const float flargest = (float)adr_maxi(largest, 1);
+    int winner = 0, count = 0, have = 0, best_sad = 0;
+    float best = 0.0f;
+    for (int k = 0; k < 7; ++k) {
+      if (!enabled[k]) continue;
+      ++count;
+      const int rx = x + cand[k * 2] / units, ry = y + cand[k * 2 + 1] / units;
+      const int inside = rx >= 0 && ry >= 0 && rx <= p.w - bw && ry <= p.h - bh;
+      const int sad = inside ? (m_sum[k * 256 + base] >> 1) : 0x3fc0;
+      const float cost = (float)sad / (float)area + ((float)m_dist[b * 7 + k] * p.repair_amount) / flargest;
+      if (!have || cost < best) {
+        have = 1;
+        best = cost;
+        winner = k;
+        best_sad = sad;
+      }
+    }
+    const int sx = cand[winner * 2], sy = cand[winner * 2 + 1];
+    const int sad = count > 1 ? best_sad : 0;
+    selected[index * 2] = (short)sx;
+    selected[index * 2 + 1] = (short)sy;
+    const int moved = adr_absi(sx - vx) + adr_absi(sy - vy) > p.penalty_span;
+    const int retest = moved || (sad * 128) / (area * normal) > p.error_threshold;
+    gate[index] = (uchar)(retest ? 255 : 0);
+    if (retest) {
+      retest_list[ATOMIC_ADD(&retest_count[0], 1)] = index;
+    } else {
+      vectors[index * 2] = (short)sx;
+      vectors[index * 2 + 1] = (short)sy;
+    }
+  }
+}
+
+/* filter_motion_error(window=5, mean_gain=1.5, blend_scale=0.5). */
+KERNEL void motion_filter_error(GLOBAL const uchar* src, GLOBAL uchar* dst, PARAMS(MotionGridParams) KARGS) {
+  const int x = GID_X, y = GID_Y;
+  if (x >= p.gw || y >= p.gh) return;
+  int total = 0;
+  for (int dy = -2; dy <= 2; ++dy) {
+    const int yy = adr_clampi(y + dy, 0, p.gh - 1);
+    for (int dx = -2; dx <= 2; ++dx) total += src[yy * p.gw + adr_clampi(x + dx, 0, p.gw - 1)];
+  }
+  const float value = ((float)total * 0.06f + (float)src[y * p.gw + x]) * 0.5f + 0.5f;
+  dst[y * p.gw + x] = (uchar)adr_clampi((int)value, 0, 255);
+}
+
+/* motion_error_mean (unless a noise scalar is supplied) and
+ * adaptive_motion_thresholds. One work-group of 256 threads. */
+KERNEL void motion_noise(GLOBAL const uchar* error, GLOBAL const float* noise_in, GLOBAL float* noise_out,
+                         GLOBAL int* thresholds, PARAMS(MotionNoiseParams) KARGS) {
+  LOCAL ATOMIC_INT m_hist[256];
+  const int lid = LID_X;
+  if (!p.has_noise) {
+    ATOMIC_ADD(&m_hist[lid], -ATOMIC_ADD(&m_hist[lid], 0));
+    BARRIER;
+    for (int i = lid; i < p.n; i += 256) ATOMIC_ADD(&m_hist[error[i]], 1);
+    BARRIER;
+  }
+  if (lid == 0) {
+    float noise;
+    if (p.has_noise) {
+      noise = noise_in[0];
+    } else {
+      int total = 0;
+      for (int k = 1; k < 256; ++k) total += ATOMIC_ADD(&m_hist[k], 0);
+      const float ftotal = (float)total;
+      const float q1 = ftotal * 0.25f, q3 = ftotal * 0.75f;
+      int cumulative = 0, low = 0, high = 0;
+      for (int k = 1; k < 256; ++k) {
+        cumulative += ATOMIC_ADD(&m_hist[k], 0);
+        const float fc = (float)cumulative;
+        if (fc < q1) ++low;
+        if (fc <= q3) ++high;
+      }
+      high = adr_mini(adr_maxi(high, low + 1), 254);
+      int num = 0, den = 0;
+      for (int i = low; i <= high; ++i) {
+        const int count = ATOMIC_ADD(&m_hist[i + 1], 0);
+        num += count * i;
+        den += count;
+      }
+      noise = (float)num / (float)adr_maxi(den, 1) + 1.0f;
+    }
+    noise_out[0] = noise;
+    thresholds[0] = (int)((noise * 65.0f / 50.0f + 8.0f) + 8.0f);
+    thresholds[1] = (int)((noise * 82.0f / 55.0f + 8.0f) + 5.0f);
+  }
+}
+
+/* reduce_motion_vectors(quantum=1): one thread per output tile. */
+KERNEL void motion_reduce_vectors(GLOBAL const short* src, GLOBAL short* dst, PARAMS(MotionReduceParams) KARGS) {
+  const int x = GID_X, y = GID_Y;
+  if (x >= p.ow || y >= p.oh) return;
+  const int rows = adr_clampi(p.h - 4 * y, 1, 4), cols = adr_clampi(p.w - 4 * x, 1, 4);
+  const int d = rows * cols;
+  for (int c = 0; c < 2; ++c) {
+    int s = 0;
+    for (int yy = 0; yy < rows; ++yy)
+      for (int xx = 0; xx < cols; ++xx) s += src[((4 * y + yy) * p.w + 4 * x + xx) * 2 + c];
+    dst[(y * p.ow + x) * 2 + c] = (short)(((adr_absi(s) + d / 2) / d) * adr_sign(s));
+  }
+}
+
+/* Mean of a byte plane as float32: integer sum (exact) then one division. */
+KERNEL void motion_error_mean(GLOBAL const uchar* error, GLOBAL float* out, PARAMS(SizeParams) KARGS) {
+  LOCAL int m_sum[256];
+  const int lid = LID_X;
+  int s = 0;
+  for (int i = lid; i < p.n; i += 256) s += error[i];
+  m_sum[lid] = s;
+  BARRIER;
+  for (int k = 128; k > 0; k >>= 1) {
+    if (lid < k) m_sum[lid] += m_sum[lid + k];
+    BARRIER;
+  }
+  if (lid == 0) out[0] = (float)m_sum[0] / (float)p.n;
+}

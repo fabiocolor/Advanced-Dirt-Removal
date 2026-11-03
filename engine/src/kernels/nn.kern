@@ -1,0 +1,108 @@
+/* Group "nn": a small convolutional classifier (auto recovery). Activations are
+ * float32 NCHW. The convolution is an implicit GEMM: M = output channels,
+ * N = batch x output pixels, K = input channels x kernel area, in 64 x 64 tiles
+ * of 256 threads (4 x 4 outputs each) with 16-deep slices staged in local memory.
+ * Each output sums its K products in ascending K order, so every backend gives
+ * the same bytes. */
+
+#define NN_TM 64
+#define NN_TN 64
+#define NN_TK 16
+
+/* Crops (B,13,H,W) as bytes -> float in [0,1]. */
+KERNEL void nn_bytes_to_float(GLOBAL const uchar* in, GLOBAL float* out, PARAMS(SizeParams) KARGS) {
+  const int i = GID_X;
+  if (i >= p.n) return;
+  out[i] = (float)in[i] / 255.0f;
+}
+
+KERNEL void nn_conv(GLOBAL const float* in, GLOBAL const float* weight, GLOBAL const float* bias,
+                    GLOBAL const float* residual, GLOBAL float* out, PARAMS(NnConvParams) KARGS) {
+  LOCAL float wtile[NN_TK * NN_TM];
+  LOCAL float xtile[NN_TK * NN_TN];
+  const int t = LID_X;
+  const int m0 = GROUP_Y * NN_TM, n0 = GROUP_X * NN_TN;
+  const int kk = p.k * p.k, K = p.ci * kk, hw = p.ho * p.wo, N = p.batch * hw;
+  const int tm = (t / 16) * 4, tn = (t % 16) * 4;
+  float acc[16];
+  for (int a = 0; a < 16; ++a) acc[a] = 0.0f;
+  for (int k0 = 0; k0 < K; k0 += NN_TK) {
+    for (int l = 0; l < 4; ++l) {
+      const int e = t + l * 256;         /* 0..1023 */
+      /* weights: row kslot, column m */
+      const int ks = e / NN_TM, mm = e % NN_TM;
+      const int kw = k0 + ks, m = m0 + mm;
+      wtile[ks * NN_TM + mm] = (kw < K && m < p.co) ? weight[m * K + kw] : 0.0f;
+      /* inputs: row kslot, column n */
+      const int kx = e / NN_TN, nn = e % NN_TN;
+      const int kidx = k0 + kx, n = n0 + nn;
+      float v = 0.0f;
+      if (kidx < K && n < N) {
+        const int c = kidx / kk, r = kidx % kk, ky = r / p.k, kxx = r % p.k;
+        const int b = n / hw, pix = n % hw, oy = pix / p.wo, ox = pix % p.wo;
+        const int iy = oy * p.stride - p.pad + ky, ix = ox * p.stride - p.pad + kxx;
+        if (iy >= 0 && iy < p.hi && ix >= 0 && ix < p.wi) v = in[((b * p.ci + c) * p.hi + iy) * p.wi + ix];
+      }
+      xtile[kx * NN_TN + nn] = v;
+    }
+    BARRIER;
+    for (int s = 0; s < NN_TK; ++s) {
+      float wv[4], xv[4];
+      for (int a = 0; a < 4; ++a) {
+        wv[a] = wtile[s * NN_TM + tm + a];
+        xv[a] = xtile[s * NN_TN + tn + a];
+      }
+      for (int a = 0; a < 4; ++a)
+        for (int c = 0; c < 4; ++c) acc[a * 4 + c] = acc[a * 4 + c] + wv[a] * xv[c];
+    }
+    BARRIER;
+  }
+  for (int a = 0; a < 4; ++a) {
+    const int m = m0 + tm + a;
+    if (m >= p.co) continue;
+    for (int c = 0; c < 4; ++c) {
+      const int n = n0 + tn + c;
+      if (n >= N) continue;
+      const int b = n / hw, pix = n % hw;
+      const int o = (b * p.co + m) * hw + pix;
+      float v = acc[a * 4 + c] + bias[m];
+      if (p.residual) v = v + residual[o];
+      if (p.relu) v = v > 0.0f ? v : 0.0f;
+      out[o] = v;
+    }
+  }
+}
+
+/* 3x3 max pooling, stride 2, padding 1. */
+KERNEL void nn_maxpool(GLOBAL const float* in, GLOBAL float* out, PARAMS(NnPoolParams) KARGS) {
+  const int i = GID_X, total = p.batch * p.c * p.ho * p.wo;
+  if (i >= total) return;
+  const int ox = i % p.wo, oy = (i / p.wo) % p.ho, bc = i / (p.wo * p.ho);
+  float best = -3.0e38f;
+  for (int ky = 0; ky < 3; ++ky) {
+    const int iy = oy * 2 - 1 + ky;
+    if (iy < 0 || iy >= p.hi) continue;
+    for (int kx = 0; kx < 3; ++kx) {
+      const int ix = ox * 2 - 1 + kx;
+      if (ix < 0 || ix >= p.wi) continue;
+      const float v = in[(bc * p.hi + iy) * p.wi + ix];
+      best = v > best ? v : best;
+    }
+  }
+  out[i] = best;
+}
+
+/* Global average pooling and the dot product with the classifier weights (logit;
+ * the host applies the sigmoid). */
+KERNEL void nn_head(GLOBAL const float* in, GLOBAL const float* weight, GLOBAL float* logit_out, PARAMS(NnHeadParams) KARGS) {
+  const int b = GID_X;
+  if (b >= p.batch) return;
+  float logit = 0.0f;
+  for (int c = 0; c < p.c; ++c) {
+    GLOBAL const float* v = in + (b * p.c + c) * p.hw;
+    float s = 0.0f;
+    for (int i = 0; i < p.hw; ++i) s = s + v[i];
+    logit = logit + (s / (float)p.hw) * weight[c];
+  }
+  logit_out[b] = logit + p.bias;
+}
