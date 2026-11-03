@@ -12,8 +12,8 @@ Resolve, Nuke and other OFX hosts on macOS, Windows and Linux.
 - **Own repair engine.** It looks for dirt, dust and sparkle that appear in one
   frame only and fills them from the neighbouring frames, with motion
   compensation. It runs on Apple Metal, NVIDIA CUDA and OpenCL (AMD, Intel,
-  NVIDIA), and on the CPU when there is no usable GPU. Every backend gives the
-  same output.
+  NVIDIA), and on the CPU when there is no usable GPU. Every backend gave the
+  same output in testing.
 - **Input encoding.** Video, or Cineon log for film scans. The effect cleans in
   linear and puts only its change back in log, so untouched pixels keep their
   exact values.
@@ -45,7 +45,8 @@ Resolve, Nuke and other OFX hosts on macOS, Windows and Linux.
 The source code is MIT. The auto-recovery model weights are under CC BY-NC 4.0
 (non-commercial use only), in `WEIGHTS_LICENSE`. This release uses weights
 version 2.0.0, attached as `recovery-model-2.0.0.bin`.
-Commercial licensing available — contact Fabio.
+For commercial use of the weights, contact me through
+[github.com/fabiocolor](https://github.com/fabiocolor).
 
 ### Requirements
 

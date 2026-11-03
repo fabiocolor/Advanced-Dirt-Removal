@@ -16,8 +16,8 @@ doesn't invent detail, and it can't fix damage that stays in the same place for
 several frames, like a long scratch or a hair in the gate.
 
 It runs on the GPU (Apple Metal, NVIDIA CUDA, and OpenCL for AMD, Intel and
-NVIDIA) and falls back to the CPU. You get the same result on all of them, so a
-render on one machine matches a render on another.
+NVIDIA) and falls back to the CPU. In my tests every backend gave the same result, so a
+render on one machine matched a render on another.
 
 ![Source and restored, with a moving wipe](assets/documentation/adr-2.0-before-after.gif)
 
@@ -192,7 +192,8 @@ The code and the model weights have different licences.
 - **OpenFX headers** in `ofx/vendor/openfx`: BSD 3-Clause, see
   [ofx/vendor/openfx/LICENSE.md](ofx/vendor/openfx/LICENSE.md).
 
-Commercial licensing available — contact Fabio.
+For commercial use of the weights, contact me through
+[github.com/fabiocolor](https://github.com/fabiocolor).
 You can reach me through [GitHub](https://github.com/fabiocolor) or the
 [Discussions](https://github.com/fabiocolor/Advanced-Dirt-Removal/discussions) page.
 
