@@ -24,7 +24,8 @@ render on one machine matches a render on another.
 Source on the left of the line, restored on the right, at the default
 settings: the dark specks and short scratches on the title card go, the
 lettering and the print's texture stay. The footage is a 35mm trailer scan.
-Whole trailer: [video](assets/documentation/adr-2.0-before-after.mp4).
+A 26-second colour sequence from another trailer, with the same wipe:
+[video](assets/documentation/adr-2.0-before-after.mp4).
 1:1 detail: [still](assets/documentation/adr-2.0-detail-before-after.png).
 About the footage: [assets/documentation](assets/documentation/README.md).
 
@@ -44,9 +45,9 @@ One effect does everything:
 
 ![Red difference view: every repair in red](assets/documentation/adr-2.0-red-difference.gif)
 
-A night shot from the same trailer in the Red difference view: every spot it
-repaired is in red. Check this view before you trust a render
-([video](assets/documentation/adr-2.0-red-difference.mp4)).
+A close-up from the *Breathless* (1983) trailer in the Red difference view:
+every speck it repaired is a red dot. Check this view before you trust a
+render ([video](assets/documentation/adr-2.0-red-difference.mp4)).
 
 ![Auto recovery off, then on, in the Red difference view](assets/documentation/adr-2.0-auto-recovery.gif)
 
