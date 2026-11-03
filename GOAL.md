@@ -92,8 +92,8 @@ shipping it. The sanitizer checks unpacked payloads and newly introduced
 history separately from the accepted older public history.
 
 The macOS install and installed-plugin render checks passed on 2 November.
-The README shows GIFs and short videos of a public-domain 1976 US Navy colour
-film (cleaning, Red difference, the Mask input) and macOS Resolve screenshots.
+The README shows GIFs of cleaning, the Red difference view, the Mask input and
+auto recovery, short videos of a 35mm trailer, and macOS Resolve screenshots.
 Screenshots are macOS only; the interface is the same on Windows and Linux
 (`assets/documentation/README.md`).
 `tools/stage_release.py` assembles downloads only after all three installer

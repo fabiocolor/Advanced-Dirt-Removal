@@ -22,9 +22,9 @@ render on one machine matches a render on another.
 ![Source and restored, with a moving wipe](assets/documentation/adr-2.0-before-after.gif)
 
 Source on the left of the line, restored on the right, at the default
-settings. Watch the dust on the wall and the big black speck at top right. The
-footage is a 16mm colour scan of a 1976 US Navy recruitment film, in the public
-domain. Whole shot: [video](assets/documentation/adr-2.0-before-after.mp4).
+settings: the dark specks and short scratches on the title card go, the
+lettering and the print's texture stay. The footage is a 35mm trailer scan.
+Whole trailer: [video](assets/documentation/adr-2.0-before-after.mp4).
 1:1 detail: [still](assets/documentation/adr-2.0-detail-before-after.png).
 About the footage: [assets/documentation](assets/documentation/README.md).
 
@@ -37,23 +37,29 @@ One effect does everything:
 - **Recovery mask:** paint where you want the original back.
 - **Auto recovery:** a small built-in model looks at every repaired spot and
   gives back the ones that look like real picture detail. It works up to a
-  point. It also gives back some real dirt, so check its matte and paint over
-  what it gets wrong.
+  point, so check its matte and paint over what it gets wrong.
 - **Spanish dirt removal:** repair only where you paint.
 - **Views:** Restored, Red difference (every repair in red on a grey picture),
   True difference and the auto-recovery matte.
 
 ![Red difference view: every repair in red](assets/documentation/adr-2.0-red-difference.gif)
 
-The same shot in the Red difference view: every spot it repaired is in red.
-Check this view before you trust a render
+A night shot from the same trailer in the Red difference view: every spot it
+repaired is in red. Check this view before you trust a render
 ([video](assets/documentation/adr-2.0-red-difference.mp4)).
+
+![Auto recovery off, then on, in the Red difference view](assets/documentation/adr-2.0-auto-recovery.gif)
+
+Fast movement can look like dirt. Here a man swings a stick past a brick wall
+(*Neighbors*, 1920). With auto recovery off, the effect repairs pieces of the
+moving arm, stick and legs (red). With auto recovery on, it gives most of them
+back, and the shot shows the original movement.
 
 ![The Mask input: Recovery, then Spanish dirt removal](assets/documentation/adr-2.0-mask.gif)
 
 The Mask input, with one area painted (the white ellipse), in the Red
 difference view. With **Recovery** the painted area keeps the original, so the
-big speck inside it stays. With **Spanish dirt removal** only the painted area
+scratch inside it stays. With **Spanish dirt removal** only the painted area
 is repaired.
 
 > **New in 2.0.** Version 1.x was a Fusion macro around DaVinci Resolve's
