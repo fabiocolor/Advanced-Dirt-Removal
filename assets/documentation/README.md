@@ -6,7 +6,7 @@ Sources for every file: [SOURCES.md](SOURCES.md).
 | --- | --- |
 | `cleanup.mp4` / `.gif` | Split view, full frame: source on the left, restored on the right |
 | `difference.mp4` / `.gif` | The Red difference view, full frame |
-| `spanish-dirt-removal.mp4` / `.gif` | Spanish dirt removal: a frame-by-frame pass, one small mask over one speck per frame, before and after |
+| `spanish-dirt-removal.mp4` / `.gif` | Spanish dirt removal, manual frame-by-frame dust cleaning: one small mask over one speck per frame, before and after |
 | `auto-recovery.mp4` / `.gif` | The Red difference view, side by side: auto recovery off and on |
 | `macos-resolve-2.0-restored.png` | The plugin in Resolve Studio 21.1 on macOS (Fusion page), Restored view |
 | `macos-resolve-2.0-red-difference.png` | The same, View set to Red difference |

@@ -133,8 +133,8 @@ matte.
 
 ### Spanish dirt removal (Mask: Spanish dirt removal)
 
-A manual, frame-by-frame spot repair, the plugin's replacement for Resolve's
-Dust Buster OFX. Go through the shot frame by frame; where you see a speck you
+Manual frame-by-frame dust cleaning, applied only where you mask. Go through
+the shot frame by frame; where you see a speck you
 want gone, paint a small mask over it on that frame. Only the painted spot is
 repaired, from the neighbouring frames; everything else, and every frame you
 don't paint, keeps the original. Spanish

@@ -30,8 +30,8 @@ One effect does everything:
 - **Auto recovery:** a small built-in model looks at every repaired spot and
   gives back the ones that look like real picture detail. You can paint on top
   of its matte to add or remove areas.
-- **Spanish dirt removal:** frame by frame, put a small mask over a speck and
-  only that spot is repaired. It replaces Resolve's Dust Buster OFX.
+- **Spanish dirt removal:** manual frame-by-frame dust cleaning. Put a small
+  mask over a speck and only that spot is repaired.
 - **Views:** Restored, Red difference (every repair in red on a grey picture),
   True difference and the auto-recovery matte.
 
@@ -53,10 +53,9 @@ and specks go; the faces, the picture and its grain stay.
 
 [Full clip, 9 s (MP4)](assets/documentation/difference.mp4)
 
-**Spanish dirt removal.** A manual pass, frame by frame. On each frame the
-operator puts a small mask over one speck, and the plugin removes that speck
-and nothing else; the rest of the frame stays as it is. It is the plugin's
-replacement for Resolve's Dust Buster OFX.
+**Spanish dirt removal.** Manual frame-by-frame dust cleaning. On each frame
+the operator puts a small mask over one speck, and the plugin removes that
+speck and nothing else; the rest of the frame stays as it is.
 
 ![Spanish dirt removal: one speck per frame, before and after](assets/documentation/spanish-dirt-removal.gif)
 
