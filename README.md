@@ -36,35 +36,36 @@ One effect does everything:
 
 ## What it does
 
-Four short clips from 35mm trailer scans at 2K. Each GIF is a small crop; the
-link under it opens the full frame as MP4.
+Four clips from 35mm trailer scans at 2K, each with several shots. The GIFs
+show the whole frame; the link under each one opens the full-quality MP4.
 
-**Cleanup.** Source on the left, restored on the right. The dust and specks go;
-the picture and its grain stay.
+**Cleanup.** Source on the left of the line, restored on the right. The dust
+and specks go; the picture and its grain stay.
 
 ![Cleanup: source and restored](assets/documentation/cleanup.gif)
 
-[Full clip, 16 s (MP4)](assets/documentation/cleanup.mp4)
+[Full clip, 9 s (MP4)](assets/documentation/cleanup.mp4)
 
 **Difference view.** Every pixel the effect changed, in red on a grey picture.
 
 ![Difference view: every repair in red](assets/documentation/difference.gif)
 
-[Full clip, 16 s (MP4)](assets/documentation/difference.mp4)
+[Full clip, 11 s (MP4)](assets/documentation/difference.mp4)
 
-**Mask.** One area painted (the white ellipse). With **Recovery** the painted
-area keeps the original. With **Spanish dirt removal** only the painted area is
-repaired.
+**Mask.** One area painted (the white ellipse), side by side. On the left,
+**Recovery**: the painted area keeps the original. On the right, **Spanish dirt
+removal**: only the painted area is repaired.
 
-![Mask: Recovery, then Spanish dirt removal](assets/documentation/mask.gif)
+![Mask: Recovery and Spanish dirt removal, side by side](assets/documentation/mask.gif)
 
-[Full clip, 14 s (MP4)](assets/documentation/mask.mp4)
+[Full clip, 12 s (MP4)](assets/documentation/mask.mp4)
 
 **Auto recovery.** Moving lights and highlights can change from one frame to the
-next like dirt does. With auto recovery on, the effect gives them back and
-keeps the dirt repaired.
+next like dirt does. Side by side, in the Difference view: on the left auto
+recovery is off, on the right it is on. With it on, the effect gives those
+details back and keeps the dirt repaired.
 
-![Auto recovery: off, then on](assets/documentation/auto-recovery.gif)
+![Auto recovery off and on, side by side](assets/documentation/auto-recovery.gif)
 
 [Full clip, 12 s (MP4)](assets/documentation/auto-recovery.mp4)
 
