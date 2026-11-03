@@ -5,7 +5,7 @@
 | Footage | Used for | Source |
 | --- | --- | --- |
 | Trailer for *The Evictors* (1979), shown with *Island of Death* | Before/after wipe, Mask, the 1:1 detail still | 35mm trailer scan, 2048 × 1556, 10-bit ProRes, from Fabio Bedoya's film trailer collection |
-| Trailer for *Breathless* (1983), Richard Gere | Red difference GIF and still, both videos | 35mm trailer scan, 2048 × 1556, 10-bit ProRes, from the same collection |
+| Trailer for *Breathless* (1983), Richard Gere | Red difference GIF and still, both videos, the Resolve screenshots | 35mm trailer scan, 2048 × 1556, 10-bit ProRes, from the same collection |
 | *Neighbors* (1920), Buster Keaton and Edward F. Cline | Auto recovery | Wikimedia Commons, public domain: https://commons.wikimedia.org/wiki/File:Neighbors_(1920)_by_Buster_Keaton_and_Edward_F._Cline.webm |
 
 The *Neighbors* file is a compressed web copy at 3840 × 2160, scaled to
@@ -51,10 +51,9 @@ The GIFs are crops at 10 frames per second: the trailer GIFs at 960 wide
 The screenshots are from macOS only. Resolve and the plugin's controls look
 the same on Windows and Linux. The `macos-resolve-2.0-*` screenshots are
 unedited captures of Resolve's window only (scaled to 1920 wide), taken on
-2 November 2026 with the installed 2.0.0 package in Resolve Studio 21.1.1.10.
+3 November 2026 with the installed 2.0.0 package in Resolve Studio 21.1.1.10.
 They use a throwaway test project in the local database, deleted afterwards.
-Their clip is *The History of Naval Aviation* (1943), a US Navy film on
-Wikimedia Commons.
+Their clip is 48 frames of the *Breathless* close-up.
 
 The `resolve-2.0-*` screenshots show the engine's synthetic test clip (seed 11,
 512 × 512, frame 5): the interface, not picture quality.

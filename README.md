@@ -131,9 +131,9 @@ workflow and the views.
 
 ![Advanced Dirt Removal 2.0 in Resolve's Fusion page on macOS](assets/documentation/macos-resolve-2.0-restored.png)
 
-The plugin in DaVinci Resolve Studio 21.1 on macOS, Fusion page, with an
-earlier public-domain test clip: the effect's output on the left, its controls
-on the right.
+The plugin in DaVinci Resolve Studio 21.1 on macOS, Fusion page, with the
+*Breathless* trailer: the effect's output on the left, its controls on the
+right.
 [Red difference in Resolve](assets/documentation/macos-resolve-2.0-red-difference.png).
 The screenshots are from macOS. Resolve and the plugin's controls look the
 same on Windows and Linux.
