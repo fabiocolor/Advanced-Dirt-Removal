@@ -40,11 +40,11 @@ Four clips from 35mm trailer scans at 2K, each with several shots. The GIFs
 show the whole frame; the link under each one opens the full-quality MP4.
 
 **Cleanup.** Source on the left of the line, restored on the right. The dust
-and specks go; the picture and its grain stay.
+and specks go; the faces, the picture and its grain stay.
 
 ![Cleanup: source and restored](assets/documentation/cleanup.gif)
 
-[Full clip, 9 s (MP4)](assets/documentation/cleanup.mp4)
+[Full clip, 12.5 s (MP4)](assets/documentation/cleanup.mp4)
 
 **Difference view.** Every pixel the effect changed, in red on a grey picture.
 
@@ -52,13 +52,14 @@ and specks go; the picture and its grain stay.
 
 [Full clip, 11 s (MP4)](assets/documentation/difference.mp4)
 
-**Mask.** One area painted (the white ellipse), side by side. On the left,
-**Recovery**: the painted area keeps the original. On the right, **Spanish dirt
-removal**: only the painted area is repaired.
+**Mask.** One area painted (the tinted ellipse), side by side, in the
+Difference view. On the left, **Recovery**: the painted area keeps the original
+and only the rest is repaired. On the right, **Spanish dirt removal**: only the
+painted area is repaired.
 
 ![Mask: Recovery and Spanish dirt removal, side by side](assets/documentation/mask.gif)
 
-[Full clip, 12 s (MP4)](assets/documentation/mask.mp4)
+[Full clip, 9 s (MP4)](assets/documentation/mask.mp4)
 
 **Auto recovery.** Moving lights and highlights can change from one frame to the
 next like dirt does. Side by side, in the Difference view: on the left auto
@@ -67,7 +68,7 @@ details back and keeps the dirt repaired.
 
 ![Auto recovery off and on, side by side](assets/documentation/auto-recovery.gif)
 
-[Full clip, 12 s (MP4)](assets/documentation/auto-recovery.mp4)
+[Full clip, 10.5 s (MP4)](assets/documentation/auto-recovery.mp4)
 
 Sources: [assets/documentation/SOURCES.md](assets/documentation/SOURCES.md).
 
