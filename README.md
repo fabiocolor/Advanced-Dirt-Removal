@@ -49,7 +49,7 @@ https://github.com/user-attachments/assets/f63015f2-2e2f-429e-8a57-5d5ce77a3ae5
 
 ![Difference view](assets/documentation/difference.gif)
 
-[MP4, 9 s](assets/documentation/difference.mp4)
+[MP4, 7 s](assets/documentation/difference.mp4)
 
 **Spanish dirt removal.** Manual frame-by-frame dust cleaning, only where you
 mask.
