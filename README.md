@@ -41,9 +41,9 @@ Clips from 35mm trailer scans at 2K. Each links to the full-quality MP4.
 
 **Cleanup.** The dust and specks go; the picture and its grain stay.
 
-https://github.com/user-attachments/assets/f63015f2-2e2f-429e-8a57-5d5ce77a3ae5
+![Cleanup: source and restored](assets/documentation/cleanup.gif)
 
-[GIF version](assets/documentation/cleanup.gif)
+[Full-quality video](https://github.com/user-attachments/assets/f63015f2-2e2f-429e-8a57-5d5ce77a3ae5)
 
 **Difference view.** Every repair in red.
 
