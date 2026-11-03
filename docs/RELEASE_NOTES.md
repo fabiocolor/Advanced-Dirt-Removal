@@ -25,7 +25,8 @@ Resolve, Nuke and other OFX hosts on macOS, Windows and Linux.
 - **Recovery mask.** Paint (Mask Paint, Magic Mask, roto, any alpha) where the
   original should stay. With auto recovery on, white strokes give the original
   back and black strokes keep the repair.
-- **Spanish dirt removal.** Repair only where you paint.
+- **Spanish dirt removal.** Manual frame-by-frame dust cleaning: paint a small
+  mask over a speck and only that spot is repaired.
 - **Views.** Restored, Red difference (every repair in red on a grey picture),
   True difference and the auto-recovery matte.
 - **Installers** for macOS (`.pkg`), Windows (setup program) and Linux

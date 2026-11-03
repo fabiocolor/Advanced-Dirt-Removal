@@ -30,45 +30,42 @@ One effect does everything:
 - **Auto recovery:** a small built-in model looks at every repaired spot and
   gives back the ones that look like real picture detail. You can paint on top
   of its matte to add or remove areas.
-- **Spanish dirt removal:** repair only where you paint.
+- **Spanish dirt removal:** manual frame-by-frame dust cleaning. Put a small
+  mask over a speck and only that spot is repaired.
 - **Views:** Restored, Red difference (every repair in red on a grey picture),
   True difference and the auto-recovery matte.
 
 ## What it does
 
-Four short clips from 35mm trailer scans at 2K. Each GIF is a small crop; the
-link under it opens the full frame as MP4.
+Clips from 35mm trailer scans at 2K. Each links to the full-quality MP4.
 
-**Cleanup.** Source on the left, restored on the right. The dust and specks go;
-the picture and its grain stay.
+**Cleanup.** The dust and specks go; the picture and its grain stay.
 
-![Cleanup: source and restored](assets/documentation/cleanup.gif)
+https://github.com/user-attachments/assets/f63015f2-2e2f-429e-8a57-5d5ce77a3ae5
 
-[Full clip, 16 s (MP4)](assets/documentation/cleanup.mp4)
+[GIF version](assets/documentation/cleanup.gif)
 
-**Difference view.** Every pixel the effect changed, in red on a grey picture.
+**Difference view.** Every repair in red.
 
-![Difference view: every repair in red](assets/documentation/difference.gif)
+![Difference view](assets/documentation/difference.gif)
 
-[Full clip, 16 s (MP4)](assets/documentation/difference.mp4)
+[MP4, 7 s](assets/documentation/difference.mp4)
 
-**Mask.** One area painted (the white ellipse). With **Recovery** the painted
-area keeps the original. With **Spanish dirt removal** only the painted area is
+**Spanish dirt removal.** Manual frame-by-frame dust cleaning, only where you
+mask.
+
+![Spanish dirt removal](assets/documentation/spanish-dirt-removal.gif)
+
+[MP4, 10 s](assets/documentation/spanish-dirt-removal.mp4)
+
+**Auto recovery.** Off and on. Moving highlights are given back; the dirt stays
 repaired.
 
-![Mask: Recovery, then Spanish dirt removal](assets/documentation/mask.gif)
+![Auto recovery off and on](assets/documentation/auto-recovery.gif)
 
-[Full clip, 14 s (MP4)](assets/documentation/mask.mp4)
+[MP4, 10.5 s](assets/documentation/auto-recovery.mp4)
 
-**Auto recovery.** Moving lights and highlights can change from one frame to the
-next like dirt does. With auto recovery on, the effect gives them back and
-keeps the dirt repaired.
-
-![Auto recovery: off, then on](assets/documentation/auto-recovery.gif)
-
-[Full clip, 12 s (MP4)](assets/documentation/auto-recovery.mp4)
-
-Sources: [assets/documentation/SOURCES.md](assets/documentation/SOURCES.md).
+Sources: [SOURCES.md](assets/documentation/SOURCES.md).
 
 > **New in 2.0.** Version 1.x was a Fusion macro around DaVinci Resolve's
 > built-in dirt removal. 2.0 is a stand-alone plugin with its own engine, for
