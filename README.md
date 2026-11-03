@@ -22,9 +22,9 @@ render on one machine matches a render on another.
 ![Source and restored, with a moving wipe](assets/documentation/adr-2.0-before-after.gif)
 
 Source on the left of the line, restored on the right, at the default
-settings. The footage is a 16mm scan of a public-domain 1943 US Navy film.
-The specks go; the long vertical scratches stay, because they are there for
-many frames. Longer version: [video](assets/documentation/adr-2.0-before-after.mp4).
+settings. Watch the dust on the wall and the big black speck at top right. The
+footage is a 16mm colour scan of a 1976 US Navy recruitment film, in the public
+domain. Whole shot: [video](assets/documentation/adr-2.0-before-after.mp4).
 1:1 detail: [still](assets/documentation/adr-2.0-detail-before-after.png).
 About the footage: [assets/documentation](assets/documentation/README.md).
 
@@ -37,16 +37,24 @@ One effect does everything:
 - **Recovery mask:** paint where you want the original back.
 - **Auto recovery:** a small built-in model looks at every repaired spot and
   gives back the ones that look like real picture detail. It works up to a
-  point, so check it and paint over what it gets wrong.
+  point. It also gives back some real dirt, so check its matte and paint over
+  what it gets wrong.
 - **Spanish dirt removal:** repair only where you paint.
 - **Views:** Restored, Red difference (every repair in red on a grey picture),
   True difference and the auto-recovery matte.
 
 ![Red difference view: every repair in red](assets/documentation/adr-2.0-red-difference.gif)
 
-The same shot in the Red difference view, so you can see every spot it
-repaired, including the odd one on the plane itself. Check this view before you
-trust a render ([video](assets/documentation/adr-2.0-red-difference.mp4)).
+The same shot in the Red difference view: every spot it repaired is in red.
+Check this view before you trust a render
+([video](assets/documentation/adr-2.0-red-difference.mp4)).
+
+![The Mask input: Recovery, then Spanish dirt removal](assets/documentation/adr-2.0-mask.gif)
+
+The Mask input, with one area painted (the white ellipse), in the Red
+difference view. With **Recovery** the painted area keeps the original, so the
+big speck inside it stays. With **Spanish dirt removal** only the painted area
+is repaired.
 
 > **New in 2.0.** Version 1.x was a Fusion macro around DaVinci Resolve's
 > built-in dirt removal. 2.0 is a stand-alone plugin with its own engine, for
@@ -116,8 +124,9 @@ workflow and the views.
 
 ![Advanced Dirt Removal 2.0 in Resolve's Fusion page on macOS](assets/documentation/macos-resolve-2.0-restored.png)
 
-The plugin in DaVinci Resolve Studio 21.1 on macOS, Fusion page, with the
-same 1943 clip: the effect's output on the left, its controls on the right.
+The plugin in DaVinci Resolve Studio 21.1 on macOS, Fusion page, with an
+earlier public-domain test clip: the effect's output on the left, its controls
+on the right.
 [Red difference in Resolve](assets/documentation/macos-resolve-2.0-red-difference.png).
 The screenshots are from macOS. Resolve and the plugin's controls look the
 same on Windows and Linux.
