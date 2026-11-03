@@ -43,7 +43,7 @@ Clips from 35mm trailer scans at 2K. Each links to the full-quality MP4.
 
 ![Cleanup: source and restored](assets/documentation/cleanup.gif)
 
-[MP4, 11 s](assets/documentation/cleanup.mp4)
+[MP4, 4 s](assets/documentation/cleanup.mp4)
 
 **Difference view.** Every repair in red.
 
