@@ -49,7 +49,7 @@ Do not replace tested downloads with an unchecked rebuild from the final tag.
 
 ## Docs, licensing and media pass (2 November, evening)
 
-- Docs rewritten in plain language and checked against [STYLE.md](STYLE.md):
+- Docs rewritten in plain language:
   README, INSTALL, USER_GUIDE, RELEASE_NOTES, a new top-level CHANGELOG.
 - Install steps for unsigned releases on each platform: Gatekeeper (Open
   Anyway, right-click → Open, `xattr`), SmartScreen (More info → Run anyway)
