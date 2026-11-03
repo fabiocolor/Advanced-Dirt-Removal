@@ -19,13 +19,14 @@ It runs on the GPU (Apple Metal, NVIDIA CUDA, and OpenCL for AMD, Intel and
 NVIDIA) and falls back to the CPU. You get the same result on all of them, so a
 render on one machine matches a render on another.
 
-[![Source and restored detail from a 1943 16mm film](assets/documentation/adr-2.0-detail-before-after.png)](assets/documentation/adr-2.0-before-after.mp4)
+![Source and restored, with a moving wipe](assets/documentation/adr-2.0-before-after.gif)
 
-Left: the source. Right: after Advanced Dirt Removal at its default settings.
-A 1:1 detail from a 16mm scan of a public-domain 1943 US Navy film. The short
-video [adr-2.0-before-after.mp4](assets/documentation/adr-2.0-before-after.mp4)
-shows the whole shot. The long vertical scratches stay, because they are
-there for many frames. Details of the footage: [assets/documentation](assets/documentation/README.md).
+Source on the left of the line, restored on the right, at the default
+settings. The footage is a 16mm scan of a public-domain 1943 US Navy film.
+The specks go; the long vertical scratches stay, because they are there for
+many frames. Longer version: [video](assets/documentation/adr-2.0-before-after.mp4).
+1:1 detail: [still](assets/documentation/adr-2.0-detail-before-after.png).
+About the footage: [assets/documentation](assets/documentation/README.md).
 
 ## What's in it
 
@@ -41,10 +42,11 @@ One effect does everything:
 - **Views:** Restored, Red difference (every repair in red on a grey picture),
   True difference and the auto-recovery matte.
 
-![Red difference view: every repair in red](assets/documentation/adr-2.0-red-difference.png)
+![Red difference view: every repair in red](assets/documentation/adr-2.0-red-difference.gif)
 
 The same shot in the Red difference view, so you can see every spot it
-repaired ([video](assets/documentation/adr-2.0-red-difference.mp4)).
+repaired, including the odd one on the plane itself. Check this view before you
+trust a render ([video](assets/documentation/adr-2.0-red-difference.mp4)).
 
 > **New in 2.0.** Version 1.x was a Fusion macro around DaVinci Resolve's
 > built-in dirt removal. 2.0 is a stand-alone plugin with its own engine, for
@@ -117,6 +119,8 @@ workflow and the views.
 The plugin in DaVinci Resolve Studio 21.1 on macOS, Fusion page, with the
 same 1943 clip: the effect's output on the left, its controls on the right.
 [Red difference in Resolve](assets/documentation/macos-resolve-2.0-red-difference.png).
+The screenshots are from macOS. Resolve and the plugin's controls look the
+same on Windows and Linux.
 
 | Control group | Controls |
 | --- | --- |

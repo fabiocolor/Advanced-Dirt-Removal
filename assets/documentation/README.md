@@ -13,12 +13,16 @@ than a real scan and some compression noise is mixed in with the grain. It
 still has plenty of dust and specks to show what the effect does.
 
 Excerpt: 5 seconds from 924.5 s (120 frames at 24 fps), cropped to the
-picture area (2816 × 2160 at x = 512) and scaled to 2048 × 1570.
+picture area (2816 × 2160 at x = 512) and scaled to 2048 × 1570. The GIFs use
+every second frame from 58 to 116 of that excerpt, cropped to 1024 × 768 at
+(420, 560) and shown at 720 wide.
 
 ## Files
 
 | File | What it shows |
 | --- | --- |
+| `adr-2.0-before-after.gif` | README animation: a wipe between source and restored, 720 wide crop, 30 frames at 12 fps |
+| `adr-2.0-red-difference.gif` | README animation: the same crop in the Red difference view |
 | `adr-2.0-before-after.mp4` | Source on the left, restored on the right, default settings |
 | `adr-2.0-red-difference.mp4` | The same shot in the Red difference view |
 | `adr-2.0-detail-before-after.png` | 1:1 detail of one frame, source and restored |
@@ -28,7 +32,7 @@ picture area (2816 × 2160 at x = 512) and scaled to 2048 × 1570.
 | `resolve-2.0-controls.png` | Earlier capture: the controls in Resolve Studio 21.1 on macOS (synthetic clip) |
 | `resolve-2.0-red-difference.png` | Red difference and its view options in Resolve (synthetic clip) |
 
-The videos and the `adr-2.0-*` stills were rendered on an Apple M5 Pro (Metal)
+The videos, GIFs and `adr-2.0-*` stills were rendered on an Apple M5 Pro (Metal)
 with the engine's command-line tool, `adr_bench`, at the default settings.
 That is the same engine the plugin runs, with the same output. Red difference
 was drawn with the formula in the [user guide](../../docs/USER_GUIDE.md#views),
@@ -36,8 +40,9 @@ at the default view options. Nothing was retouched. You can see what the
 effect leaves alone: the long vertical scratches stay, because they are there
 for many frames, not one.
 
-The `macos-resolve-2.0-*` screenshots are unedited captures of Resolve's
-window only (scaled to 1920 wide), taken on 2 November 2026 with the installed
+The screenshots are from macOS only. Resolve and the plugin's controls look
+the same on Windows and Linux. The `macos-resolve-2.0-*` screenshots are
+unedited captures of Resolve's window only (scaled to 1920 wide), taken on 2 November 2026 with the installed
 2.0.0 macOS package in Resolve Studio 21.1.1.10 on the M5 Pro. They use a
 throwaway test project in the local database, deleted afterwards.
 
