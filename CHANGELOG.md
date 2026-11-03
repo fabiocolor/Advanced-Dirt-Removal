@@ -14,7 +14,8 @@ Added
 - Input encoding: Video or Cineon log.
 - Auto recovery, with a **Calculate recovery** button and a **Confidence**
   control.
-- Recovery mask and Spanish dirt removal through the Mask input.
+- Recovery mask through the Mask input, and Spanish dirt removal: frame-by-frame
+  spot repair inside a small painted mask, replacing Resolve's Dust Buster OFX.
 - Views: Restored, Red difference, True difference, Auto recovery matte.
 - Installers for macOS (`.pkg`), Windows (setup program) and Linux (tarball
   with `install.sh`).

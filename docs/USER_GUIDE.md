@@ -133,8 +133,11 @@ matte.
 
 ### Spanish dirt removal (Mask: Spanish dirt removal)
 
-The opposite use of the mask: only painted areas are repaired, and everything
-else keeps the original. Useful for treating one damaged area of a shot. Spanish
+A manual, frame-by-frame spot repair, the plugin's replacement for Resolve's
+Dust Buster OFX. Go through the shot frame by frame; where you see a speck you
+want gone, paint a small mask over it on that frame. Only the painted spot is
+repaired, from the neighbouring frames; everything else, and every frame you
+don't paint, keeps the original. Spanish
 dirt removal does not use auto recovery: with Auto recovery on, the render stops
 with the error *"Auto recovery cannot be used with Spanish dirt removal"*. Turn
 one of them off and it renders again. With nothing connected to the Mask input,
