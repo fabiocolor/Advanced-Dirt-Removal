@@ -44,22 +44,22 @@ and specks go; the faces, the picture and its grain stay.
 
 ![Cleanup: source and restored](assets/documentation/cleanup.gif)
 
-[Full clip, 12.5 s (MP4)](assets/documentation/cleanup.mp4)
+[Full clip, 11 s (MP4)](assets/documentation/cleanup.mp4)
 
 **Difference view.** Every pixel the effect changed, in red on a grey picture.
 
 ![Difference view: every repair in red](assets/documentation/difference.gif)
 
-[Full clip, 11 s (MP4)](assets/documentation/difference.mp4)
+[Full clip, 9 s (MP4)](assets/documentation/difference.mp4)
 
-**Mask.** One area painted (the tinted ellipse), side by side, in the
+**Mask.** One area painted (the white ellipse), side by side, in the
 Difference view. On the left, **Recovery**: the painted area keeps the original
 and only the rest is repaired. On the right, **Spanish dirt removal**: only the
 painted area is repaired.
 
 ![Mask: Recovery and Spanish dirt removal, side by side](assets/documentation/mask.gif)
 
-[Full clip, 9 s (MP4)](assets/documentation/mask.mp4)
+[Full clip, 8.5 s (MP4)](assets/documentation/mask.mp4)
 
 **Auto recovery.** Moving lights and highlights can change from one frame to the
 next like dirt does. Side by side, in the Difference view: on the left auto
