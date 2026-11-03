@@ -37,40 +37,35 @@ One effect does everything:
 
 ## What it does
 
-Four clips from 35mm trailer scans at 2K, each with several shots. The GIFs
-show the whole frame; the link under each one opens the full-quality MP4.
+Clips from 35mm trailer scans at 2K. Each links to the full-quality MP4.
 
-**Cleanup.** Source on the left of the line, restored on the right. The dust
-and specks go; the faces, the picture and its grain stay.
+**Cleanup.** The dust and specks go; the picture and its grain stay.
 
 ![Cleanup: source and restored](assets/documentation/cleanup.gif)
 
-[Full clip, 11 s (MP4)](assets/documentation/cleanup.mp4)
+[MP4, 11 s](assets/documentation/cleanup.mp4)
 
-**Difference view.** Every pixel the effect changed, in red on a grey picture.
+**Difference view.** Every repair in red.
 
-![Difference view: every repair in red](assets/documentation/difference.gif)
+![Difference view](assets/documentation/difference.gif)
 
-[Full clip, 9 s (MP4)](assets/documentation/difference.mp4)
+[MP4, 9 s](assets/documentation/difference.mp4)
 
-**Spanish dirt removal.** Manual frame-by-frame dust cleaning. On each frame
-the operator puts a small mask over one speck, and the plugin removes that
-speck and nothing else; the rest of the frame stays as it is.
+**Spanish dirt removal.** Manual frame-by-frame dust cleaning, only where you
+mask.
 
-![Spanish dirt removal: one speck per frame, before and after](assets/documentation/spanish-dirt-removal.gif)
+![Spanish dirt removal](assets/documentation/spanish-dirt-removal.gif)
 
-[Full clip, 10 s (MP4)](assets/documentation/spanish-dirt-removal.mp4)
+[MP4, 10 s](assets/documentation/spanish-dirt-removal.mp4)
 
-**Auto recovery.** Moving lights and highlights can change from one frame to the
-next like dirt does. Side by side, in the Difference view: on the left auto
-recovery is off, on the right it is on. With it on, the effect gives those
-details back and keeps the dirt repaired.
+**Auto recovery.** Off and on. Moving highlights are given back; the dirt stays
+repaired.
 
-![Auto recovery off and on, side by side](assets/documentation/auto-recovery.gif)
+![Auto recovery off and on](assets/documentation/auto-recovery.gif)
 
-[Full clip, 10.5 s (MP4)](assets/documentation/auto-recovery.mp4)
+[MP4, 10.5 s](assets/documentation/auto-recovery.mp4)
 
-Sources: [assets/documentation/SOURCES.md](assets/documentation/SOURCES.md).
+Sources: [SOURCES.md](assets/documentation/SOURCES.md).
 
 > **New in 2.0.** Version 1.x was a Fusion macro around DaVinci Resolve's
 > built-in dirt removal. 2.0 is a stand-alone plugin with its own engine, for
