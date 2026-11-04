@@ -97,8 +97,7 @@ xattr -dr com.apple.quarantine ~/Downloads/AdvancedDirtRemoval-<version>.pkg
 protected your PC", click **More info** → **Run anyway**. It needs
 administrator rights for the shared OFX folder.
 
-winget: 2.0.0 has been submitted and is waiting to be accepted. Until then,
-`winget install FabioColor.AdvancedDirtRemoval` still installs 1.1.3.
+Or with winget: `winget install FabioColor.AdvancedDirtRemoval`.
 
 **Linux.**
 

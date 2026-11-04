@@ -55,17 +55,11 @@ Installed to:
 
 Uninstall: Settings → Apps → Advanced Dirt Removal → Uninstall.
 
-**winget.** The 2.0.0 manifest in
-[`installers/win/winget/2.0.0`](../installers/win/winget/2.0.0) has been
-submitted and is waiting to be accepted. Until then, this command still
-installs 1.1.3:
+**winget.**
 
 ```powershell
 winget install FabioColor.AdvancedDirtRemoval
 ```
-
-Once 2.0.0 is accepted there, `winget upgrade FabioColor.AdvancedDirtRemoval`
-will move you to 2.0.
 
 ## Linux
 
