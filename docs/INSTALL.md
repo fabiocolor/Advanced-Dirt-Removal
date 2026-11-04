@@ -11,8 +11,6 @@ yourself ([BUILD.md](BUILD.md)).
 
 Downloads are on the
 [releases page](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases).
-Until 2.0.0 is published there, the latest release and winget still give you
-1.1.3. Check the version before you install.
 
 ## macOS
 
@@ -57,9 +55,9 @@ Installed to:
 
 Uninstall: Settings → Apps → Advanced Dirt Removal → Uninstall.
 
-**winget.** A winget manifest for 2.0.0 is drafted in
-[`installers/win/winget/2.0.0`](../installers/win/winget/2.0.0) and is pending
-approval in the winget repository. As it is right now, this command still
+**winget.** The 2.0.0 manifest in
+[`installers/win/winget/2.0.0`](../installers/win/winget/2.0.0) has been
+submitted and is waiting to be accepted. Until then, this command still
 installs 1.1.3:
 
 ```powershell

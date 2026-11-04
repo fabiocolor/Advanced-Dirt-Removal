@@ -72,9 +72,6 @@ Sources: [SOURCES.md](assets/documentation/SOURCES.md).
 > Resolve, Nuke and other OFX hosts on macOS, Windows and Linux. What changed:
 > [CHANGELOG.md](CHANGELOG.md). What has been tested: [docs/TESTED.md](docs/TESTED.md).
 
-**2.0.0 is not published yet.** Until it is, the releases page and winget still
-give you 1.1.3. Everything below describes 2.0.
-
 ## Install
 
 The installers are unsigned. I don't pay for an Apple Developer ID or a Windows
@@ -100,10 +97,8 @@ xattr -dr com.apple.quarantine ~/Downloads/AdvancedDirtRemoval-<version>.pkg
 protected your PC", click **More info** → **Run anyway**. It needs
 administrator rights for the shared OFX folder.
 
-winget: a 2.0.0 manifest is drafted in
-[`installers/win/winget/2.0.0`](installers/win/winget/2.0.0) and is pending
-approval. As it is right now, `winget install FabioColor.AdvancedDirtRemoval`
-still installs 1.1.3.
+winget: 2.0.0 has been submitted and is waiting to be accepted. Until then,
+`winget install FabioColor.AdvancedDirtRemoval` still installs 1.1.3.
 
 **Linux.**
 

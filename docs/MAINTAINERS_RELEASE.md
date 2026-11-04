@@ -118,11 +118,10 @@ notarization.
 
 ## winget
 
-A draft 2.0.0 manifest is in
-[`installers/win/winget/2.0.0`](../installers/win/winget/2.0.0), marked as
-pending approval. Submit it to microsoft/winget-pkgs only after the release is
-live, and check that the downloaded `.exe` matches `InstallerSha256` and
-installs 2.0.0.
+The 2.0.0 manifest is in
+[`installers/win/winget/2.0.0`](../installers/win/winget/2.0.0). Submit a new
+version to microsoft/winget-pkgs only after the release is live, and check that
+the downloaded `.exe` matches `InstallerSha256` and installs that version.
 
 The 2.0 installer is a machine-wide install (the OFX folder needs administrator
 rights); 1.x was per user. The manifest therefore uses:
