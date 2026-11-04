@@ -174,6 +174,8 @@ There is no CI service. Releases are built and checked locally.
 
 ## Support
 
+ADR is free and open source, and I make it in my own time. If it saves you work, you can support it on [Ko-fi](https://ko-fi.com/fabiocolor). Contributions, bug reports and test footage are welcome too.
+
 - Issues: [GitHub Issues](https://github.com/fabiocolor/Advanced-Dirt-Removal/issues)
 - Discussions: [GitHub Discussions](https://github.com/fabiocolor/Advanced-Dirt-Removal/discussions)
 
