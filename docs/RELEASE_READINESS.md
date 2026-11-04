@@ -64,7 +64,7 @@ Do not replace tested downloads with an unchecked rebuild from the final tag.
   `recovery-model-2.0.0.bin`, `WEIGHTS_LICENSE.txt` and `LICENSE`. The staged
   candidate in `release-candidate-r2` predates this; stage a new candidate
   directory before publishing.
-- Draft winget manifest in `installers/win/winget/2.0.0`, pending approval.
+- winget manifest in `installers/win/winget/2.0.0`.
 - `check_release.py build` passes on the M5 Pro (Metal, OpenCL, CPU) after the
   build change; no processing code changed.
 
