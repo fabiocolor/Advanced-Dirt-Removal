@@ -33,11 +33,9 @@ Everything is in one effect:
 > have been tested, and [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md) what is
 > new.
 
-**Local 2.0 candidate:** the memory-usage fix has completed its documented
-regression campaign. Pushing remains on hold until matte recovery integration
-is complete. The previously assembled installers predate the fix; public
-downloads and winget still provide 1.1.3. The source and instructions below
-describe 2.0. See [release readiness](docs/RELEASE_READINESS.md).
+**2.0.0 release candidate:** publication is pending. The existing public
+downloads and winget package still contain 1.1.3 until the 2.0 release is
+published. The source and instructions below describe 2.0.
 
 ![Advanced Dirt Removal 2.0 controls in Resolve Fusion](assets/documentation/resolve-2.0-controls.png)
 
@@ -98,19 +96,6 @@ screenshots of the installed macOS package.
 The plugin keeps a diagnostic log (backend, device, timing, errors); its
 location is in the [user guide](docs/USER_GUIDE.md#diagnostics-speed-and-limits).
 Please attach it to issue reports.
-
-## Memory usage
-
-The current source adds GPU host-image transport to reduce the large Resolve
-Fusion memory accumulation seen with the original 2.0 candidate. In two
-100-frame 2048×1556 Mac tests, peak process footprint fell from 13.38 GiB to
-3.75 / 3.88 GiB, with exact tested pixels and no new swapouts. CPU-only host
-image transport keeps its existing behaviour. The repair engine still needs
-working RAM and GPU memory, which increase with resolution.
-
-See [memory qualification](docs/MEMORY_QUALIFICATION.md) for the platform,
-format, performance and longer-run limits. These changes are not yet in a
-published installer.
 
 ## Build from source
 

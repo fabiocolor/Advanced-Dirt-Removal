@@ -3,11 +3,6 @@
 Each installer adds the **Advanced Dirt Removal OFX plugin** for DaVinci
 Resolve, Nuke and other OFX hosts. Restart your host afterwards.
 
-The current source includes a qualified memory-usage fix, but the previously
-assembled 2.0.0 installers predate it. Updated installers will follow matte
-recovery integration and integrated-candidate qualification. Pushing and
-publication remain held; see [RELEASE_READINESS.md](RELEASE_READINESS.md).
-
 Version 1.x was a Fusion macro. On Windows the 2.0 installer first uninstalls a
 1.x installation, including its macros. On macOS and Linux a 1.x macro is left
 in place, so compositions that use it keep working; delete the

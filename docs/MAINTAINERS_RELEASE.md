@@ -4,19 +4,6 @@ For repository maintainers. End-user docs: [INSTALL.md](INSTALL.md).
 
 There is no CI service. Every release is built and checked locally.
 
-## Current integration and push hold — 8 November 2026
-
-The memory fix is qualified for the scope in
-[MEMORY_QUALIFICATION.md](MEMORY_QUALIFICATION.md), and Fabio authorized its
-local commit. Pushing is held until matte recovery integration is complete.
-The existing auto-recovery features are not removed by that pending milestone.
-
-The installer manifest currently records the older candidate; those packages
-do not contain the memory fix. After integration, qualify the integrated source
-and rebuilt installers before replacing the manifest or assembling publishable
-downloads. Keep the older files and hashes as provenance. See
-[RELEASE_READINESS.md](RELEASE_READINESS.md) for current status.
-
 ## Before a release
 
 1. `python3 tools/check_release.py build` on each platform you ship
@@ -61,8 +48,8 @@ section of [RELEASE_NOTES.md](RELEASE_NOTES.md) as the release description.
 
 ### Assemble the checked candidate
 
-Keep the three raw installers in one input directory. For the historical
-pre-memory-fix 2.0.0 candidate, the exact hashes and build revisions are in
+Keep the three raw installers in one input directory. For the existing 2.0.0
+candidate their exact hashes and individual build revisions are in
 [`release/2.0.0.json`](../release/2.0.0.json). The Linux installer must be the
 rebuild with the host runtime fix; earlier tarballs have the same filename.
 
@@ -78,11 +65,8 @@ copies the Linux tarball, includes current install/release notes, and writes a
 manifest and checksums. It refuses to overwrite a previous candidate and never
 uploads, tags or pushes. Archive members contain no build-machine paths.
 
-A candidate qualifies only the exact processing code and package bytes that
-were tested. The historical manifest cannot certify the later memory fix or
-matte recovery integration. Documentation-only commits do not change the
-qualified processing inputs.
-
+The candidate includes only the plugin code already qualified on each platform;
+subsequent documentation/release-tool commits do not invalidate that evidence.
 If any installer is rebuilt, repeat the applicable package, sanitizer and host
 checks, then update the manifest with its new hash and build revision. Do not
 publish an untested rebuild merely to change the revision printed in its log.
@@ -90,9 +74,8 @@ publish an untested rebuild merely to change the revision printed in its log.
 ### Publication boundary
 
 The first public push and release need the owner's explicit approval. Until
-then, keep the candidate local and retain the matte recovery integration hold.
-After approval, confirm the reviewed commit, intended tag and candidate
-checksums; publish only those downloads and
+then, keep the candidate local. After approval, confirm the reviewed commit,
+the intended tag and candidate checksums; publish only those downloads and
 the notes in `RELEASE_NOTES.md`. Remove the temporary candidate notices from
 README/INSTALL when publishing. No history rewrite or force-push is needed.
 Update winget only after its installer URL is live and its downloaded bytes

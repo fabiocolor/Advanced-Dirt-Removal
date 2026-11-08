@@ -8,41 +8,22 @@ Anything not listed has not been tried. Please report results from other hosts,
 systems and GPUs in [GitHub Issues](https://github.com/fabiocolor/Advanced-Dirt-Removal/issues),
 with the diagnostic log.
 
-The initial November 2026 qualification used a 2368×1712 film scan (float
-EXR): 56 frames on macOS, a 12-frame excerpt on Windows and Linux, compared
-frame by frame with the macOS result. The later memory-fix campaign is listed
-separately below.
+Version 2.0.0, November 2026. Real-footage tests use a 2368×1712 film scan
+(float EXR): 56 frames on macOS, a 12-frame excerpt on Windows and Linux,
+compared frame by frame with the macOS result.
 
-## Memory-fix candidate — 8 November 2026
+## Memory-fix checks — 8 November 2026
 
-The current memory-fix source was requalified separately from the original
-installers. [MEMORY_QUALIFICATION.md](MEMORY_QUALIFICATION.md) contains the
-measurements, exact source/evidence checksums and failed/interrupted attempts.
+The fix passed the existing engine/OFX regressions across the tested macOS,
+Windows and Linux backends, licensed Windows/Linux Nuke checks, Pascal
+fallback, portable Linux checks and 28 format comparisons. Tested pixels match.
+Two Mac 100-frame runs peaked at 3.75 / 3.88 GiB instead of 13.38 GiB, with no
+new swapouts. CPU-only host-image transport remains unchanged; extended Mac
+and AMD CPU recovery attempts stopped at their documented safety bounds.
+The tables below retain the initial release qualification; Mac Nuke was not
+rerun successfully for this fix. No updated installer has been qualified.
 
-| Current candidate check | Result |
-| --- | --- |
-| Mac arm64 Metal/OpenCL/CPU; Windows NVIDIA CUDA/OpenCL/CPU; Windows AMD OpenCL/CPU; Linux NVIDIA CUDA/OpenCL/CPU | Original 58 engine cases and strict OFX contract on each tested backend |
-| Mac real 2048×1556 Resolve Fusion memory | Two 100-frame renders: 3.75 / 3.88 GiB peak footprint, exact tested pixels, no new swapouts |
-| Windows Nuke Indie 17.0v3 / RTX 3090 | Nine original host checks; 25 additional settings × 12 real 2368×1712 frames = 300 exact native-engine comparisons |
-| Linux Nuke Indie 17.1v2 and Resolve Studio 21.0.4.5 Fusion / RTX 3090 | Nine original host checks in each; real-scan engine parity and recovery maps also pass |
-| Windows Pascal / Quadro P5000 | Automatic OpenCL fallback: 58 exact cases; forced CUDA reports the expected unsupported image |
-| Portable Linux AlmaLinux 8 / GCC 14 build | CPU 58 cases, strict contract and transport unit pass; maximum GLIBC symbol 2.27, two OFX exports |
-| Portable build on Ubuntu / RTX A4000 | 174 engine cases, three strict contracts and 63 exact frames through the dynamically loaded product module |
-| Resolve DPX/EXR/ProRes file-input comparison | 28 variants at native 640×360: 448 exact frame pairs / 896 decoded outputs, alpha included where present |
-
-The Mac CPU contract completed on a later normal-pressure run. Mac Nuke was
-not requalified in this campaign because the tested profile lacked a licence;
-Windows and Linux used existing licensed profiles. AMD CPU recovery and the
-extended 494-frame Mac run stopped at their documented bounds. CPU-only Resolve
-host-image memory behaviour is unchanged. No new installer was installed or
-qualified. The Windows 300-frame Nuke control suite clears RAM cache between
-independent settings and is not an uninterrupted-session memory test.
-
-The tables below preserve the **initial 1–2 November qualification** of the
-older installer candidate. They do not mean every initial host/feature cell
-was rerun for the memory fix or the forthcoming matte recovery integration.
-
-## Initial macOS qualification: every feature, in Resolve and Nuke
+## macOS: every feature, in DaVinci Resolve and Nuke
 
 Apple M5 Pro, macOS 27, Metal. DaVinci Resolve Studio 21.1 (Fusion page) and
 Nuke 17.1, both driven by script with the plugin from this repository.

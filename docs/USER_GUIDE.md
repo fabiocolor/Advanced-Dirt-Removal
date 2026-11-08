@@ -193,14 +193,6 @@ Mask input) the output is exactly the cleaned frame.
   `%LOCALAPPDATA%\FabioColor\AdvancedDirtRemoval\Logs` (Windows),
   `~/.local/state/fabiocolor/advanced-dirt-removal/logs` (Linux). Attach it to
   issue reports. `ADR_LOG=off` turns it off.
-- **Memory.** The current unreleased memory-fix source uses GPU host images
-  when the host supports them, reducing the large Resolve Fusion accumulation
-  seen with the original 2.0 candidate. CPU-only host-image transport keeps its
-  existing behaviour. Temporal cleaning and recovery still need working RAM
-  and GPU memory, which increase with resolution; this is not a fixed memory
-  budget or unlimited-session guarantee. Changing cleaning settings to save
-  memory also changes the restoration. See
-  [memory qualification](MEMORY_QUALIFICATION.md) for tested scope and limits.
 - **Review moving shots.** Very fast motion can look like dirt. Raise Motion
   guard, use auto recovery, and paint back what is left.
 - **Interlaced material** is not supported; deinterlace first.

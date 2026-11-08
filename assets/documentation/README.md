@@ -1,10 +1,7 @@
 # Advanced Dirt Removal 2.0 screenshots
 
 These are unedited screenshots of Resolve Studio 21.1.1.10 on macOS, captured
-for the initial 2.0.0 candidate after installing its macOS package into the
-system OFX folder. They document the interface, which the memory fix does not
-change; they are not screenshots of a newly packaged memory-fix or integrated
-matte recovery release.
+after installing the 2.0.0 macOS package into the system OFX folder.
 
 - `resolve-2.0-controls.png`: Restored view and the current control groups.
 - `resolve-2.0-red-difference.png`: Red Difference and its view options.

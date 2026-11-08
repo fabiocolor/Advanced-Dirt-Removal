@@ -1,24 +1,12 @@
 # Release notes
 
-## Unreleased — memory-usage fixes, 8 November 2026
+## Unreleased fix
 
-- Optional Metal host images on macOS and CUDA/OpenCL host images on Windows
-  and Linux reduce the dominant Resolve Fusion memory accumulation in the
-  tested GPU image paths. Hosts without these extensions retain the CPU image
-  fallback. Cleaning controls, temporal behaviour and expected pixels are
-  unchanged.
-- Windows CPU context destruction now releases suspended Fiber stacks after
-  joining their worker threads.
-- Added transport lifetime/context/error tests and expanded the strict OFX
-  contracts. The completed campaign covers the documented macOS, Windows
-  NVIDIA/AMD and Linux backends, licensed Nuke, Pascal fallback, portable Linux
-  ABI/runtime and 28 DPX/EXR/ProRes variants. See
-  [MEMORY_QUALIFICATION.md](MEMORY_QUALIFICATION.md) for exact scope and limits.
-
-These changes are local and are not included in the previously assembled
-installers. Pushing is held until matte recovery integration is complete;
-release packaging and qualification follow the integrated source. No new
-version or release has been published.
+- Reduced Resolve Fusion memory growth through optional GPU host-image
+  transport on macOS, Windows and Linux; fixed Windows CPU Fiber-stack cleanup.
+- Cleaning controls, temporal processing and expected output hashes are unchanged.
+- Push held until matte recovery integration is complete. Existing installers
+  predate this fix.
 
 ## 2.0.0
 
