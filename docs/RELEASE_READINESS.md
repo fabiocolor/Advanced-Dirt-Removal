@@ -1,8 +1,8 @@
 # Current update — 8 November 2026
 
-Memory fix committed locally. Push held until matte recovery integration is
-complete. The installer candidate below predates the fix; rebuild and check
-packages after integration before updating the release manifest.
+The memory fix is committed locally. We will push after matte recovery
+integration is complete. Existing installers do not include the fix; we will
+rebuild and test them after integration.
 
 # 2.0.0 release readiness — 2 November 2026
 

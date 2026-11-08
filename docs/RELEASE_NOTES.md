@@ -2,11 +2,9 @@
 
 ## Unreleased fix
 
-- Reduced Resolve Fusion memory growth through optional GPU host-image
-  transport on macOS, Windows and Linux; fixed Windows CPU Fiber-stack cleanup.
-- Cleaning controls, temporal processing and expected output hashes are unchanged.
-- Push held until matte recovery integration is complete. Existing installers
-  predate this fix.
+- Reduced memory use during GPU rendering in Resolve on macOS, Windows and Linux.
+- Fixed memory not being freed after CPU processing on Windows.
+- Cleaning results and controls are unchanged.
 
 ## 2.0.0
 

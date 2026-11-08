@@ -12,16 +12,16 @@ Version 2.0.0, November 2026. Real-footage tests use a 2368×1712 film scan
 (float EXR): 56 frames on macOS, a 12-frame excerpt on Windows and Linux,
 compared frame by frame with the macOS result.
 
-## Memory-fix checks — 8 November 2026
+## Memory fix — 8 November 2026
 
-The fix passed the existing engine/OFX regressions across the tested macOS,
-Windows and Linux backends, licensed Windows/Linux Nuke checks, Pascal
-fallback, portable Linux checks and 28 format comparisons. Tested pixels match.
-Two Mac 100-frame runs peaked at 3.75 / 3.88 GiB instead of 13.38 GiB, with no
-new swapouts. CPU-only host-image transport remains unchanged; extended Mac
-and AMD CPU recovery attempts stopped at their documented safety bounds.
-The tables below retain the initial release qualification; Mac Nuke was not
-rerun successfully for this fix. No updated installer has been qualified.
+We tested the update on macOS, Windows and Linux, including Resolve, Nuke,
+older NVIDIA cards and 28 file formats. The tested results are unchanged.
+Two 100-frame Mac renders stayed below 4 GiB, compared with 13.38 GiB before,
+and did not add swap. Hosts without GPU image support keep the previous memory
+behaviour. The longer Mac render and Auto recovery tests on the AMD CPU
+stopped at their memory or time limits. The Mac Nuke test could not run because of a licence error.
+The tables below record the original release tests. Existing installers do
+not include this fix.
 
 ## macOS: every feature, in DaVinci Resolve and Nuke
 
