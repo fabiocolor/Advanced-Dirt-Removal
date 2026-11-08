@@ -12,6 +12,33 @@ Version 2.0.0, November 2026. Real-footage tests use a 2368×1712 film scan
 (float EXR): 56 frames on macOS, a 12-frame excerpt on Windows and Linux,
 compared frame by frame with the macOS result.
 
+## Compact Resolve inspector — development build, 8 November 2026
+
+A single independent review from Astra and Fable informed a shared layout for
+Advanced Dirt Removal and the standalone recovery adapter. Routine controls
+remain visible; stroke details, source setup and advanced controls start collapsed.
+The engines, saved parameter identities, defaults, choice strings and stroke
+format are unchanged. Cleaning controls retain their serialization order;
+descriptor presentation order is separate, preserving recovery-cache keys.
+
+Resolve Studio 21.1.1.10 on Apple M5 Pro loaded isolated test identities with
+this layout. Primary controls fit without scrolling in a 1920×1080 window on
+Color and Edit; shorter inspectors require scrolling for secondary sections.
+At 2483×1410 the complete collapsed panel fits. These are tested window sizes,
+not a claim about every display scale or workspace layout.
+
+Before/after float EXR comparisons matched every RGB sample on all 200 frames
+from the native Color and Edit prepared-original fixtures: recovery, Spanish,
+Red difference and True difference, 25 frames per case. The standalone adapter
+also matched 100 frames across its bake-route reference cases. Its
+existing Fusion additional-source route rejected missing host frame-rate
+metadata in the baseline; that route is outside this UI-only qualification.
+Normal build, engine hashes on Metal/OpenCL/CPU, parameter contract and paint
+fixture checks passed. Native scripted input is not a physical tablet-feel test.
+The compact inspector also passed native stroke selection, Delete and paint
+Undo/Redo with exact document restoration. The installed production plugin and
+published 2.0 installers remain unchanged.
+
 ## Viewer painting — development build, 8 November 2026
 
 On the Apple M5 Pro in Resolve Studio 21.1.1, the prepared-original workflow

@@ -48,8 +48,10 @@ The first control. Pick what the values entering the effect are:
 
 ## Cleaning controls
 
-On the **Cleaning** page (in hosts that show pages), in three groups. Start with
-the defaults. If real detail is being removed, lower **Sensitivity** or raise
+In Resolve, **Cleaning** shows **Sensitivity**, **Motion guard** and
+**Repair amount**. The remaining controls are in collapsed **Advanced cleaning**.
+Other hosts retain the three groups on the **Cleaning** page (where supported).
+Start with the defaults. If real detail is being removed, lower **Sensitivity** or raise
 **Motion guard**; if dirt remains, raise **Sensitivity** or try **Analyse: RGB**.
 
 | Control | Default | What it does |
@@ -81,11 +83,13 @@ shot again, and auto recovery calculates a new matte for the new settings.
 
 Automatic repair sometimes removes things that belong to the picture: a
 fast-moving hand, a spark, a highlight. Recovery gives the original back there.
-The **Recovery** group holds:
+In Resolve, **Method** selects Recovery or Spanish dirt removal; the collapsed
+**Auto recovery** group holds the automatic matte controls. Other hosts keep
+these controls in **Recovery**:
 
 | Control | Default | What it does |
 | --- | --- | --- |
-| Mode | Recovery | How painting and the Mask input are used: **Recovery** or **Spanish dirt removal** (below). |
+| Method (Mode in other hosts) | Recovery | How painting and the Mask input are used: **Recovery** or **Spanish dirt removal** (below). |
 | Calculate recovery | button | Calculates the auto-recovery matte for the whole shot now and turns Auto recovery on. |
 | Auto recovery | Off | On: give back repaired spots the model judges to be real picture detail. |
 | Confidence | 0.80 | Give back only spots the model is at least this sure about (0.50 to 0.99). Higher gives back less. |
@@ -102,6 +106,19 @@ has no alpha), so a Mask Paint, Magic Mask, roto shape or plain alpha all work.
 
 Development build only. Existing 2.0 installers do not include viewer painting.
 
+The compact inspector follows the same working order as the standalone
+recovery adapter: **View**, **Method**, then **Paint**. Advanced Dirt Removal also shows
+its three primary **Cleaning** controls. **Paint** keeps enable, Tool, Brush,
+Size, Softness, Opacity, selection status and Undo/Redo visible. **Strokes**
+starts collapsed and holds duration, navigation, deletion, enable state and
+rectangle dimensions. **Brush options**, **Source setup**, **Auto recovery**,
+**Advanced cleaning** and **View options** start collapsed. Open them when
+needed; their settings are still saved with the project.
+
+The primary controls fit without scrolling in the tested 1920×1080 Resolve
+window. Smaller inspectors can require scrolling for the secondary sections;
+host display scaling and panel height affect the available space.
+
 Turn on **Paint in viewer** and the viewer's **Open FX Overlay**. On Color,
 **Enhanced Viewer** (Shift-F) gives the picture more room. Choose **Paint**,
 **Erase** or **Select**, then a **Round**, **Square** or **Rectangle** brush.
@@ -111,7 +128,8 @@ Drag a rectangle from corner to corner. **Recovery** gives the original back;
 **Spanish dirt removal** repairs only where you paint.
 
 **Select** lets you move a stroke or resize a rectangle by its corner handles.
-The controls edit its size, softness, opacity and duration. **Delete stroke**
+The visible controls edit its size, softness and opacity; open **Strokes**
+for duration, enable state, deletion and rectangle dimensions. **Delete stroke**
 removes it; **Undo paint** brings it back, including its properties and selection.
 **Redo paint** repeats the edit. Paint history is kept for the current editing
 session and resets when the effect or project is reloaded. **Hold (frames)** defaults to one
@@ -146,7 +164,7 @@ Preparation uses a separate timeline, verifies every source frame and restores
 the working timeline and Deliver settings. It disables V1's ordinary output
 only after verification; the clip and its media are preserved.
 
-On V2 add Advanced Dirt Removal. Under **Paint → Source setup**, choose
+On V2 add Advanced Dirt Removal. Under **Source setup**, choose
 **Prepared original**, select the verified **Original folder**, and leave
 **Original frame offset** at 0. Use **Video** input encoding and **Auto recovery:
 Off**. Painting now blends the export and original without running cleanup.

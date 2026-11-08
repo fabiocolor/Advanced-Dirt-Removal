@@ -541,27 +541,27 @@ const Extra extras[]={
  {"difference_gain","Difference gain","Gain of the True difference view.","view_group",ExtraDouble,4,0,100},
 };
 bool isExtraParam(const char*name){if(!std::strcmp(name,"encoding")||paint_ui::isParam(name))return true;for(auto&x:extras)if(!std::strcmp(x.name,name))return true;return false;}
-void defineEncodingParam(OfxParamSetHandle ps){
+void defineEncodingParam(OfxParamSetHandle ps,const char*parent=nullptr){
  OfxPropertySetHandle p;check(params->paramDefine(ps,kOfxParamTypeChoice,"encoding",&p),"define encoding");
- ss(p,kOfxPropLabel,"Input encoding");ss(p,kOfxParamPropHint,"Video / already converted: values as delivered. Cineon log: Cineon-encoded film scans; cleaning works on linear values and the repair is put back in log, so untouched pixels keep their exact values.");
+ ss(p,kOfxPropLabel,"Input encoding");if(parent)ss(p,kOfxParamPropParent,parent);ss(p,kOfxParamPropHint,"Video / already converted: values as delivered. Cineon log: Cineon-encoded film scans; cleaning works on linear values and the repair is put back in log, so untouched pixels keep their exact values.");
  si(p,kOfxParamPropAnimates,0);for(int k=0;k<2;++k)ss(p,kOfxParamPropChoiceOption,encodingChoices[k],k);si(p,kOfxParamPropDefault,0);
 }
 // Defines one group of extras (nullptr: the top-level ones) in display order.
-void defineExtraParams(OfxParamSetHandle ps,const char*group){
+void defineExtraParam(OfxParamSetHandle ps,const Extra&x,const char*parent,const char*label=nullptr){
  OfxPropertySetHandle p;
- if(group){check(params->paramDefine(ps,kOfxParamTypeGroup,group,&p),"define group");ss(p,kOfxPropLabel,!std::strcmp(group,"auto_recovery_group")?"Recovery":"View options");si(p,kOfxParamPropGroupOpen,!std::strcmp(group,"auto_recovery_group"));}
- for(auto&x:extras){
-  const char*type=x.kind==ExtraChoice?kOfxParamTypeChoice:x.kind==ExtraBool?kOfxParamTypeBoolean:x.kind==ExtraDouble?kOfxParamTypeDouble:x.kind==ExtraInt?kOfxParamTypeInteger:x.kind==ExtraString?kOfxParamTypeString:kOfxParamTypePushButton;
-  const bool top=!x.group;if(group?(top||std::strcmp(x.group,group)):!top)continue;
-  check(params->paramDefine(ps,type,x.name,&p),"define extra control");ss(p,kOfxPropLabel,x.label);ss(p,kOfxParamPropHint,x.hint);if(!top)ss(p,kOfxParamPropParent,x.group);
-  if(x.kind==ExtraButton)continue;
+ const char*type=x.kind==ExtraChoice?kOfxParamTypeChoice:x.kind==ExtraBool?kOfxParamTypeBoolean:x.kind==ExtraDouble?kOfxParamTypeDouble:x.kind==ExtraInt?kOfxParamTypeInteger:x.kind==ExtraString?kOfxParamTypeString:kOfxParamTypePushButton;
+  check(params->paramDefine(ps,type,x.name,&p),"define extra control");ss(p,kOfxPropLabel,label?label:x.label);ss(p,kOfxParamPropHint,x.hint);if(parent)ss(p,kOfxParamPropParent,parent);
+  if(x.kind==ExtraButton)return;
   si(p,kOfxParamPropAnimates,0);
   if(x.kind==ExtraChoice){for(int k=0;k<x.count;++k)ss(p,kOfxParamPropChoiceOption,x.choices[k],k);si(p,kOfxParamPropDefault,int(x.initial));}
   else if(x.kind==ExtraBool)si(p,kOfxParamPropDefault,int(x.initial));
   else if(x.kind==ExtraInt){if(!std::strcmp(x.name,"recovery_request")){si(p,kOfxParamPropSecret,1);si(p,kOfxParamPropEvaluateOnChange,1);}si(p,kOfxParamPropDefault,int(x.initial));for(auto k:{kOfxParamPropMin,kOfxParamPropDisplayMin})si(p,k,int(x.minimum));for(auto k:{kOfxParamPropMax,kOfxParamPropDisplayMax})si(p,k,int(x.maximum));}
   else if(x.kind==ExtraDouble){for(auto v:{std::make_pair(kOfxParamPropDefault,x.initial),{kOfxParamPropMin,x.minimum},{kOfxParamPropMax,x.maximum},{kOfxParamPropDisplayMin,x.minimum},{kOfxParamPropDisplayMax,x.maximum}})check(prop->propSetDouble(p,v.first,0,v.second),"extra range");}
   else if(x.kind==ExtraString){ss(p,kOfxParamPropStringMode,kOfxParamStringIsDirectoryPath);ss(p,kOfxParamPropDefault,"");}
- }
+}
+void defineExtraParams(OfxParamSetHandle ps,const char*group){
+ if(group){OfxPropertySetHandle p;check(params->paramDefine(ps,kOfxParamTypeGroup,group,&p),"define group");ss(p,kOfxPropLabel,!std::strcmp(group,"auto_recovery_group")?"Recovery":"View options");si(p,kOfxParamPropGroupOpen,!std::strcmp(group,"auto_recovery_group"));}
+ for(auto&x:extras){const bool top=!x.group;if(group?(top||std::strcmp(x.group,group)):!top)continue;defineExtraParam(ps,x,x.group);}
 }
 // Inspector tabs (OFX pages). Children are listed in display order.
 void definePages(OfxParamSetHandle ps,bool paintHost){
@@ -570,13 +570,43 @@ void definePages(OfxParamSetHandle ps,bool paintHost){
  const std::vector<std::string> recovery={"mask_mode","recovery_calculate","auto_recovery","recovery_confidence","recovery_folder"};
  const std::vector<std::string> view={"difference_threshold","red_intensity","red_opacity","gray_background","difference_gain"};
  struct Page{const char*name;const char*label;const std::vector<std::string>*kids;};
- const std::vector<std::string> paintPage={"paint","paint_tool","paint_shape","paint_size","paint_softness","paint_opacity","paint_hold","paint_stroke_info","paint_previous","paint_next","paint_delete","paint_stroke_on","paint_rect_width","paint_rect_height","paint_smoothing","paint_pressure","paint_outlines","paint_keys","paint_source_kind","paint_source_folder","paint_source_offset"};
+ const std::vector<std::string> paintPage={"paint","paint_tool","paint_shape","paint_size","paint_softness","paint_opacity","paint_hold","paint_stroke_info","paint_previous","paint_next","paint_undo","paint_redo","paint_delete","paint_stroke_on","paint_rect_width","paint_rect_height","paint_smoothing","paint_pressure","paint_outlines","paint_keys","paint_source_kind","paint_source_folder","paint_source_offset"};
  const Page pages[]={{"page_cleaning","Cleaning",&cleaning},{"page_recovery","Recovery",&recovery},{"page_paint","Paint",&paintPage},{"page_view","View",&view}};
  for(auto&pg:pages){
   if(pg.kids==&paintPage&&!paintHost)continue;
   OfxPropertySetHandle p;check(params->paramDefine(ps,kOfxParamTypePage,pg.name,&p),"define page");ss(p,kOfxPropLabel,pg.label);
   for(size_t k=0;k<pg.kids->size();++k)ss(p,kOfxParamPropPageChild,(*pg.kids)[k].c_str(),int(k));
  }
+}
+// Display order is independent of controls[]: that array also keys recovery caches.
+void defineCleaningControl(OfxParamSetHandle ps,const Control&c,const char*parent){
+ OfxPropertySetHandle p;check(params->paramDefine(ps,c.boolean?kOfxParamTypeBoolean:c.choices?kOfxParamTypeChoice:c.integral?kOfxParamTypeInteger:kOfxParamTypeDouble,c.name,&p),"define control");ss(p,kOfxPropLabel,c.label);if(parent)ss(p,kOfxParamPropParent,parent);if(!std::strcmp(c.name,"enabled"))si(p,kOfxParamPropSecret,1);if(c.hint)ss(p,kOfxParamPropHint,c.hint);si(p,kOfxParamPropAnimates,0);if(c.boolean||c.integral){si(p,kOfxParamPropDefault,int(c.initial));if(c.choices){for(int index=0;index<=int(c.maximum);++index)ss(p,kOfxParamPropChoiceOption,c.choices[index],index);}else if(c.integral){for(auto key:{kOfxParamPropMin,kOfxParamPropDisplayMin})si(p,key,c.minimum);for(auto key:{kOfxParamPropMax,kOfxParamPropDisplayMax})si(p,key,int(c.maximum));}}else{for(auto v:{std::make_pair(kOfxParamPropDefault,c.initial),{kOfxParamPropMin,0.},{kOfxParamPropMax,c.maximum},{kOfxParamPropDisplayMin,0.},{kOfxParamPropDisplayMax,c.maximum}})check(prop->propSetDouble(p,v.first,0,v.second),"control range");}
+}
+void defineControlPresentation(OfxParamSetHandle ps){
+ if(!paintHost()){
+  defineEncodingParam(ps);std::set<std::string> definedGroups;
+  for(auto&c:controls){
+   if(c.group&&!definedGroups.count("top")){definedGroups.insert("top");defineExtraParams(ps,nullptr);defineExtraParams(ps,"auto_recovery_group");paint_ui::define(ps,false);}
+   if(c.group&&definedGroups.insert(c.group).second)for(auto&g:groups)if(!std::strcmp(g.name,c.group)){OfxPropertySetHandle p;check(params->paramDefine(ps,kOfxParamTypeGroup,g.name,&p),"define group");ss(p,kOfxPropLabel,g.label);si(p,kOfxParamPropGroupOpen,!std::strcmp(g.name,"detection"));}
+   defineCleaningControl(ps,c,c.group);
+  }
+  defineExtraParams(ps,"view_group");definePages(ps,false);return;
+ }
+ auto group=[&](const char*name,const char*label,bool open,bool hidden=false){OfxPropertySetHandle p;check(params->paramDefine(ps,kOfxParamTypeGroup,name,&p),"define group");ss(p,kOfxPropLabel,label);si(p,kOfxParamPropGroupOpen,open);if(hidden)si(p,kOfxParamPropSecret,1);};
+ auto extra=[&](const char*name,const char*parent){for(auto&x:extras)if(!std::strcmp(name,x.name)){defineExtraParam(ps,x,parent,!std::strcmp(name,"mask_mode")?"Method":nullptr);return;}require(false,"missing display extra");};
+ auto primary=[](const Control&c){return !std::strcmp(c.name,"sensitivity")||!std::strcmp(c.name,"motion_guard")||!std::strcmp(c.name,"repair_amount");};
+ extra("view",nullptr);extra("mask_mode",nullptr);
+ group("detection","Cleaning",true);
+ for(auto name:{"sensitivity","motion_guard","repair_amount"})for(auto&c:controls)if(!std::strcmp(name,c.name))defineCleaningControl(ps,c,"detection");
+ paint_ui::define(ps,true);
+ group("auto_recovery_group","Auto recovery",false);
+ for(auto name:{"auto_recovery","recovery_confidence","recovery_calculate","recovery_request","recovery_folder"})extra(name,"auto_recovery_group");
+ group("processing","Advanced cleaning",false);
+ for(auto&c:controls)if(!primary(c))defineCleaningControl(ps,c,c.group?"processing":nullptr);
+ // Keep the original group identity for saved hosts; its controls are now together above.
+ group("safeguards","Safeguards",false,true);
+ defineEncodingParam(ps,"paint_source_group");
+ defineExtraParams(ps,"view_group");definePages(ps,true);
 }
 // Spanish dirt removal makes auto recovery irrelevant: grey its controls out while it is on.
 void updateRecoveryEnabled(Instance&i){
@@ -1026,7 +1056,7 @@ OfxStatus entry(const char*action,const void*handle,OfxPropertySetHandle in,OfxP
 #endif
 if(paintHost())check(prop->propSetPointer(p,kOfxImageEffectPluginPropOverlayInteractV1,0,(void*)paint_ui::overlay),"paint overlay");
 ss(p,kOfxPropLabel,ADR_PLUGIN_LABEL);ss(p,kOfxImageEffectPluginPropGrouping,"FabioColor");{auto status=prop->propSetString(p,kOfxPropPluginDescription,0,("Open-source temporal dirt and dust removal for film scans (Metal, CUDA, OpenCL or CPU). Works on the RGB values as delivered; review moving shots before delivery."+(adrlog::path().empty()?std::string():" Diagnostic log: "+adrlog::path())).c_str());if(status!=kOfxStatErrUnknown)check(status,"optional plugin description");}ss(p,kOfxImageEffectPropSupportedContexts,kOfxImageEffectContextFilter);ss(p,kOfxImageEffectPropSupportedPixelDepths,kOfxBitDepthFloat,0);ss(p,kOfxImageEffectPropSupportedPixelDepths,kOfxBitDepthHalf,1);ss(p,kOfxImageEffectPropSupportedPixelDepths,kOfxBitDepthShort,2);ss(p,kOfxImageEffectPluginRenderThreadSafety,kOfxImageEffectRenderInstanceSafe);si(p,kOfxImageEffectPluginPropHostFrameThreading,0);si(p,kOfxImageEffectPropSupportsTiles,0);si(p,kOfxImageEffectPropSupportsMultiResolution,0);si(p,kOfxImageEffectPropTemporalClipAccess,1);si(p,kOfxImageEffectPropSupportsMultipleClipPARs,0);si(p,kOfxImageEffectPropSupportsMultipleClipDepths,0);return kOfxStatOK;}
- if(!std::strcmp(action,kOfxImageEffectActionDescribeInContext)){require(str(in,kOfxImageEffectPropContext)==kOfxImageEffectContextFilter,"Filter context required");for(auto name:{"Source","Output"}){OfxPropertySetHandle p;check(fx->clipDefine(e,name,&p),"define clip");ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGB,0);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGBA,1);si(p,kOfxImageEffectPropSupportsTiles,0);if(!std::strcmp(name,"Source"))si(p,kOfxImageEffectPropTemporalClipAccess,1);}{OfxPropertySetHandle p;check(fx->clipDefine(e,"Mask",&p),"define mask clip");ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentAlpha,0);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGBA,1);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGB,2);si(p,kOfxImageClipPropOptional,1);si(p,kOfxImageClipPropIsMask,1);si(p,kOfxImageEffectPropSupportsTiles,0);}OfxParamSetHandle ps;check(fx->getParamSet(e,&ps),"parameters");defineEncodingParam(ps);std::set<std::string> definedGroups;for(auto&c:controls){if(c.group&&!definedGroups.count("top")){definedGroups.insert("top");defineExtraParams(ps,nullptr);defineExtraParams(ps,"auto_recovery_group");paint_ui::define(ps,paintHost());}if(c.group&&definedGroups.insert(c.group).second)for(auto&g:groups)if(!std::strcmp(g.name,c.group)){OfxPropertySetHandle gp;check(params->paramDefine(ps,kOfxParamTypeGroup,g.name,&gp),"define group");ss(gp,kOfxPropLabel,g.label);si(gp,kOfxParamPropGroupOpen,!std::strcmp(g.name,"detection"));}OfxPropertySetHandle p;check(params->paramDefine(ps,c.boolean?kOfxParamTypeBoolean:c.choices?kOfxParamTypeChoice:c.integral?kOfxParamTypeInteger:kOfxParamTypeDouble,c.name,&p),"define control");ss(p,kOfxPropLabel,c.label);if(c.group)ss(p,kOfxParamPropParent,c.group);if(!std::strcmp(c.name,"enabled"))si(p,kOfxParamPropSecret,1);if(c.hint)ss(p,kOfxParamPropHint,c.hint);si(p,kOfxParamPropAnimates,0);if(c.boolean||c.integral){si(p,kOfxParamPropDefault,int(c.initial));if(c.choices){for(int index=0;index<=int(c.maximum);++index)ss(p,kOfxParamPropChoiceOption,c.choices[index],index);}else if(c.integral){for(auto key:{kOfxParamPropMin,kOfxParamPropDisplayMin})si(p,key,c.minimum);for(auto key:{kOfxParamPropMax,kOfxParamPropDisplayMax})si(p,key,int(c.maximum));}}else{for(auto v:{std::make_pair(kOfxParamPropDefault,c.initial),{kOfxParamPropMin,0.},{kOfxParamPropMax,c.maximum},{kOfxParamPropDisplayMin,0.},{kOfxParamPropDisplayMax,c.maximum}})check(prop->propSetDouble(p,v.first,0,v.second),"control range");}}defineExtraParams(ps,"view_group");definePages(ps,paintHost());
+ if(!std::strcmp(action,kOfxImageEffectActionDescribeInContext)){require(str(in,kOfxImageEffectPropContext)==kOfxImageEffectContextFilter,"Filter context required");for(auto name:{"Source","Output"}){OfxPropertySetHandle p;check(fx->clipDefine(e,name,&p),"define clip");ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGB,0);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGBA,1);si(p,kOfxImageEffectPropSupportsTiles,0);if(!std::strcmp(name,"Source"))si(p,kOfxImageEffectPropTemporalClipAccess,1);}{OfxPropertySetHandle p;check(fx->clipDefine(e,"Mask",&p),"define mask clip");ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentAlpha,0);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGBA,1);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGB,2);si(p,kOfxImageClipPropOptional,1);si(p,kOfxImageClipPropIsMask,1);si(p,kOfxImageEffectPropSupportsTiles,0);}OfxParamSetHandle ps;check(fx->getParamSet(e,&ps),"parameters");defineControlPresentation(ps);
  return kOfxStatOK;}
  if(!std::strcmp(action,kOfxActionCreateInstance)){auto i=std::make_unique<Instance>();check(fx->clipGetHandle(e,"Source",&i->source,nullptr),"source clip");check(fx->clipGetHandle(e,"Output",&i->output,nullptr),"output clip");OfxParamSetHandle ps;check(fx->getParamSet(e,&ps),"parameters");for(auto&c:controls)check(params->paramGetHandle(ps,c.name,&i->parameters[c.name],nullptr),"control handle");check(params->paramGetHandle(ps,"encoding",&i->parameters["encoding"],nullptr),"encoding handle");for(auto&x:extras)check(params->paramGetHandle(ps,x.name,&i->parameters[x.name],nullptr),"extra handle");for(auto n:{"paint","paint_data","paint_source_kind","paint_source_folder","paint_source_offset"})check(params->paramGetHandle(ps,n,&i->parameters[n],nullptr),"paint handle");if(fx->clipGetHandle(e,"Mask",&i->mask,nullptr)!=kOfxStatOK)i->mask=nullptr;check(prop->propSetPointer(properties(e),kOfxPropInstanceData,0,i.get()),"instance data");static int created=0;i->id=++created;trackInstance(e);adrlog::info(i->label()+" created");i.release();lock.unlock();/* Host parameter writes can synchronously reenter the adapter. */try{updateRecoveryEnabled(instance(e));}catch(...){}try{paint_ui::refresh(e);}catch(...){}return kOfxStatOK;}
  if(!std::strcmp(action,kOfxActionDestroyInstance)){auto&i=instance(e);i.close();adrlog::info(i.label()+" destroyed");untrackInstance(e);paint_ui::changeBatches.erase(e);paint_ui::histories.erase(e);delete &i;check(prop->propSetPointer(properties(e),kOfxPropInstanceData,0,nullptr),"clear instance");return kOfxStatOK;}

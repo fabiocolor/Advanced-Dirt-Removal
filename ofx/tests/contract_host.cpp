@@ -33,7 +33,7 @@ OfxStatus getString(OfxPropertySetHandle p,const char*k,int i,char**v){auto it=P
 OfxStatus set##NAME##N(OfxPropertySetHandle p,const char*k,int n,const TYPE*v){for(int i=0;i<n;++i)set##NAME(p,k,i,v[i]);return 0;} \
 OfxStatus get##NAME##N(OfxPropertySetHandle p,const char*k,int n,TYPE*v){for(int i=0;i<n;++i){auto s=get##NAME(p,k,i,&v[i]);if(s)return s;}return 0;}
 ARRAY(Int,int) ARRAY(Double,double)
-struct Parameter {Properties props;bool choice=false;bool text=false;};
+struct Parameter {Properties props;bool choice=false;bool text=false;std::string type;size_t ordinal=0;};
 struct TestImage {Properties props;std::vector<float> backing;};
 struct Clip {Properties props;std::map<int,std::unique_ptr<TestImage>> images;bool output=false;};
 struct Effect {Properties props;std::map<std::string,Parameter> parameters;Clip source,output;};
@@ -49,7 +49,7 @@ OfxStatus getImage(OfxImageClipHandle c,double t,const OfxRectD*,OfxPropertySetH
 OfxStatus releaseImage(OfxPropertySetHandle){++released;return 0;}
 OfxStatus rod(OfxImageClipHandle,double,OfxRectD*r){*r={-7,11,-3,14};return 0;}
 int aborted(OfxImageEffectHandle){return abortEnabled&&++abortCount>12;}
-OfxStatus defineParameter(OfxParamSetHandle s,const char*t,const char*n,OfxPropertySetHandle*p){auto&v=(*reinterpret_cast<std::map<std::string,Parameter>*>(s))[n];v.choice=std::string(t)==kOfxParamTypeChoice||std::string(t)==kOfxParamTypeBoolean||std::string(t)==kOfxParamTypeInteger;v.text=std::string(t)==kOfxParamTypeString;*p=H(v.props);return 0;}
+OfxStatus defineParameter(OfxParamSetHandle s,const char*t,const char*n,OfxPropertySetHandle*p){auto&items=*reinterpret_cast<std::map<std::string,Parameter>*>(s);auto inserted=items.emplace(n,Parameter{});auto&v=inserted.first->second;if(inserted.second)v.ordinal=items.size()-1;v.type=t;v.choice=std::string(t)==kOfxParamTypeChoice||std::string(t)==kOfxParamTypeBoolean||std::string(t)==kOfxParamTypeInteger;v.text=std::string(t)==kOfxParamTypeString;*p=H(v.props);return 0;}
 OfxStatus parameterHandle(OfxParamSetHandle s,const char*n,OfxParamHandle*h,OfxPropertySetHandle*p){auto&v=(*reinterpret_cast<std::map<std::string,Parameter>*>(s))[n];*h=reinterpret_cast<OfxParamHandle>(&v);if(p)*p=H(v.props);return 0;}
 OfxStatus value(OfxParamHandle h,OfxTime t,...){auto&p=*reinterpret_cast<Parameter*>(h);va_list a;va_start(a,t);if(p.text){auto&s=p.props.strings[kOfxParamPropDefault];if(s.empty())s.push_back("");*va_arg(a,char**)=s[0].data();}else if(p.choice)*va_arg(a,int*)=p.props.ints[kOfxParamPropDefault][0];else *va_arg(a,double*)=p.props.doubles[kOfxParamPropDefault][0];va_end(a);return 0;}
 OfxStatus currentValue(OfxParamHandle h,...){auto&p=*reinterpret_cast<Parameter*>(h);va_list a;va_start(a,h);if(p.text){auto&v=p.props.strings[kOfxParamPropDefault];if(v.empty())v.push_back("");*va_arg(a,char**)=v[0].data();}else if(p.choice)*va_arg(a,int*)=p.props.ints[kOfxParamPropDefault][0];else *va_arg(a,double*)=p.props.doubles[kOfxParamPropDefault][0];va_end(a);return kOfxStatOK;}
@@ -142,7 +142,27 @@ int main(int argc,char**argv){
  verify(rejectedMetalSupport>=2,"CPU-only host rejects optional GPU extensions without preventing discovery");
 #endif
  rejectMetalSupport=false;verify(plugin->mainEntry(kOfxActionDescribe,handle,nullptr,nullptr)==kOfxStatOK,"GPU-capable descriptor also accepted");
- verify(plugin->mainEntry(kOfxImageEffectActionDescribeInContext,handle,ip,nullptr)==0,"context");verify(e.parameters.size()==66,"all controls, groups and pages exposed");verify(e.parameters.count("page_paint")==0&&e.parameters["paint"].props.ints[kOfxParamPropSecret]==std::vector<int>{1}&&e.parameters["paint_tool"].props.ints[kOfxParamPropSecret]==std::vector<int>{1},"viewer painting hidden outside Resolve");verify(e.props.pointers.count(kOfxImageEffectPluginPropOverlayInteractV1)==0,"no viewer overlay outside Resolve");for(auto pg:{"page_cleaning","page_recovery","page_view"})verify(e.parameters.count(pg)==1,"inspector page defined");for(auto g:{"detection","processing","safeguards"})verify(e.parameters.count(g)==1,"control group defined");verify(e.parameters["sensitivity"].props.strings[kOfxParamPropParent]==std::vector<std::string>{"detection"},"controls are grouped");verify(plugin->mainEntry(kOfxActionCreateInstance,handle,nullptr,nullptr)==0,"create");
+ verify(plugin->mainEntry(kOfxImageEffectActionDescribeInContext,handle,ip,nullptr)==0,"context");verify(e.parameters.size()==67,"all controls, groups and pages exposed");verify(e.parameters.count("page_paint")==0&&e.parameters["paint"].props.ints[kOfxParamPropSecret]==std::vector<int>{1}&&e.parameters["paint_tool"].props.ints[kOfxParamPropSecret]==std::vector<int>{1},"viewer painting hidden outside Resolve");verify(e.props.pointers.count(kOfxImageEffectPluginPropOverlayInteractV1)==0,"no viewer overlay outside Resolve");for(auto pg:{"page_cleaning","page_recovery","page_view"})verify(e.parameters.count(pg)==1,"inspector page defined");for(auto g:{"detection","processing","safeguards"})verify(e.parameters.count(g)==1,"control group defined");verify(e.parameters["sensitivity"].props.strings[kOfxParamPropParent]==std::vector<std::string>{"detection"},"controls are grouped");verify(plugin->mainEntry(kOfxActionCreateInstance,handle,nullptr,nullptr)==0,"create");
+ // Compact Resolve presentation preserves every existing value/type/range/choice.
+ // The normal-host descriptor is an independent ordering of the same controls.
+ {
+  const auto savedHost=hostProperties;auto*savedInteracts=interacts;OfxInteractSuiteV1 suite{};interacts=&suite;setString(H(hostProperties),kOfxPropName,0,"DaVinciResolve");
+  Effect compact;auto compactHandle=reinterpret_cast<OfxImageEffectHandle>(&compact);
+  verify(plugin->mainEntry(kOfxImageEffectActionDescribeInContext,compactHandle,ip,nullptr)==kOfxStatOK,"compact Resolve descriptor");
+  for(const auto&entry:e.parameters){const auto&before=entry.second;if(before.type==kOfxParamTypeGroup||before.type==kOfxParamTypePage)continue;
+   auto found=compact.parameters.find(entry.first);verify(found!=compact.parameters.end(),"compact layout retains every parameter identity");const auto&after=found->second;
+   verify(before.type==after.type,"compact layout retains parameter types");
+   auto a=before.props,b=after.props;
+   for(auto key:{kOfxPropLabel,kOfxParamPropHint,kOfxParamPropParent}){a.strings.erase(key);b.strings.erase(key);}
+   a.ints.erase(kOfxParamPropSecret);b.ints.erase(kOfxParamPropSecret);
+   verify(a.strings==b.strings&&a.ints==b.ints&&a.doubles==b.doubles,"compact layout retains defaults, ranges, choices and evaluation behavior");
+  }
+  verify(compact.parameters.at("view").ordinal<compact.parameters.at("mask_mode").ordinal&&compact.parameters.at("sensitivity").ordinal<compact.parameters.at("paint").ordinal,"checking and cleaning controls precede paint");
+  for(auto name:{"auto_recovery_group","processing","stroke_details_group","paint_options_group","paint_source_group","view_group"})verify(compact.parameters.at(name).props.ints.at(kOfxParamPropGroupOpen)==std::vector<int>{0},"secondary groups start collapsed");
+  verify(compact.parameters.at("paint_hold").props.strings.at(kOfxParamPropParent)==std::vector<std::string>{"stroke_details_group"},"duration is a stroke detail");
+  const auto&children=compact.parameters.at("page_paint").props.strings.at(kOfxParamPropPageChild);for(auto name:{"paint_undo","paint_redo"})verify(std::find(children.begin(),children.end(),name)!=children.end(),"page-respecting hosts retain paint history buttons");
+  hostProperties=savedHost;interacts=savedInteracts;std::cout<<"compact UI parameter contract and group defaults: passed\n";
+ }
  // Native keys request redraw without editing OFX parameters outside a
  // callback. A host-delayed mouse-up must preserve the queued command order.
  {

@@ -211,21 +211,22 @@ void define(OfxParamSetHandle ps,bool visible){
  real("paint_size","Size","paint_group","Brush diameter in picture pixels. Shift-drag in the viewer, or [ and ].",80,1,2048,400);
  real("paint_softness","Softness","paint_group","0 is a hard edge. Option/Alt-drag in the viewer, or - and =.",.5,0,1,1);
  real("paint_opacity","Opacity","paint_group","How much one stroke gives back. Keys ; and '.",1,0,1,1);
- {auto p=make(kOfxParamTypeInteger,"paint_hold","Hold (frames)","paint_group","How many frames a new stroke lasts, from the frame it is painted on. 1 paints only the current frame.");si(p,kOfxParamPropDefault,1);si(p,kOfxParamPropMin,1);si(p,kOfxParamPropMax,100000);si(p,kOfxParamPropDisplayMin,1);si(p,kOfxParamPropDisplayMax,250);}
  label("paint_stroke_info","Selected","paint_group","No strokes yet");
- make(kOfxParamTypePushButton,"paint_previous","Previous stroke","paint_group","Select the previous stroke (key ,).");
- make(kOfxParamTypePushButton,"paint_next","Next stroke","paint_group","Select the next stroke (key .).");
  make(kOfxParamTypePushButton,"paint_undo","Undo paint","paint_group","Undo one paint stroke or property edit. Cmd/Ctrl-Z while the viewer has paint focus. History is kept for this editing session.");
  make(kOfxParamTypePushButton,"paint_redo","Redo paint","paint_group","Redo a paint edit. Cmd/Ctrl-Shift-Z while the viewer has paint focus.");
- make(kOfxParamTypePushButton,"paint_delete","Delete stroke","paint_group","Delete the selected stroke (Delete key). Undo brings it back.");
- boolean("paint_stroke_on","Stroke on","paint_group","Turn the selected stroke off to compare without it (key X).",1);
- real("paint_rect_width","Rectangle width","paint_group","Width of the selected rectangle in picture pixels.",80,1,32768,2048);
- real("paint_rect_height","Rectangle height","paint_group","Height of the selected rectangle in picture pixels.",80,1,32768,2048);
- {auto p=make(kOfxParamTypeGroup,"paint_options_group","Brush options","paint_group",nullptr);si(p,kOfxParamPropGroupOpen,0);}
+ {auto p=make(kOfxParamTypeGroup,"stroke_details_group","Strokes",nullptr,nullptr);si(p,kOfxParamPropGroupOpen,0);}
+ {auto p=make(kOfxParamTypeInteger,"paint_hold","Hold (frames)","stroke_details_group","How many frames a new stroke lasts, from the frame it is painted on. 1 paints only the current frame.");si(p,kOfxParamPropDefault,1);si(p,kOfxParamPropMin,1);si(p,kOfxParamPropMax,100000);si(p,kOfxParamPropDisplayMin,1);si(p,kOfxParamPropDisplayMax,250);}
+ make(kOfxParamTypePushButton,"paint_previous","Previous stroke","stroke_details_group","Select the previous stroke (key ,).");
+ make(kOfxParamTypePushButton,"paint_next","Next stroke","stroke_details_group","Select the next stroke (key .).");
+ make(kOfxParamTypePushButton,"paint_delete","Delete stroke","stroke_details_group","Delete the selected stroke (Delete key). Undo brings it back.");
+ boolean("paint_stroke_on","Stroke on","stroke_details_group","Turn the selected stroke off to compare without it (key X).",1);
+ real("paint_rect_width","Rectangle width","stroke_details_group","Width of the selected rectangle in picture pixels.",80,1,32768,2048);
+ real("paint_rect_height","Rectangle height","stroke_details_group","Height of the selected rectangle in picture pixels.",80,1,32768,2048);
+ {auto p=make(kOfxParamTypeGroup,"paint_options_group","Brush options",nullptr,nullptr);si(p,kOfxParamPropGroupOpen,0);}
  real("paint_smoothing","Smoothing","paint_options_group","Smooths the pen path while you paint.",.2,0,.95,.95);
  boolean("paint_pressure","Tablet pressure","paint_options_group","Pen pressure changes the brush size. Leave off for a mouse.",0);
  boolean("paint_outlines","Show strokes","paint_options_group","Draw stroke outlines and the brush in the viewer (key H). Never rendered.",1);
- {auto p=make(kOfxParamTypeGroup,"paint_source_group","Source setup","paint_group",nullptr);si(p,kOfxParamPropGroupOpen,0);}
+ {auto p=make(kOfxParamTypeGroup,"paint_source_group","Source setup",nullptr,nullptr);si(p,kOfxParamPropGroupOpen,0);}
  {auto p=make(kOfxParamTypeChoice,"paint_source_kind","Paint source","paint_source_group","Clean this clip: repair this input, then recover the original. Prepared original: the input is a finished processed export; painting uses its prepared original without running cleanup again.",true);ss(p,kOfxParamPropChoiceOption,"Clean this clip",0);ss(p,kOfxParamPropChoiceOption,"Prepared original",1);si(p,kOfxParamPropDefault,0);}
  {auto p=make(kOfxParamTypeString,"paint_source_folder","Original folder","paint_source_group","Run Prepare ADR Recovery Source with the processed export on V2 and the aligned original on V1. Keep the verified source folder with the project.",true);ss(p,kOfxParamPropStringMode,kOfxParamStringIsDirectoryPath);ss(p,kOfxParamPropDefault,"");}
  {auto p=make(kOfxParamTypeInteger,"paint_source_offset","Original frame offset","paint_source_group","Prepared frame = working frame + offset. Leave at 0 for the prepared V2/V1 workflow.",true);si(p,kOfxParamPropDefault,0);si(p,kOfxParamPropMin,-1000000000);si(p,kOfxParamPropMax,1000000000);}
