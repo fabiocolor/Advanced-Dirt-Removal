@@ -33,9 +33,9 @@ Everything is in one effect:
 > have been tested, and [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md) what is
 > new.
 
-**2.0.0 release candidate:** publication is pending. The existing public
-downloads and winget package still contain 1.1.3 until the 2.0 release is
-published. The source and instructions below describe 2.0.
+**2.0.0 is published** on GitHub and winget. Built-in viewer painting and the
+integrated manual-recovery controls described in the development guide are
+new development work and are not included in those published installers.
 
 ![Advanced Dirt Removal 2.0 controls in Resolve Fusion](assets/documentation/resolve-2.0-controls.png)
 

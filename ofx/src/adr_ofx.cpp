@@ -551,6 +551,7 @@ void defineExtraParam(OfxParamSetHandle ps,const Extra&x,const char*parent,const
  OfxPropertySetHandle p;
  const char*type=x.kind==ExtraChoice?kOfxParamTypeChoice:x.kind==ExtraBool?kOfxParamTypeBoolean:x.kind==ExtraDouble?kOfxParamTypeDouble:x.kind==ExtraInt?kOfxParamTypeInteger:x.kind==ExtraString?kOfxParamTypeString:kOfxParamTypePushButton;
   check(params->paramDefine(ps,type,x.name,&p),"define extra control");ss(p,kOfxPropLabel,label?label:x.label);ss(p,kOfxParamPropHint,x.hint);if(parent)ss(p,kOfxParamPropParent,parent);
+  if(label&&!std::strcmp(x.name,"mask_mode"))ss(p,kOfxParamPropHint,"Recovery: paint original detail back over automatic cleanup. Spanish dirt removal: apply cleanup only where painted. Paint directly in this effect's viewer; no separate Mask Paint is required. Key I.");
   if(x.kind==ExtraButton)return;
   si(p,kOfxParamPropAnimates,0);
   if(x.kind==ExtraChoice){for(int k=0;k<x.count;++k)ss(p,kOfxParamPropChoiceOption,x.choices[k],k);si(p,kOfxParamPropDefault,int(x.initial));}
@@ -594,18 +595,18 @@ void defineControlPresentation(OfxParamSetHandle ps){
  }
  auto group=[&](const char*name,const char*label,bool open,bool hidden=false){OfxPropertySetHandle p;check(params->paramDefine(ps,kOfxParamTypeGroup,name,&p),"define group");ss(p,kOfxPropLabel,label);si(p,kOfxParamPropGroupOpen,open);if(hidden)si(p,kOfxParamPropSecret,1);};
  auto extra=[&](const char*name,const char*parent){for(auto&x:extras)if(!std::strcmp(name,x.name)){defineExtraParam(ps,x,parent,!std::strcmp(name,"mask_mode")?"Method":nullptr);return;}require(false,"missing display extra");};
- auto primary=[](const Control&c){return !std::strcmp(c.name,"sensitivity")||!std::strcmp(c.name,"motion_guard")||!std::strcmp(c.name,"repair_amount");};
- extra("view",nullptr);extra("mask_mode",nullptr);
- group("detection","Cleaning",true);
- for(auto name:{"sensitivity","motion_guard","repair_amount"})for(auto&c:controls)if(!std::strcmp(name,c.name))defineCleaningControl(ps,c,"detection");
- paint_ui::define(ps,true);
+ // Preserve the published automatic-cleaning layout and control order.
+ defineEncodingParam(ps);extra("view",nullptr);
+ std::set<std::string> definedGroups;
+ for(auto&c:controls){
+  if(c.group&&definedGroups.insert(c.group).second)for(auto&g:groups)if(!std::strcmp(g.name,c.group))group(g.name,g.label,!std::strcmp(g.name,"detection"));
+  defineCleaningControl(ps,c,c.group);
+ }
  group("auto_recovery_group","Auto recovery",false);
  for(auto name:{"auto_recovery","recovery_confidence","recovery_calculate","recovery_request","recovery_folder"})extra(name,"auto_recovery_group");
- group("processing","Advanced cleaning",false);
- for(auto&c:controls)if(!primary(c))defineCleaningControl(ps,c,c.group?"processing":nullptr);
- // Keep the original group identity for saved hosts; its controls are now together above.
- group("safeguards","Safeguards",false,true);
- defineEncodingParam(ps,"paint_source_group");
+ group("paint_group","Manual recovery / Spanish",true);
+ extra("mask_mode","paint_group");
+ paint_ui::define(ps,true,true);
  defineExtraParams(ps,"view_group");definePages(ps,true);
 }
 // Spanish dirt removal makes auto recovery irrelevant: grey its controls out while it is on.
@@ -613,7 +614,7 @@ void updateRecoveryEnabled(Instance&i){
  if(!params->paramGetPropertySet)return;
  int spanish=0,prepared=0;if(params->paramGetValue(i.parameters.at("mask_mode"),&spanish)!=kOfxStatOK)return;params->paramGetValue(i.parameters.at("paint_source_kind"),&prepared);
  for(auto&c:controls){OfxPropertySetHandle ph=nullptr;if(params->paramGetPropertySet(i.parameters.at(c.name),&ph)==kOfxStatOK&&ph)prop->propSetInt(ph,kOfxParamPropEnabled,0,prepared?0:1);}
- for(auto n:{"recovery_calculate","recovery_confidence","recovery_folder"}){OfxPropertySetHandle ph=nullptr;
+ for(auto n:{"auto_recovery","recovery_calculate","recovery_confidence","recovery_folder"}){if(!std::strcmp(n,"auto_recovery")&&!paintHost())continue;OfxPropertySetHandle ph=nullptr;
   if(params->paramGetPropertySet(i.parameters.at(n),&ph)==kOfxStatOK&&ph)prop->propSetInt(ph,kOfxParamPropEnabled,0,(spanish||prepared)?0:1);}
 }
 struct Settings{
@@ -628,6 +629,10 @@ Settings readSettings(Instance&i,double time){
  D("recovery_confidence",s.confidence);
  D("difference_threshold",s.threshold);D("red_intensity",s.redIntensity);D("red_opacity",s.redOpacity);D("gray_background",s.gray);D("difference_gain",s.gain);
  s.maskMode=spanish?2:1;s.view=viewOfChoice[std::max(0,std::min(3,choice))];
+ // Spanish painting and prepared exports own their finishing route. Keep the
+ // saved automatic-recovery setting for when ordinary recovery is resumed.
+ int prepared=0;I("paint_source_kind",prepared);
+ if(paintHost()&&(spanish||prepared))s.mode=0;
  char*str=nullptr;if(params->paramGetValueAtTime(i.parameters.at("recovery_folder"),time,&str)==kOfxStatOK&&str)s.folder=str;
  s.encoding=s.encoding==1;s.mode=s.mode>0?1:0;s.view=std::max(0,std::min(7,s.view));s.confidence=std::max(.5,std::min(.99,s.confidence));
  return s;
@@ -946,7 +951,12 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
   // Finishing: Cineon delta, auto recovery, the Mask input, limits and views. Skipped (output = the
   // engine's picture) when none of them is active.
   std::vector<float> finished;
-  {std::vector<float> mm,ms;const bool haveMask=readMask(i,time,w,h,source.b,mm,ms);
+  {std::vector<float> mm,ms;
+   // Existing projects retain the optional external-mask route. Once the
+   // built-in brush is used, its document owns manual recovery on every frame,
+   // including frames without a stroke and while editing is switched off.
+   const bool builtInBrush=paintHost()&&(paintOn||!strokes.strokes.empty());
+   const bool haveMask=!builtInBrush&&readMask(i,time,w,h,source.b,mm,ms);
    // Spanish dirt removal with nothing painted leaves the picture unrepaired.
    const bool active=prepared||st.encoding||st.mode||haveMask||painted||st.maskMode==2||st.rect||st.frames||st.amount<1||st.view!=0;
    if(active){

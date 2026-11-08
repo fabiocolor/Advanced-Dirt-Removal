@@ -35,17 +35,17 @@ OfxStatus get##NAME##N(OfxPropertySetHandle p,const char*k,int n,TYPE*v){for(int
 ARRAY(Int,int) ARRAY(Double,double)
 struct Parameter {Properties props;bool choice=false;bool text=false;std::string type;size_t ordinal=0;};
 struct TestImage {Properties props;std::vector<float> backing;};
-struct Clip {Properties props;std::map<int,std::unique_ptr<TestImage>> images;bool output=false;};
-struct Effect {Properties props;std::map<std::string,Parameter> parameters;Clip source,output;};
+struct Clip {Properties props;std::map<int,std::unique_ptr<TestImage>> images;bool output=false,mask=false;};
+struct Effect {Properties props;std::map<std::string,Parameter> parameters;Clip source,output,mask;};
 Effect& E(OfxImageEffectHandle e){return *reinterpret_cast<Effect*>(e);}
 bool enforceFrameRange=false;double declaredFrameRange[2]{};int undeclaredFetches=0;
-std::vector<int> fetched;int acquired=0,released=0,abortCount=0;bool abortEnabled=false,slowImageOnce=false;int missing=-999;
+std::vector<int> fetched;int maskFetches=0;int acquired=0,released=0,abortCount=0;bool abortEnabled=false,slowImageOnce=false;int missing=-999;
 OfxStatus effectProps(OfxImageEffectHandle e,OfxPropertySetHandle*p){*p=H(E(e).props);return 0;}
 OfxStatus paramSet(OfxImageEffectHandle e,OfxParamSetHandle*p){*p=reinterpret_cast<OfxParamSetHandle>(&E(e).parameters);return 0;}
-OfxStatus defineClip(OfxImageEffectHandle e,const char*n,OfxPropertySetHandle*p){*p=H(std::string(n)=="Source"?E(e).source.props:E(e).output.props);return 0;}
-OfxStatus clipHandle(OfxImageEffectHandle e,const char*n,OfxImageClipHandle*c,OfxPropertySetHandle*p){auto&clip=std::string(n)=="Source"?E(e).source:E(e).output;*c=reinterpret_cast<OfxImageClipHandle>(&clip);if(p)*p=H(clip.props);return 0;}
+OfxStatus defineClip(OfxImageEffectHandle e,const char*n,OfxPropertySetHandle*p){*p=H(std::string(n)=="Source"?E(e).source.props:std::string(n)=="Mask"?E(e).mask.props:E(e).output.props);return 0;}
+OfxStatus clipHandle(OfxImageEffectHandle e,const char*n,OfxImageClipHandle*c,OfxPropertySetHandle*p){auto&clip=std::string(n)=="Source"?E(e).source:std::string(n)=="Mask"?E(e).mask:E(e).output;*c=reinterpret_cast<OfxImageClipHandle>(&clip);if(p)*p=H(clip.props);return 0;}
 OfxStatus clipProps(OfxImageClipHandle c,OfxPropertySetHandle*p){*p=H(reinterpret_cast<Clip*>(c)->props);return 0;}
-OfxStatus getImage(OfxImageClipHandle c,double t,const OfxRectD*,OfxPropertySetHandle*p){auto&clip=*reinterpret_cast<Clip*>(c);if(!clip.output&&enforceFrameRange&&(t<declaredFrameRange[0]||t>declaredFrameRange[1])){++undeclaredFetches;std::cerr<<"FAIL: source fetch "<<t<<" outside declared range "<<declaredFrameRange[0]<<".."<<declaredFrameRange[1]<<"\n";return kOfxStatFailed;}if(duringImage){auto callback=std::move(duringImage);duringImage=nullptr;callback();}if(slowImageOnce){slowImageOnce=false;std::this_thread::sleep_for(std::chrono::milliseconds(5300));}if(!clip.output)fetched.push_back(int(t));if(!clip.output&&int(t)==missing)return kOfxStatFailed;auto it=clip.images.find(int(t));if(it==clip.images.end())return kOfxStatFailed;*p=H(it->second->props);++acquired;return 0;}
+OfxStatus getImage(OfxImageClipHandle c,double t,const OfxRectD*,OfxPropertySetHandle*p){auto&clip=*reinterpret_cast<Clip*>(c);if(clip.mask)++maskFetches;if(!clip.output&&enforceFrameRange&&(t<declaredFrameRange[0]||t>declaredFrameRange[1])){++undeclaredFetches;std::cerr<<"FAIL: source fetch "<<t<<" outside declared range "<<declaredFrameRange[0]<<".."<<declaredFrameRange[1]<<"\n";return kOfxStatFailed;}if(duringImage){auto callback=std::move(duringImage);duringImage=nullptr;callback();}if(slowImageOnce){slowImageOnce=false;std::this_thread::sleep_for(std::chrono::milliseconds(5300));}if(!clip.output)fetched.push_back(int(t));if(!clip.output&&int(t)==missing)return kOfxStatFailed;auto it=clip.images.find(int(t));if(it==clip.images.end())return kOfxStatFailed;*p=H(it->second->props);++acquired;return 0;}
 OfxStatus releaseImage(OfxPropertySetHandle){++released;return 0;}
 OfxStatus rod(OfxImageClipHandle,double,OfxRectD*r){*r={-7,11,-3,14};return 0;}
 int aborted(OfxImageEffectHandle){return abortEnabled&&++abortCount>12;}
@@ -157,7 +157,16 @@ int main(int argc,char**argv){
    a.ints.erase(kOfxParamPropSecret);b.ints.erase(kOfxParamPropSecret);
    verify(a.strings==b.strings&&a.ints==b.ints&&a.doubles==b.doubles,"compact layout retains defaults, ranges, choices and evaluation behavior");
   }
-  verify(compact.parameters.at("view").ordinal<compact.parameters.at("mask_mode").ordinal&&compact.parameters.at("sensitivity").ordinal<compact.parameters.at("paint").ordinal,"checking and cleaning controls precede paint");
+  verify(compact.parameters.at("paint").props.ints.at(kOfxParamPropEvaluateOnChange)==std::vector<int>{1},"enabling the built-in brush invalidates legacy-mask output immediately");
+  const auto method=compact.parameters.at("mask_mode").ordinal;
+  for(const auto&c:controls)verify(compact.parameters.at(c.name).ordinal<method,"every automatic cleaning option precedes manual method");
+  for(auto name:{"encoding","auto_recovery","recovery_confidence","recovery_calculate","recovery_request","recovery_folder"})verify(compact.parameters.at(name).ordinal<method,"automatic setup and recovery options precede manual method");
+  verify(method<compact.parameters.at("paint").ordinal,"manual method precedes brush controls");
+  verify(compact.parameters.at("mask_mode").props.strings.at(kOfxParamPropParent)==std::vector<std::string>{"paint_group"},"method belongs to manual recovery section");
+  for(auto name:{"stroke_details_group","paint_options_group","paint_source_group"})verify(compact.parameters.at(name).props.strings.at(kOfxParamPropParent)==std::vector<std::string>{"paint_group"},"manual options stay in manual recovery section");
+  verify(!compact.parameters.at("encoding").props.strings.count(kOfxParamPropParent),"published input encoding remains top level");
+  for(auto&c:controls)if(c.group)verify(compact.parameters.at(c.name).props.strings.at(kOfxParamPropParent)==std::vector<std::string>{c.group},"published automatic control grouping retained");
+  for(auto&g:groups)verify(compact.parameters.at(g.name).props.strings.at(kOfxPropLabel)==std::vector<std::string>{g.label},"published automatic group labels retained");
   for(auto name:{"auto_recovery_group","processing","stroke_details_group","paint_options_group","paint_source_group","view_group"})verify(compact.parameters.at(name).props.ints.at(kOfxParamPropGroupOpen)==std::vector<int>{0},"secondary groups start collapsed");
   verify(compact.parameters.at("paint_hold").props.strings.at(kOfxParamPropParent)==std::vector<std::string>{"stroke_details_group"},"duration is a stroke detail");
   const auto&children=compact.parameters.at("page_paint").props.strings.at(kOfxParamPropPageChild);for(auto name:{"paint_undo","paint_redo"})verify(std::find(children.begin(),children.end(),name)!=children.end(),"page-respecting hosts retain paint history buttons");
@@ -293,7 +302,39 @@ int main(int argc,char**argv){
   data={paint::encode(d)};
   paintRender(f,0,"paint recovery rectangle");paintRender(f-1,0,"paint on another frame changes nothing");
   paintRender(f,1,"paint Spanish dirt removal rectangle");paintRender(f+1,1,"Spanish dirt removal with nothing painted");
+  // A connected legacy mask must not also affect built-in painting. This is
+  // deliberately a full-white mask: any accidental fetch changes every pixel.
+  const auto savedHost=hostProperties;auto*savedInteracts=interacts;OfxInteractSuiteV1 suite{};interacts=&suite;setString(H(hostProperties),kOfxPropName,0,"DaVinciResolve");
+  e.mask.mask=true;e.mask.output=true;setInt(H(e.mask.props),kOfxImageClipPropConnected,0,1);
+  for(int frame:{f,f+1}){auto image=frameImage(sourcePixels,frame,w,h,false,false);std::fill(image->backing.begin(),image->backing.end(),1.f);e.mask.images[frame+100]=std::move(image);}
+  auto&paintEnabled=e.parameters["paint"].props.ints[kOfxParamPropDefault];
+  auto&automatic=e.parameters["auto_recovery"].props.ints[kOfxParamPropDefault];
+  maskFetches=0;paintEnabled={1};
+  paintRender(f,0,"built-in recovery ignores connected legacy mask");
+  paintRender(f,1,"built-in Spanish ignores connected legacy mask");
+  automatic={1};paintRender(f,1,"Spanish temporarily bypasses automatic recovery");
+  verify(automatic==std::vector<int>{1},"Spanish preserves saved automatic-recovery preference");automatic={0};
+  paintEnabled={0};paintRender(f,0,"saved strokes still own recovery with editing off");
+  paintRender(f+1,0,"saved strokes own frames without a stroke");
+  paintRender(f+1,1,"Spanish untouched frames ignore legacy mask");
+  data={""};paintEnabled={1};paintRender(f+1,0,"empty built-in brush ignores legacy mask while editing");
+  verify(maskFetches==0,"built-in recovery never requests an external mask image");
+  paintEnabled={0};mode={0};setDouble(ip,kOfxPropTime,0,f+100);
+  verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)==kOfxStatOK,"old mask-only project still renders");
+  verify(maskFetches==1,"legacy project fetches its original mask");
+  {Image result(reinterpret_cast<OfxImageClipHandle>(&e.output),f+100);for(int y=0;y<h;++y)for(int x=0;x<w;++x)for(int c=0;c<3;++c)verify(result.read(x,y,c)==sourcePixels[((size_t(f)*h+y)*w+x)*3+c],"legacy full-white recovery mask retains original output");}
+  setInt(H(e.mask.props),kOfxImageClipPropConnected,0,0);e.mask.images.clear();hostProperties=savedHost;interacts=savedInteracts;
+  std::cout<<"integrated recovery: exclusive built-in brush, Spanish auto bypass and legacy mask compatibility passed\n";
   data={""};mode={0};renderFrame(f);
+ }
+
+ // Built-in paint/erase deliberately override the automatic-recovery matte;
+ // untouched pixels continue to follow it, including partially erased edges.
+ {
+  Settings settings;settings.maskMode=1;std::vector<float> original(12,.25f),repair(12,.75f),out;
+  std::vector<uint8_t> matte(4,1);paint::Layers brush;brush.value={1,0,0,0};brush.touched={1,1,.5f,0};
+  finish(settings,0,4,1,original,repair.data(),matte,false,{}, {},&brush,out);
+  for(int x=0;x<4;++x)for(int c=0;c<3;++c)verify(out[x*3+c]==(x==1?.75f:x==2?.5f:.25f),"manual paint/erase and automatic matte compose once");
  }
 
  // A finished processed input recovers a separately prepared original. No temporal
@@ -308,7 +349,8 @@ int main(int argc,char**argv){
   setDouble(ip,kOfxPropTime,0,100);OfxInteractSuiteV1 overlaySuite{};interacts=&overlaySuite;setString(H(hostProperties),kOfxPropName,0,"DaVinciResolve");
   auto&data=e.parameters["paint_data"].props.strings[kOfxParamPropDefault];
   paint::Document doc;doc.width=w;doc.height=h;doc.nextId=2;paint::Stroke stroke;stroke.id=1;stroke.first=stroke.last=100;stroke.shape=paint::Shape::Rectangle;stroke.softness=0;stroke.points={{-1,-1,1},{2,2,1}};doc.strokes.push_back(stroke);
-  for(int spanish:{0,1})for(int painted:{0,1}){
+  for(int automatic:{0,1})for(int spanish:{0,1})for(int painted:{0,1}){
+   setInt(H(e.parameters["auto_recovery"].props),kOfxParamPropDefault,0,automatic);
    data={painted?paint::encode(doc):""};setInt(H(e.parameters["mask_mode"].props),kOfxParamPropDefault,0,spanish);
    Properties needed;verify(plugin->mainEntry(kOfxImageEffectActionGetFramesNeeded,handle,ip,H(needed))==0,"prepared dependencies");
    verify(needed.doubles["OfxImageClipPropFrameRange_Source"]==std::vector<double>{100,100},"prepared input needs only the current frame");declaredFrameRange[0]=declaredFrameRange[1]=100;fetched.clear();
@@ -319,6 +361,11 @@ int main(int argc,char**argv){
    for(int y=0;y<h;++y)for(int x=0;x<w;++x)for(int c=0;c<3;++c)verify(result.read(x,y,c)==(useOriginal?.375f:sourcePixels[(size_t(y)*w+x)*3+c]),"prepared original/processed endpoints exact");
   }
   data={""};setInt(H(e.parameters["mask_mode"].props),kOfxParamPropDefault,0,0);
+  verify(e.parameters["auto_recovery"].props.ints[kOfxParamPropDefault]==std::vector<int>{1},"prepared route preserves automatic-recovery preference");
+  setInt(H(e.parameters["paint_source_kind"].props),kOfxParamPropDefault,0,0);
+  verify(readSettings(instance(handle),100).mode==1,"ordinary recovery resumes saved automatic-recovery preference");
+  setInt(H(e.parameters["auto_recovery"].props),kOfxParamPropDefault,0,0);
+  setInt(H(e.parameters["paint_source_kind"].props),kOfxParamPropDefault,0,1);
   interacts=nullptr;verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)!=0,"prepared source rejected outside Resolve");
   setInt(H(e.parameters["paint_source_kind"].props),kOfxParamPropDefault,0,0);renderFrame(0);
   std::cout<<"Prepared original: exact Recovery/Spanish endpoints, current frame only, no engine sequence, host gating passed\n";

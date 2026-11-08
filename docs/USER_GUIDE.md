@@ -48,9 +48,10 @@ The first control. Pick what the values entering the effect are:
 
 ## Cleaning controls
 
-In Resolve, **Cleaning** shows **Sensitivity**, **Motion guard** and
-**Repair amount**. The remaining controls are in collapsed **Advanced cleaning**.
-Other hosts retain the three groups on the **Cleaning** page (where supported).
+The published automatic-cleaning layout is retained: **Input encoding** and
+**View**, followed by **Detection**, **Processing** and **Safeguards** in their
+original order. All cleaning options stay in those groups. **Auto recovery**
+follows them, then the integrated **Manual recovery / Spanish** section.
 Start with the defaults. If real detail is being removed, lower **Sensitivity** or raise
 **Motion guard**; if dirt remains, raise **Sensitivity** or try **Analyse: RGB**.
 
@@ -95,29 +96,29 @@ these controls in **Recovery**:
 | Confidence | 0.80 | Give back only spots the model is at least this sure about (0.50 to 0.99). Higher gives back less. |
 | Matte folder | empty | Where calculated mattes are stored. Empty: the user's application data folder (below). |
 
-### The recovery mask (Mode: Recovery)
+### Integrated recovery
 
-Paint on the Mask input where the original should be kept. Painted areas show
-the source; everything else shows the repair. Soft edges and partial opacity
-blend between the two. The mask is the input's alpha (or its first channel if it
-has no alpha), so a Mask Paint, Magic Mask, roto shape or plain alpha all work.
+In Resolve, paint directly in this effect's viewer. No separate Mask Paint,
+Magic Mask or recovery node is required. Automatic cleanup produces the working
+image; the built-in strokes give original detail back in Recovery, or limit
+cleanup to painted areas in Spanish dirt removal.
+
+Older projects with an external Mask input still load and render that path when
+the built-in brush is unused. Enabling Paint in viewer or keeping any built-in
+strokes makes this effect's brush the sole manual recovery source for the clip.
+The external mask is then ignored on every frame, including frames without a
+stroke and while brush editing is off. This prevents overlapping corrections.
 
 ### Painting in Resolve
 
 Development build only. Existing 2.0 installers do not include viewer painting.
 
-The compact inspector follows the same working order as the standalone
-recovery adapter: **View**, **Method**, then **Paint**. Advanced Dirt Removal also shows
-its three primary **Cleaning** controls. **Paint** keeps enable, Tool, Brush,
-Size, Softness, Opacity, selection status and Undo/Redo visible. **Strokes**
-starts collapsed and holds duration, navigation, deletion, enable state and
-rectangle dimensions. **Brush options**, **Source setup**, **Auto recovery**,
-**Advanced cleaning** and **View options** start collapsed. Open them when
-needed; their settings are still saved with the project.
-
-The primary controls fit without scrolling in the tested 1920×1080 Resolve
-window. Smaller inspectors can require scrolling for the secondary sections;
-host display scaling and panel height affect the available space.
+The original automatic controls stay first. **Manual recovery / Spanish**
+contains **Method**, Paint in viewer, Tool, Brush, Size, Softness, Opacity,
+selection status and Undo/Redo. Its collapsed **Strokes**, **Brush options** and
+**Source setup** sections contain the remaining manual controls. Collapse
+Detection while concentrating on painting; available panel height and display
+scaling determine how much scrolling is needed.
 
 Turn on **Paint in viewer** and the viewer's **Open FX Overlay**. On Color,
 **Enhanced Viewer** (Shift-F) gives the picture more room. Choose **Paint**,
@@ -166,8 +167,9 @@ only after verification; the clip and its media are preserved.
 
 On V2 add Advanced Dirt Removal. Under **Source setup**, choose
 **Prepared original**, select the verified **Original folder**, and leave
-**Original frame offset** at 0. Use **Video** input encoding and **Auto recovery:
-Off**. Painting now blends the export and original without running cleanup.
+**Original frame offset** at 0. Use **Video** input encoding. Automatic recovery
+pauses for this route. Painting blends the export and original without running
+cleanup.
 Keep that source folder with the project. Missing, corrupt or mismatched source
 frames stop rendering with an error.
 
@@ -194,20 +196,20 @@ it a probability. Spots at or above **Confidence** are given back.
   Each shot is a `shot-<id>` folder of small run-length-encoded files. Delete the
   folders to free space; they are recalculated when needed.
 
-**Editing the matte with the mask.** With Auto recovery on and Mask set to
-Recovery, the Mask input edits the matte: unpainted areas follow the matte,
-**white** strokes give the original back, **black** strokes keep the repair (take
-back something the model gave back). Use **View: Auto recovery matte** to see the
-matte.
+**Editing the automatic matte.** Built-in paint gives original detail back;
+Erase keeps the cleaned result where the model recovered too much. Untouched
+areas continue to follow the automatic matte. There is one finishing pass.
+Legacy external masks keep their white/black behavior only when the built-in
+brush is unused. **Auto recovery matte** displays the model's matte.
 
-### Spanish dirt removal (Mask: Spanish dirt removal)
+### Spanish dirt removal (Method: Spanish dirt removal)
 
-The opposite use of the mask: only painted areas are repaired, and everything
-else keeps the original. Useful for treating one damaged area of a shot. Spanish
-dirt removal does not use auto recovery: with Auto recovery on, the render stops
-with the error *"Auto recovery cannot be used with Spanish dirt removal"*. Turn
-one of them off and it renders again. With nothing connected to the Mask input,
-Spanish dirt removal leaves the whole picture unrepaired.
+Only painted areas are repaired; everything else keeps the original. With
+nothing painted, Spanish leaves the whole picture unrepaired. In Resolve,
+automatic recovery pauses in Spanish mode, preserving its saved setting for
+when Recovery is selected again. It also pauses for prepared processed exports,
+which do not run the cleaner or its model. Other OFX hosts retain the published
+external-mask behavior and require Auto recovery off for Spanish mode.
 
 ## Views
 
@@ -246,8 +248,10 @@ gate    = Recovery, auto off:      1 − mask
 result  = source where gate = 0, repair where gate = 1, source + (repair − source) × gate between
 ```
 
-With the default settings (Video, Restored, Auto recovery off, nothing on the
-Mask input) the output is exactly the cleaned frame.
+With the default settings (Video, Restored, Auto recovery off, no recovery
+strokes or legacy mask) the output is exactly the cleaned frame. The formulas
+above describe the compatibility mask; built-in paint/erase overrides the
+automatic matte by its stroke coverage, without also applying that external mask.
 
 ## Diagnostics, speed and limits
 

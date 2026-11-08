@@ -195,17 +195,19 @@ void changed(OfxImageEffectHandle e,OfxPropertySetHandle in){
  if(found!=changeBatches.end()){found->second.names.emplace_back(name?name:"",reason?reason:"");return;}
  applyChanged(e,name?name:"",reason);
 }
-void define(OfxParamSetHandle ps,bool visible){
+// A predeclared manual section lets its Method control precede the brush controls.
+void define(OfxParamSetHandle ps,bool visible,bool groupDefined=false){
+ const char* detailsParent=groupDefined?"paint_group":nullptr;
  auto make=[&](const char*type,const char*name,const char*label,const char*parent,const char*hint,bool evaluate=false){
   OfxPropertySetHandle p;check(params->paramDefine(ps,type,name,&p),name);ss(p,kOfxPropLabel,label);if(parent)ss(p,kOfxParamPropParent,parent);if(hint)ss(p,kOfxParamPropHint,hint);
   if(std::strcmp(type,kOfxParamTypeGroup)&&std::strcmp(type,kOfxParamTypePushButton)){si(p,kOfxParamPropAnimates,0);si(p,kOfxParamPropEvaluateOnChange,evaluate);si(p,kOfxParamPropCanUndo,evaluate);}
   if(!visible)si(p,kOfxParamPropSecret,1);return p;};
  auto choice=[&](const char*name,const char*label,const char*parent,const char*hint,std::initializer_list<const char*> options){auto p=make(kOfxParamTypeChoice,name,label,parent,hint);int k=0;for(auto o:options)ss(p,kOfxParamPropChoiceOption,o,k++);si(p,kOfxParamPropDefault,0);};
  auto real=[&](const char*name,const char*label,const char*parent,const char*hint,double initial,double lo,double hi,double displayHi){auto p=make(kOfxParamTypeDouble,name,label,parent,hint);for(auto v:{std::make_pair(kOfxParamPropDefault,initial),{kOfxParamPropMin,lo},{kOfxParamPropMax,hi},{kOfxParamPropDisplayMin,lo},{kOfxParamPropDisplayMax,displayHi}})check(prop->propSetDouble(p,v.first,0,v.second),name);};
- auto boolean=[&](const char*name,const char*label,const char*parent,const char*hint,int initial){auto p=make(kOfxParamTypeBoolean,name,label,parent,hint);si(p,kOfxParamPropDefault,initial);};
+ auto boolean=[&](const char*name,const char*label,const char*parent,const char*hint,int initial,bool evaluate=false){auto p=make(kOfxParamTypeBoolean,name,label,parent,hint,evaluate);si(p,kOfxParamPropDefault,initial);};
  auto label=[&](const char*name,const char*text,const char*parent,const char*initial){auto p=make(kOfxParamTypeString,name,text,parent,nullptr);ss(p,kOfxParamPropStringMode,kOfxParamStringIsLabel);ss(p,kOfxParamPropDefault,initial);si(p,kOfxParamPropPersistant,0);};
- {auto p=make(kOfxParamTypeGroup,"paint_group","Paint",nullptr,nullptr);si(p,kOfxParamPropGroupOpen,1);}
- boolean("paint","Paint in viewer","paint_group","Paint on the picture in the viewer (turn on the viewer's Open FX overlay). In Recovery mode painting gives the original back; in Spanish dirt removal it repairs only where you paint.",0);
+ if(!groupDefined){auto p=make(kOfxParamTypeGroup,"paint_group","Paint",nullptr,nullptr);si(p,kOfxParamPropGroupOpen,1);}
+ boolean("paint","Paint in viewer","paint_group","Paint directly in this effect's viewer (turn on Open FX Overlay). Recovery gives original detail back; Spanish dirt removal repairs only where painted. No separate Mask Paint is needed. While editing is enabled or strokes exist, the built-in brush replaces the legacy external mask.",0,true);
  choice("paint_tool","Tool","paint_group","Paint, Erase (take paint away) or Select (click a stroke to select, move or resize it). Keys B, E, V.",{"Paint","Erase","Select"});
  choice("paint_shape","Brush","paint_group","Round or square brush, or a rectangle dragged from corner to corner. Keys C, Q, R.",{"Round","Square","Rectangle"});
  real("paint_size","Size","paint_group","Brush diameter in picture pixels. Shift-drag in the viewer, or [ and ].",80,1,2048,400);
@@ -214,7 +216,7 @@ void define(OfxParamSetHandle ps,bool visible){
  label("paint_stroke_info","Selected","paint_group","No strokes yet");
  make(kOfxParamTypePushButton,"paint_undo","Undo paint","paint_group","Undo one paint stroke or property edit. Cmd/Ctrl-Z while the viewer has paint focus. History is kept for this editing session.");
  make(kOfxParamTypePushButton,"paint_redo","Redo paint","paint_group","Redo a paint edit. Cmd/Ctrl-Shift-Z while the viewer has paint focus.");
- {auto p=make(kOfxParamTypeGroup,"stroke_details_group","Strokes",nullptr,nullptr);si(p,kOfxParamPropGroupOpen,0);}
+ {auto p=make(kOfxParamTypeGroup,"stroke_details_group","Strokes",detailsParent,nullptr);si(p,kOfxParamPropGroupOpen,0);}
  {auto p=make(kOfxParamTypeInteger,"paint_hold","Hold (frames)","stroke_details_group","How many frames a new stroke lasts, from the frame it is painted on. 1 paints only the current frame.");si(p,kOfxParamPropDefault,1);si(p,kOfxParamPropMin,1);si(p,kOfxParamPropMax,100000);si(p,kOfxParamPropDisplayMin,1);si(p,kOfxParamPropDisplayMax,250);}
  make(kOfxParamTypePushButton,"paint_previous","Previous stroke","stroke_details_group","Select the previous stroke (key ,).");
  make(kOfxParamTypePushButton,"paint_next","Next stroke","stroke_details_group","Select the next stroke (key .).");
@@ -222,11 +224,11 @@ void define(OfxParamSetHandle ps,bool visible){
  boolean("paint_stroke_on","Stroke on","stroke_details_group","Turn the selected stroke off to compare without it (key X).",1);
  real("paint_rect_width","Rectangle width","stroke_details_group","Width of the selected rectangle in picture pixels.",80,1,32768,2048);
  real("paint_rect_height","Rectangle height","stroke_details_group","Height of the selected rectangle in picture pixels.",80,1,32768,2048);
- {auto p=make(kOfxParamTypeGroup,"paint_options_group","Brush options",nullptr,nullptr);si(p,kOfxParamPropGroupOpen,0);}
+ {auto p=make(kOfxParamTypeGroup,"paint_options_group","Brush options",detailsParent,nullptr);si(p,kOfxParamPropGroupOpen,0);}
  real("paint_smoothing","Smoothing","paint_options_group","Smooths the pen path while you paint.",.2,0,.95,.95);
  boolean("paint_pressure","Tablet pressure","paint_options_group","Pen pressure changes the brush size. Leave off for a mouse.",0);
  boolean("paint_outlines","Show strokes","paint_options_group","Draw stroke outlines and the brush in the viewer (key H). Never rendered.",1);
- {auto p=make(kOfxParamTypeGroup,"paint_source_group","Source setup",nullptr,nullptr);si(p,kOfxParamPropGroupOpen,0);}
+ {auto p=make(kOfxParamTypeGroup,"paint_source_group","Source setup",detailsParent,nullptr);si(p,kOfxParamPropGroupOpen,0);}
  {auto p=make(kOfxParamTypeChoice,"paint_source_kind","Paint source","paint_source_group","Clean this clip: repair this input, then recover the original. Prepared original: the input is a finished processed export; painting uses its prepared original without running cleanup again.",true);ss(p,kOfxParamPropChoiceOption,"Clean this clip",0);ss(p,kOfxParamPropChoiceOption,"Prepared original",1);si(p,kOfxParamPropDefault,0);}
  {auto p=make(kOfxParamTypeString,"paint_source_folder","Original folder","paint_source_group","Run Prepare ADR Recovery Source with the processed export on V2 and the aligned original on V1. Keep the verified source folder with the project.",true);ss(p,kOfxParamPropStringMode,kOfxParamStringIsDirectoryPath);ss(p,kOfxParamPropDefault,"");}
  {auto p=make(kOfxParamTypeInteger,"paint_source_offset","Original frame offset","paint_source_group","Prepared frame = working frame + offset. Leave at 0 for the prepared V2/V1 workflow.",true);si(p,kOfxParamPropDefault,0);si(p,kOfxParamPropMin,-1000000000);si(p,kOfxParamPropMax,1000000000);}

@@ -12,20 +12,29 @@ Version 2.0.0, November 2026. Real-footage tests use a 2368×1712 film scan
 (float EXR): 56 frames on macOS, a 12-frame excerpt on Windows and Linux,
 compared frame by frame with the macOS result.
 
-## Compact Resolve inspector — development build, 8 November 2026
+## Integrated Resolve inspector — development build, 8 November 2026
 
 A single independent review from Astra and Fable informed a shared layout for
 Advanced Dirt Removal and the standalone recovery adapter. Routine controls
 remain visible; stroke details, source setup and advanced controls start collapsed.
-The engines, saved parameter identities, defaults, choice strings and stroke
-format are unchanged. Cleaning controls retain their serialization order;
+The revised workflow restores the published Input encoding, View, Detection,
+Processing and Safeguards layout. All automatic options precede the integrated
+Manual recovery / Spanish section. The built-in brush owns manual recovery
+while enabled or while saved strokes exist; older external-mask projects retain
+their compatibility path when that brush is unused. Spanish and prepared-source
+routes pause automatic recovery without overwriting its saved preference.
+The cleaning engine, saved parameter identities, defaults, choice strings and
+stroke format are unchanged. Finishing now gives the built-in brush exclusive
+ownership over manual recovery instead of composing a second external mask.
+Cleaning controls retain their serialization order;
 descriptor presentation order is separate, preserving recovery-cache keys.
 
-Resolve Studio 21.1.1.10 on Apple M5 Pro loaded isolated test identities with
-this layout. Primary controls fit without scrolling in a 1920×1080 window on
-Color and Edit; shorter inspectors require scrolling for secondary sections.
-At 2483×1410 the complete collapsed panel fits. These are tested window sizes,
-not a claim about every display scale or workspace layout.
+Resolve Studio 21.1.1.10 on Apple M5 Pro loaded isolated test identities. The
+initial compact layout fit its primary controls in a 1920×1080 window; operator
+feedback then restored the published cleaning layout. With Detection expanded,
+short inspectors can require scrolling to manual controls. Collapsing Detection
+makes room for painting. Color and Edit show the original automatic groups
+followed by one manual section with its own stroke, brush and source options.
 
 Before/after float EXR comparisons matched every RGB sample on all 200 frames
 from the native Color and Edit prepared-original fixtures: recovery, Spanish,
@@ -34,7 +43,11 @@ also matched 100 frames across its bake-route reference cases. Its
 existing Fusion additional-source route rejected missing host frame-rate
 metadata in the baseline; that route is outside this UI-only qualification.
 Normal build, engine hashes on Metal/OpenCL/CPU, parameter contract and paint
-fixture checks passed. Native scripted input is not a physical tablet-feel test.
+fixture checks passed. Connected-mask regressions verified exclusive brush
+ownership, legacy mask-only output, untouched-frame behavior, editing off,
+Spanish with a saved Auto recovery preference, and prepared exports with that
+preference retained. Manual paint and erase override the automatic matte once;
+a partially erased edge blends correctly. Native scripted input is not a physical tablet-feel test.
 The compact inspector also passed native stroke selection, Delete and paint
 Undo/Redo with exact document restoration. The installed production plugin and
 published 2.0 installers remain unchanged.
