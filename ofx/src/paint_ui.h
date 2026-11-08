@@ -1,0 +1,377 @@
+// Painting in the host viewer: the Paint controls and the viewer overlay.
+// Included by adr_ofx.cpp inside its anonymous namespace (uses its OFX suites
+// and helpers). Strokes are stored in the hidden paint_data parameter, so they
+// are saved with the project and use the host's Undo and Redo.
+//
+// Never take the instance render lock here: hosts call these on their UI
+// thread, which a render may be waiting for inside clipGetImage.
+namespace paint_ui {
+enum class Action {None,Paint,Erase,Select,Round,Square,Rectangle,SizeDown,SizeUp,SoftDown,SoftUp,OpacityDown,OpacityUp,Previous,Next,Delete,Toggle,Outlines,Mode,View1,View2,View3,View4};
+enum Tool {ToolPaint=0,ToolErase=1,ToolSelect=2};
+// Keys the overlay handles when the host delivers them; everything else stays with the host.
+inline Action key(int k){
+ if(k>='A'&&k<='Z')k+=32;
+ switch(k){
+  case 'b':return Action::Paint;case 'e':return Action::Erase;case 'v':return Action::Select;
+  case 'c':return Action::Round;case 'q':return Action::Square;case 'r':return Action::Rectangle;
+  case '[':return Action::SizeDown;case ']':return Action::SizeUp;case '-':return Action::SoftDown;case '=':case '+':return Action::SoftUp;
+  case ';':return Action::OpacityDown;case '\'':return Action::OpacityUp;
+  case ',':return Action::Previous;case '.':return Action::Next;case 'x':return Action::Toggle;case 'h':return Action::Outlines;case 'i':return Action::Mode;
+  case '1':return Action::View1;case '2':return Action::View2;case '3':return Action::View3;case '4':return Action::View4;
+  case 0xffff:case 0xff08:return Action::Delete;
+  default:return Action::None;
+ }
+}
+inline bool repeatable(Action a){return a==Action::SizeDown||a==Action::SizeUp||a==Action::SoftDown||a==Action::SoftUp||a==Action::OpacityDown||a==Action::OpacityUp;}
+inline bool isParam(const char*name){return name&&!std::strncmp(name,"paint",5);}
+
+OfxParamSetHandle paramSet(OfxImageEffectHandle e){OfxParamSetHandle ps;check(fx->getParamSet(e,&ps),"parameters");return ps;}
+OfxParamHandle parameter(OfxImageEffectHandle e,const char*n){OfxParamHandle h;check(params->paramGetHandle(paramSet(e),n,&h,nullptr),n);return h;}
+int getInt(OfxImageEffectHandle e,const char*n){int v=0;check(params->paramGetValue(parameter(e,n),&v),n);return v;}
+double getDouble(OfxImageEffectHandle e,const char*n){double v=0;check(params->paramGetValue(parameter(e,n),&v),n);require(std::isfinite(v),n);return v;}
+std::string getText(OfxImageEffectHandle e,const char*n){char*v=nullptr;check(params->paramGetValue(parameter(e,n),&v),n);return v?v:"";}
+paint::Document document(OfxImageEffectHandle e){return paint::decode(getText(e,"paint_data"));}
+thread_local bool updating=false;
+struct Updating{bool before;Updating():before(updating){updating=true;}~Updating(){updating=before;}};
+// Resolve can record even a redundant programmatic write as an edit: write only real changes.
+void setInt(OfxImageEffectHandle e,const char*n,int v){if(getInt(e,n)!=v)check(params->paramSetValue(parameter(e,n),v),n);}
+void setDouble(OfxImageEffectHandle e,const char*n,double v){if(getDouble(e,n)!=v)check(params->paramSetValue(parameter(e,n),v),n);}
+void setText(OfxImageEffectHandle e,const char*n,const std::string&v){if(getText(e,n)!=v)check(params->paramSetValue(parameter(e,n),v.c_str()),n);}
+void enable(OfxImageEffectHandle e,const char*n,bool on){if(!params->paramGetPropertySet)return;OfxPropertySetHandle p=nullptr;if(params->paramGetPropertySet(parameter(e,n),&p)==kOfxStatOK&&p)prop->propSetInt(p,kOfxParamPropEnabled,0,on?1:0);}
+void store(OfxImageEffectHandle e,const paint::Document&d){setText(e,"paint_data",paint::encode(d));}
+struct Undo{
+ OfxParamSetHandle ps;bool active=false;
+ Undo(OfxImageEffectHandle e,const char*name):ps(paramSet(e)){check(params->paramEditBegin(ps,name),"begin undo");active=true;}
+ ~Undo(){if(active)params->paramEditEnd(ps);}
+ void end(){if(active){check(params->paramEditEnd(ps),"end undo");active=false;}}
+};
+double rectWidth(const paint::Stroke&s,const paint::Document&d){return std::abs(s.points[1].x-s.points[0].x)*d.width;}
+double rectHeight(const paint::Stroke&s,const paint::Document&d){return std::abs(s.points[1].y-s.points[0].y)*d.height;}
+// Scales a stroke to a new size; a rectangle keeps its centre and proportions.
+void resize(paint::Stroke&s,const paint::Document&d,double size,double previous){
+ if(s.shape==paint::Shape::Rectangle){const double k=size/std::max(previous,1e-9);paint::rectangleSize(s,d.width,d.height,std::clamp(rectWidth(s,d)*k,1.,32768.),std::clamp(rectHeight(s,d)*k,1.,32768.));}
+ s.diameter=size;
+}
+// Brings the label and enabled states up to date. loadBrush: show the selected stroke's values in the controls.
+void refresh(OfxImageEffectHandle e,bool loadBrush=false){
+ if(!params->paramGetValue||!params->paramSetValue)return;  // minimal test hosts
+ Updating guard;auto d=document(e);int selected=getInt(e,"paint_stroke");
+ if(selected<0||selected>int(d.strokes.size())){selected=0;setInt(e,"paint_stroke",0);}
+ const bool spanish=getInt(e,"mask_mode")==1;std::string info;
+ if(selected){
+  auto&s=d.strokes[selected-1];
+  info="Stroke "+std::to_string(selected)+" of "+std::to_string(d.strokes.size())+": "+(s.erase?"erase":spanish?"repair":"recover")+", "+(s.shape==paint::Shape::Rectangle?"rectangle":s.shape==paint::Shape::Square?"square":"round")
+   +", frame"+(s.first==s.last?" "+std::to_string(s.first):"s "+std::to_string(s.first)+"-"+std::to_string(s.last))+(s.enabled?"":" (off)");
+  if(loadBrush){
+   setInt(e,"paint_shape",int(s.shape));setDouble(e,"paint_size",s.diameter);setDouble(e,"paint_softness",s.softness);setDouble(e,"paint_opacity",s.opacity);
+   setInt(e,"paint_hold",std::clamp(s.last-s.first+1,1,100000));setInt(e,"paint_stroke_on",s.enabled);
+   if(s.shape==paint::Shape::Rectangle){setDouble(e,"paint_rect_width",std::clamp(rectWidth(s,d),1.,32768.));setDouble(e,"paint_rect_height",std::clamp(rectHeight(s,d),1.,32768.));}
+  }
+ }else info=d.strokes.empty()?"No strokes yet":std::string("None (")+std::to_string(d.strokes.size())+(d.strokes.size()==1?" stroke)":" strokes)");
+ setText(e,"paint_stroke_info",info);
+ const bool rect=selected&&d.strokes[selected-1].shape==paint::Shape::Rectangle;
+ for(auto n:{"paint_delete","paint_stroke_on"})enable(e,n,selected!=0);
+ for(auto n:{"paint_rect_width","paint_rect_height"})enable(e,n,rect);
+ for(auto n:{"paint_previous","paint_next"})enable(e,n,!d.strokes.empty());
+}
+void select(OfxImageEffectHandle e,int stroke){Updating guard;setInt(e,"paint_stroke",stroke);if(stroke)setInt(e,"paint_tool",ToolSelect);}
+// Every key and button goes through here, so they share the host's Undo with the Inspector controls.
+void command(OfxImageEffectHandle e,Action action){
+ using A=Action;
+ auto d=document(e);int selected=getInt(e,"paint_stroke");const bool has=selected>0&&selected<=int(d.strokes.size());const int count=int(d.strokes.size());
+ switch(action){
+  case A::Paint:case A::Erase:case A::Select:{Updating guard;setInt(e,"paint_tool",action==A::Paint?ToolPaint:action==A::Erase?ToolErase:ToolSelect);if(action!=A::Select)setInt(e,"paint_stroke",0);refresh(e);return;}
+  case A::Previous:case A::Next:if(!count)return;select(e,action==A::Next?(selected>=count?1:selected+1):(selected<=1?count:selected-1));refresh(e,true);return;
+  case A::Outlines:{Updating guard;setInt(e,"paint_outlines",!getInt(e,"paint_outlines"));return;}
+  case A::View1:case A::View2:case A::View3:case A::View4:{const int v=int(action)-int(A::View1);if(getInt(e,"view")==v)return;Undo undo(e,"View");Updating guard;setInt(e,"view",v);return;}
+  case A::Mode:{Undo undo(e,"Recovery mode");{Updating guard;setInt(e,"mask_mode",!getInt(e,"mask_mode"));}refresh(e);return;}
+  case A::Delete:case A::Toggle:if(!has)return;break;
+  default:break;
+ }
+ Undo undo(e,"Paint");Updating guard;
+ auto value=[&](const char*n,double v){const double previous=getDouble(e,n);setDouble(e,n,v);if(!has)return;auto&s=d.strokes[selected-1];
+  if(!std::strcmp(n,"paint_size"))resize(s,d,v,previous);else if(!std::strcmp(n,"paint_softness"))s.softness=v;else if(!std::strcmp(n,"paint_opacity"))s.opacity=v;};
+ switch(action){
+  case A::Round:case A::Square:case A::Rectangle:{auto shape=action==A::Round?paint::Shape::Round:action==A::Square?paint::Shape::Square:paint::Shape::Rectangle;setInt(e,"paint_shape",int(shape));if(has)paint::changeShape(d.strokes[selected-1],shape,d.width,d.height);break;}
+  case A::SizeDown:value("paint_size",std::max(1.,getDouble(e,"paint_size")*.8));break;
+  case A::SizeUp:value("paint_size",std::min(2048.,getDouble(e,"paint_size")*1.25));break;
+  case A::SoftDown:value("paint_softness",std::max(0.,getDouble(e,"paint_softness")-.1));break;
+  case A::SoftUp:value("paint_softness",std::min(1.,getDouble(e,"paint_softness")+.1));break;
+  case A::OpacityDown:value("paint_opacity",std::max(0.,getDouble(e,"paint_opacity")-.1));break;
+  case A::OpacityUp:value("paint_opacity",std::min(1.,getDouble(e,"paint_opacity")+.1));break;
+  case A::Delete:d.strokes.erase(d.strokes.begin()+selected-1);setInt(e,"paint_stroke",0);break;
+  case A::Toggle:d.strokes[selected-1].enabled=!d.strokes[selected-1].enabled;break;
+  default:break;
+ }
+ store(e,d);refresh(e,true);
+}
+// InstanceChanged for paint parameters (and Mode, which changes the wording).
+void changed(OfxImageEffectHandle e,OfxPropertySetHandle in){
+ if(updating)return;char*nameValue=nullptr;check(prop->propGetString(in,kOfxPropName,0,&nameValue),"changed parameter");const std::string name=nameValue?nameValue:"";
+ char*reason=nullptr;prop->propGetString(in,kOfxPropChangeReason,0,&reason);
+ if(name=="paint_data"||name=="paint_stroke"){refresh(e,true);return;}
+ if(name=="mask_mode"){refresh(e);return;}
+ if(name=="paint_source_kind"){updateRecoveryEnabled(instance(e));return;}
+ if(name=="paint_tool"){if(getInt(e,"paint_tool")!=ToolSelect&&getInt(e,"paint_stroke")){Updating guard;setInt(e,"paint_stroke",0);}refresh(e);return;}
+ if(!reason||std::strcmp(reason,kOfxChangeUserEdited))return;
+ if(name=="paint_previous"){command(e,Action::Previous);return;}
+ if(name=="paint_next"){command(e,Action::Next);return;}
+ if(name=="paint_delete"){command(e,Action::Delete);return;}
+ const auto encoded=getText(e,"paint_data");auto d=paint::decode(encoded);const int selected=getInt(e,"paint_stroke");
+ if(selected<1||selected>int(d.strokes.size()))return;  // the controls set the next stroke
+ auto&s=d.strokes[selected-1];
+ if(name=="paint_size")resize(s,d,getDouble(e,"paint_size"),s.diameter);
+ else if(name=="paint_softness")s.softness=getDouble(e,"paint_softness");
+ else if(name=="paint_opacity")s.opacity=getDouble(e,"paint_opacity");
+ else if(name=="paint_shape")paint::changeShape(s,paint::Shape(getInt(e,"paint_shape")),d.width,d.height);
+ else if(name=="paint_rect_width"||name=="paint_rect_height"){if(s.shape!=paint::Shape::Rectangle)return;paint::rectangleSize(s,d.width,d.height,getDouble(e,"paint_rect_width"),getDouble(e,"paint_rect_height"));}
+ else if(name=="paint_hold")s.last=s.first+getInt(e,"paint_hold")-1;
+ else if(name=="paint_stroke_on")s.enabled=getInt(e,"paint_stroke_on")!=0;
+ else return;
+ // Undo, redo and project loading also arrive as user edits. A control that
+ // already matches the stored stroke must not open a new edit (it would clear Redo).
+ if(paint::encode(d)==encoded)return;
+ Undo undo(e,"Edit stroke");store(e,d);refresh(e,true);
+}
+void define(OfxParamSetHandle ps,bool visible){
+ auto make=[&](const char*type,const char*name,const char*label,const char*parent,const char*hint,bool evaluate=false){
+  OfxPropertySetHandle p;check(params->paramDefine(ps,type,name,&p),name);ss(p,kOfxPropLabel,label);if(parent)ss(p,kOfxParamPropParent,parent);if(hint)ss(p,kOfxParamPropHint,hint);
+  if(std::strcmp(type,kOfxParamTypeGroup)&&std::strcmp(type,kOfxParamTypePushButton)){si(p,kOfxParamPropAnimates,0);si(p,kOfxParamPropEvaluateOnChange,evaluate);si(p,kOfxParamPropCanUndo,evaluate);}
+  if(!visible)si(p,kOfxParamPropSecret,1);return p;};
+ auto choice=[&](const char*name,const char*label,const char*parent,const char*hint,std::initializer_list<const char*> options){auto p=make(kOfxParamTypeChoice,name,label,parent,hint);int k=0;for(auto o:options)ss(p,kOfxParamPropChoiceOption,o,k++);si(p,kOfxParamPropDefault,0);};
+ auto real=[&](const char*name,const char*label,const char*parent,const char*hint,double initial,double lo,double hi,double displayHi){auto p=make(kOfxParamTypeDouble,name,label,parent,hint);for(auto v:{std::make_pair(kOfxParamPropDefault,initial),{kOfxParamPropMin,lo},{kOfxParamPropMax,hi},{kOfxParamPropDisplayMin,lo},{kOfxParamPropDisplayMax,displayHi}})check(prop->propSetDouble(p,v.first,0,v.second),name);};
+ auto boolean=[&](const char*name,const char*label,const char*parent,const char*hint,int initial){auto p=make(kOfxParamTypeBoolean,name,label,parent,hint);si(p,kOfxParamPropDefault,initial);};
+ auto label=[&](const char*name,const char*text,const char*parent,const char*initial){auto p=make(kOfxParamTypeString,name,text,parent,nullptr);ss(p,kOfxParamPropStringMode,kOfxParamStringIsLabel);ss(p,kOfxParamPropDefault,initial);si(p,kOfxParamPropPersistant,0);};
+ {auto p=make(kOfxParamTypeGroup,"paint_group","Paint",nullptr,nullptr);si(p,kOfxParamPropGroupOpen,1);}
+ boolean("paint","Paint in viewer","paint_group","Paint on the picture in the viewer (turn on the viewer's Open FX overlay). In Recovery mode painting gives the original back; in Spanish dirt removal it repairs only where you paint.",0);
+ choice("paint_tool","Tool","paint_group","Paint, Erase (take paint away) or Select (click a stroke to select, move or resize it). Keys B, E, V.",{"Paint","Erase","Select"});
+ choice("paint_shape","Brush","paint_group","Round or square brush, or a rectangle dragged from corner to corner. Keys C, Q, R.",{"Round","Square","Rectangle"});
+ real("paint_size","Size","paint_group","Brush diameter in picture pixels. Shift-drag in the viewer, or [ and ].",80,1,2048,400);
+ real("paint_softness","Softness","paint_group","0 is a hard edge. Option/Alt-drag in the viewer, or - and =.",.5,0,1,1);
+ real("paint_opacity","Opacity","paint_group","How much one stroke gives back. Keys ; and '.",1,0,1,1);
+ {auto p=make(kOfxParamTypeInteger,"paint_hold","Hold (frames)","paint_group","How many frames a new stroke lasts, from the frame it is painted on. 1 paints only the current frame.");si(p,kOfxParamPropDefault,1);si(p,kOfxParamPropMin,1);si(p,kOfxParamPropMax,100000);si(p,kOfxParamPropDisplayMin,1);si(p,kOfxParamPropDisplayMax,250);}
+ label("paint_stroke_info","Selected","paint_group","No strokes yet");
+ make(kOfxParamTypePushButton,"paint_previous","Previous stroke","paint_group","Select the previous stroke (key ,).");
+ make(kOfxParamTypePushButton,"paint_next","Next stroke","paint_group","Select the next stroke (key .).");
+ make(kOfxParamTypePushButton,"paint_delete","Delete stroke","paint_group","Delete the selected stroke (Delete key). Undo brings it back.");
+ boolean("paint_stroke_on","Stroke on","paint_group","Turn the selected stroke off to compare without it (key X).",1);
+ real("paint_rect_width","Rectangle width","paint_group","Width of the selected rectangle in picture pixels.",80,1,32768,2048);
+ real("paint_rect_height","Rectangle height","paint_group","Height of the selected rectangle in picture pixels.",80,1,32768,2048);
+ {auto p=make(kOfxParamTypeGroup,"paint_options_group","Brush options","paint_group",nullptr);si(p,kOfxParamPropGroupOpen,0);}
+ real("paint_smoothing","Smoothing","paint_options_group","Smooths the pen path while you paint.",.2,0,.95,.95);
+ boolean("paint_pressure","Tablet pressure","paint_options_group","Pen pressure changes the brush size. Leave off for a mouse.",0);
+ boolean("paint_outlines","Show strokes","paint_options_group","Draw stroke outlines and the brush in the viewer (key H). Never rendered.",1);
+ {auto p=make(kOfxParamTypeGroup,"paint_source_group","Source setup","paint_group",nullptr);si(p,kOfxParamPropGroupOpen,0);}
+ {auto p=make(kOfxParamTypeChoice,"paint_source_kind","Paint source","paint_source_group","Clean this clip: repair this input, then recover the original. Prepared original: the input is a finished processed export; painting uses its prepared original without running cleanup again.",true);ss(p,kOfxParamPropChoiceOption,"Clean this clip",0);ss(p,kOfxParamPropChoiceOption,"Prepared original",1);si(p,kOfxParamPropDefault,0);}
+ {auto p=make(kOfxParamTypeString,"paint_source_folder","Original folder","paint_source_group","Run Prepare ADR Recovery Source with the processed export on V2 and the aligned original on V1. Keep the verified source folder with the project.",true);ss(p,kOfxParamPropStringMode,kOfxParamStringIsDirectoryPath);ss(p,kOfxParamPropDefault,"");}
+ {auto p=make(kOfxParamTypeInteger,"paint_source_offset","Original frame offset","paint_source_group","Prepared frame = working frame + offset. Leave at 0 for the prepared V2/V1 workflow.",true);si(p,kOfxParamPropDefault,0);si(p,kOfxParamPropMin,-1000000000);si(p,kOfxParamPropMax,1000000000);}
+ label("paint_keys","Keys","paint_options_group","Shift-drag size, Option/Alt-drag softness, B E V tool, C Q R brush, [ ] size, Delete");
+ {auto p=make(kOfxParamTypeInteger,"paint_stroke","Selected stroke","paint_group",nullptr);si(p,kOfxParamPropDefault,0);si(p,kOfxParamPropMin,0);si(p,kOfxParamPropMax,4096);si(p,kOfxParamPropSecret,1);}
+ {auto p=make(kOfxParamTypeString,"paint_data","Strokes","paint_group",nullptr,true);ss(p,kOfxParamPropDefault,"");ss(p,kOfxParamPropStringMode,kOfxParamStringIsMultiLine);si(p,kOfxParamPropSecret,1);si(p,kOfxParamPropPersistant,1);}
+}
+
+// ---- Viewer overlay ----------------------------------------------------------
+struct Overlay {
+ OfxImageEffectHandle effect=nullptr;OfxInteractHandle handle=nullptr;
+ OfxRectD rod{};double par=1;int frame=0,interactionFrame=0;
+ paint::Point cursor{},down{};bool hasCursor=false,drawing=false,moving=false,adjusting=false;
+ std::array<double,2> screen{},screenDown{},pixelScale{1,1};
+ int adjustment=0,corner=-1;double startSize=80,startSoftness=.5;
+ unsigned modifiers=0;
+ paint::Document work;size_t index=0;std::unique_ptr<Undo> undo;
+};
+void geometry(Overlay&o,double time){
+ check(fx->clipGetRegionOfDefinition(instance(o.effect).source,time,&o.rod),"paint source region");
+ OfxPropertySetHandle cp;check(fx->clipGetPropertySet(instance(o.effect).source,&cp),"paint source properties");
+ o.par=1;prop->propGetDouble(cp,kOfxImagePropPixelAspectRatio,0,&o.par);
+ require(std::isfinite(o.par)&&o.par>0&&o.rod.x2>o.rod.x1&&o.rod.y2>o.rod.y1,"invalid painting geometry");
+}
+void readScale(Overlay&o,OfxPropertySetHandle in){for(int j=0;j<2;++j){double scale=1;if(prop->propGetDouble(in,kOfxInteractPropPixelScale,j,&scale)==kOfxStatOK&&std::isfinite(scale)&&scale>0)o.pixelScale[j]=scale;}}
+void coordinates(Overlay&o,OfxPropertySetHandle in){
+ o.frame=frameTime(in);geometry(o,o.frame);paint_input::focusKeys(&o);
+ const double x=number(in,kOfxInteractPropPenPosition,0),y=number(in,kOfxInteractPropPenPosition,1);double pressure=1;
+ if(getInt(o.effect,"paint_pressure"))prop->propGetDouble(in,kOfxInteractPropPenPressure,0,&pressure);if(!std::isfinite(pressure))pressure=1;
+ o.cursor={(x-o.rod.x1)/(o.rod.x2-o.rod.x1),(y-o.rod.y1)/(o.rod.y2-o.rod.y1),std::clamp(pressure,0.,1.)};o.hasCursor=true;
+ // Resolve 21's PenViewportPosition is not in screen pixels on macOS. Screen
+ // distance comes from canonical position / pixel scale, which also keeps
+ // handles and drag sensitivity independent of the viewer zoom.
+ readScale(o,in);for(int j=0;j<2;++j)o.screen[j]=(j?y:x)/o.pixelScale[j];
+}
+int pictureWidth(const Overlay&o){return int(std::llround((o.rod.x2-o.rod.x1)/o.par));}
+int pictureHeight(const Overlay&o){return int(std::llround(o.rod.y2-o.rod.y1));}
+void finishGesture(Overlay&o){if(!o.drawing&&!o.moving&&!o.adjusting&&!o.undo)return;o.drawing=o.moving=o.adjusting=false;o.corner=-1;o.adjustment=0;if(o.undo){o.undo->end();o.undo.reset();}refresh(o.effect);}
+unsigned (*modifierQuery)()=paint_input::nativeModifiers;
+// macOS and Windows: the current keyboard state, sampled only during a pointer
+// event the host delivered (a modifier release swallowed by a host command must
+// not leave a stale key down). Elsewhere: the host's key events.
+unsigned pointerModifiers(const Overlay&o){
+#if defined(__APPLE__)||defined(_WIN32)
+ (void)o;return modifierQuery();
+#else
+ unsigned r=modifierQuery();
+ if(o.modifiers&3u)r|=paint_input::Shift;
+ const unsigned alt=(1u<<(0xffe9-0xffe1))|(1u<<(0xffea-0xffe1));
+ if(o.modifiers&alt)r|=paint_input::Alt;
+ if(o.modifiers&~(3u|alt))r|=paint_input::HostCommand;
+ return r;
+#endif
+}
+// Horizontal drag: right is bigger/softer. Size doubles every 120 screen pixels.
+void adjustBrush(Overlay&o){
+ auto e=o.effect;const double dx=o.screen[0]-o.screenDown[0];
+ const bool size=o.adjustment==1;const char*n=size?"paint_size":"paint_softness";
+ const double v=size?std::clamp(o.startSize*std::exp2(dx/120.),1.,2048.):std::clamp(o.startSoftness+dx/240.,0.,1.);
+ if(getDouble(e,n)==v)return;
+ if(!o.undo)o.undo=std::make_unique<Undo>(e,size?"Brush size":"Brush softness");
+ Updating guard;setDouble(e,n,v);auto d=o.work;const int selected=getInt(e,"paint_stroke");
+ if(selected>0&&selected<=int(d.strokes.size())){auto&s=d.strokes[selected-1];if(size)resize(s,d,v,o.work.strokes[selected-1].diameter);else s.softness=v;store(e,d);}
+ refresh(e,true);
+}
+std::array<paint::Point,4> corners(const paint::Stroke&s){const double l=std::min(s.points[0].x,s.points[1].x),r=std::max(s.points[0].x,s.points[1].x),b=std::min(s.points[0].y,s.points[1].y),t=std::max(s.points[0].y,s.points[1].y);return {{{l,b,1},{r,b,1},{r,t,1},{l,t,1}}};}
+int cornerAt(const Overlay&o,const paint::Stroke&s){auto cs=corners(s);for(int j=0;j<4;++j)if(std::abs((cs[j].x-o.cursor.x)*(o.rod.x2-o.rod.x1)/o.pixelScale[0])<=8&&std::abs((cs[j].y-o.cursor.y)*(o.rod.y2-o.rod.y1)/o.pixelScale[1])<=8)return j;return -1;}
+double X(const Overlay&o,double x){return o.rod.x1+x*(o.rod.x2-o.rod.x1);}
+double Y(const Overlay&o,double y){return o.rod.y1+y*(o.rod.y2-o.rod.y1);}
+void circle(const Overlay&o,const paint::Point&p,double radius){paint_gl::loop();for(int j=0;j<64;++j){const double a=j*6.283185307179586/64;paint_gl::vertex(X(o,p.x)+std::cos(a)*radius*o.par,Y(o,p.y)+std::sin(a)*radius);}paint_gl::end();}
+void box(const Overlay&o,const paint::Point&a,const paint::Point&b){paint_gl::loop();paint_gl::vertex(X(o,a.x),Y(o,a.y));paint_gl::vertex(X(o,b.x),Y(o,a.y));paint_gl::vertex(X(o,b.x),Y(o,b.y));paint_gl::vertex(X(o,a.x),Y(o,b.y));paint_gl::end();}
+void brushOutline(const Overlay&o,const paint::Point&p,double diameter,paint::Shape shape){
+ const double r=diameter*.5;
+ if(shape==paint::Shape::Square)box(o,{p.x-r*o.par/(o.rod.x2-o.rod.x1),p.y-r/(o.rod.y2-o.rod.y1),1},{p.x+r*o.par/(o.rod.x2-o.rod.x1),p.y+r/(o.rod.y2-o.rod.y1),1});else circle(o,p,r);
+}
+void draw(Overlay&o,OfxPropertySetHandle in){
+ auto e=o.effect;const double time=number(in,kOfxPropTime);geometry(o,time);readScale(o,in);
+ // Read every host value before touching GL state.
+ const auto d=document(e);const int selected=getInt(e,"paint_stroke"),outlines=getInt(e,"paint_outlines"),tool=getInt(e,"paint_tool");
+ const double diameter=getDouble(e,"paint_size"),softness=getDouble(e,"paint_softness");const auto shape=paint::Shape(getInt(e,"paint_shape"));
+ if(!paint_gl::ready())return;
+ paint_gl::Scope gl;
+ if(outlines)for(size_t j=0;j<d.strokes.size();++j){
+  const auto&s=d.strokes[j];if(time<s.first||time>s.last)continue;
+  if(int(j+1)==selected)paint_gl::color(1,.85f,0,1);else if(!s.enabled)paint_gl::color(.5f,.5f,.5f,.5f);else if(s.erase)paint_gl::color(1,.35f,.25f,.7f);else paint_gl::color(.1f,1,.7f,.7f);
+  if(s.shape==paint::Shape::Rectangle){
+   box(o,s.points[0],s.points[1]);
+   if(int(j+1)==selected){const double rx=4*o.pixelScale[0]/(o.rod.x2-o.rod.x1),ry=4*o.pixelScale[1]/(o.rod.y2-o.rod.y1);for(auto q:corners(s))box(o,{q.x-rx,q.y-ry,1},{q.x+rx,q.y+ry,1});}
+   continue;
+  }
+  paint_gl::strip();for(auto&q:s.points)paint_gl::vertex(X(o,q.x),Y(o,q.y));paint_gl::end();
+  brushOutline(o,s.points.front(),s.diameter*s.points.front().pressure,s.shape);
+  if(s.points.size()>1)brushOutline(o,s.points.back(),s.diameter*s.points.back().pressure,s.shape);
+ }
+ if(!o.hasCursor||(tool==ToolSelect&&!o.adjusting))return;
+ const auto at=o.adjusting?o.down:o.cursor;
+ if(shape==paint::Shape::Rectangle&&!o.adjusting){
+  const double rx=7*o.pixelScale[0]/(o.rod.x2-o.rod.x1),ry=7*o.pixelScale[1]/(o.rod.y2-o.rod.y1);
+  paint_gl::color(1,1,1,1);paint_gl::lines();paint_gl::vertex(X(o,at.x-rx),Y(o,at.y));paint_gl::vertex(X(o,at.x+rx),Y(o,at.y));paint_gl::vertex(X(o,at.x),Y(o,at.y-ry));paint_gl::vertex(X(o,at.x),Y(o,at.y+ry));paint_gl::end();
+  return;
+ }
+ const auto cursorShape=shape==paint::Shape::Rectangle?paint::Shape::Round:shape;
+ paint_gl::color(0,0,0,1);paint_gl::lineWidth(3);brushOutline(o,at,diameter,cursorShape);
+ paint_gl::color(1,1,1,1);paint_gl::lineWidth(1);brushOutline(o,at,diameter,cursorShape);
+ paint_gl::color(1,1,1,.5f);brushOutline(o,at,diameter*(1-softness),cursorShape);
+}
+OfxStatus penDown(Overlay&o,OfxInteractHandle h,OfxPropertySetHandle in){
+ auto e=o.effect;if(o.drawing||o.moving||o.adjusting)finishGesture(o);
+ coordinates(o,in);if(o.cursor.x<0||o.cursor.x>1||o.cursor.y<0||o.cursor.y>1)return kOfxStatReplyDefault;
+ const auto modifiers=pointerModifiers(o);if(modifiers&paint_input::HostCommand)return kOfxStatReplyDefault;  // host pan/zoom chords
+ o.work=document(e);o.down=o.cursor;o.interactionFrame=o.frame;const int tool=getInt(e,"paint_tool");
+ o.adjustment=modifiers&paint_input::Alt?2:modifiers&paint_input::Shift?1:0;
+ if(o.adjustment){o.adjusting=true;o.screenDown=o.screen;o.startSize=getDouble(e,"paint_size");o.startSoftness=getDouble(e,"paint_softness");interacts->interactRedraw(h);return kOfxStatOK;}
+ const int w=pictureWidth(o),hh=pictureHeight(o);
+ if(tool==ToolSelect){
+  int found=-1;o.corner=-1;const int selected=getInt(e,"paint_stroke");
+  if(selected>0&&selected<=int(o.work.strokes.size())){const auto&s=o.work.strokes[selected-1];if(s.shape==paint::Shape::Rectangle&&o.frame>=s.first&&o.frame<=s.last){o.corner=cornerAt(o,s);if(o.corner>=0)found=selected-1;}}
+  // Topmost stroke under the pen on this frame; switched-off and transparent strokes stay selectable.
+  for(int j=int(o.work.strokes.size())-1;found<0&&j>=0;--j){auto s=o.work.strokes[j];s.opacity=1;if(o.frame>=s.first&&o.frame<=s.last&&paint::coverage(s,o.cursor.x*w,o.cursor.y*hh,w,hh)>0)found=j;}
+  {Updating guard;setInt(e,"paint_stroke",found+1);}refresh(e,true);
+  if(found<0){interacts->interactRedraw(h);return kOfxStatOK;}
+  o.index=size_t(found);o.moving=true;
+ }else{
+  require(o.work.strokes.size()<4096,"Paint stroke limit reached (4096)");
+  if(o.work.strokes.empty()){o.work.width=w;o.work.height=hh;}
+  require(o.work.width==w&&o.work.height==hh,"The picture size changed since these strokes were painted");
+  paint::Stroke s;s.id=o.work.nextId++;s.first=o.frame;s.last=o.frame+getInt(e,"paint_hold")-1;s.erase=tool==ToolErase;s.shape=paint::Shape(getInt(e,"paint_shape"));
+  s.diameter=getDouble(e,"paint_size");s.softness=getDouble(e,"paint_softness");s.opacity=getDouble(e,"paint_opacity");
+  s.points.push_back(o.cursor);if(s.shape==paint::Shape::Rectangle)s.points.push_back(o.cursor);
+  o.work.strokes.push_back(std::move(s));o.index=o.work.strokes.size()-1;o.drawing=true;
+  {Updating guard;setInt(e,"paint_stroke",0);}
+ }
+ o.undo=std::make_unique<Undo>(e,tool==ToolSelect?"Move stroke":"Paint stroke");
+ // A new rectangle is stored once it has a size (on motion).
+ if(o.drawing&&o.work.strokes[o.index].shape!=paint::Shape::Rectangle)store(e,o.work);
+ interacts->interactRedraw(h);return kOfxStatOK;
+}
+OfxStatus penMove(Overlay&o,OfxInteractHandle h,OfxPropertySetHandle in,bool up){
+ auto e=o.effect;coordinates(o,in);
+ if((o.drawing||o.moving||o.adjusting)&&o.frame!=o.interactionFrame){finishGesture(o);return kOfxStatOK;}
+ if(o.adjusting)adjustBrush(o);
+ else if(o.drawing&&o.work.strokes[o.index].shape==paint::Shape::Rectangle){
+  auto&s=o.work.strokes[o.index];s.points[1]=o.cursor;
+  const bool empty=std::abs(s.points[1].x-s.points[0].x)*o.work.width<1||std::abs(s.points[1].y-s.points[0].y)*o.work.height<1;
+  if(!empty)store(e,o.work);
+  else if(up){o.work.strokes.erase(o.work.strokes.begin()+o.index);store(e,o.work);}  // a click makes no rectangle
+ }else if(o.drawing){
+  auto&ps=o.work.strokes[o.index].points;auto q=o.cursor;
+  if(!ps.empty()&&!up){const double smooth=getDouble(e,"paint_smoothing");q.x=ps.back().x*smooth+q.x*(1-smooth);q.y=ps.back().y*smooth+q.y*(1-smooth);}
+  if(ps.empty()||std::hypot((q.x-ps.back().x)*o.work.width,(q.y-ps.back().y)*o.work.height)>.25||std::abs(q.pressure-ps.back().pressure)>1e-4){ps.push_back(q);store(e,o.work);}
+ }else if(o.moving){
+  auto d=o.work;auto&s=d.strokes[o.index];
+  if(o.corner>=0){auto opposite=corners(s)[(o.corner+2)%4],edge=o.cursor;
+   if(std::abs(edge.x-opposite.x)*d.width<1)edge.x=opposite.x+(edge.x<opposite.x?-1.:1.)/d.width;
+   if(std::abs(edge.y-opposite.y)*d.height<1)edge.y=opposite.y+(edge.y<opposite.y?-1.:1.)/d.height;
+   s.points={opposite,edge};}
+  else{const double dx=o.cursor.x-o.down.x,dy=o.cursor.y-o.down.y;for(auto&q:s.points){q.x+=dx;q.y+=dy;}}
+  store(e,d);refresh(e,true);
+ }
+ if(up)finishGesture(o);
+ interacts->interactRedraw(h);return kOfxStatOK;
+}
+bool nativeKey(void*owner,int keyCode,bool repeat){
+ auto&o=*static_cast<Overlay*>(owner);
+ if(!isLiveInstance(o.effect)||!o.hasCursor||!getInt(o.effect,"paint"))return false;
+ const auto a=key(keyCode);if(a==Action::None)return false;
+ try{if(!o.drawing&&!o.moving&&!o.adjusting&&(!repeat||repeatable(a)))command(o.effect,a);interacts->interactRedraw(o.handle);}
+ catch(const std::exception&ex){adrlog::error(std::string("paint key: ")+ex.what());}
+ return true;
+}
+OfxStatus overlay(const char*action,const void*handle,OfxPropertySetHandle in,OfxPropertySetHandle){
+ auto h=(OfxInteractHandle)handle;Overlay*active=nullptr;
+ try{
+  if(!std::strcmp(action,kOfxActionDescribe))return kOfxStatOK;
+  OfxPropertySetHandle ip=nullptr;check(interacts->interactGetPropertySet(h,&ip),"overlay properties");
+  if(!std::strcmp(action,kOfxActionCreateInstance)){auto o=std::make_unique<Overlay>();void*e=nullptr;check(prop->propGetPointer(ip,kOfxPropEffectInstance,0,&e),"overlay effect");o->effect=(OfxImageEffectHandle)e;o->handle=h;check(prop->propSetPointer(ip,kOfxPropInstanceData,0,o.get()),"overlay instance");paint_input::registerKeys(o.get(),nativeKey);o.release();return kOfxStatOK;}
+  void*p=nullptr;check(prop->propGetPointer(ip,kOfxPropInstanceData,0,&p),"overlay state");require(p,"missing overlay state");auto&o=*static_cast<Overlay*>(p);active=&o;auto e=o.effect;
+  if(!std::strcmp(action,kOfxActionDestroyInstance)){
+   // Resolve can destroy the effect before its overlay: no parameter or undo
+   // calls here. Every stroke was already stored while painting.
+   paint_input::unregisterKeys(&o);if(o.undo)o.undo->active=false;delete &o;return kOfxStatOK;
+  }
+  if(!std::strcmp(action,kOfxInteractActionGainFocus)){o.modifiers=0;return kOfxStatOK;}
+  if(!std::strcmp(action,kOfxInteractActionLoseFocus)){paint_input::blurKeys(&o);o.modifiers=0;finishGesture(o);o.hasCursor=false;return kOfxStatOK;}
+  if(!getInt(e,"paint")){if(o.drawing||o.moving||o.adjusting)finishGesture(o);return kOfxStatReplyDefault;}
+  if(!std::strcmp(action,kOfxInteractActionDraw)){draw(o,in);return kOfxStatOK;}
+  const bool down=!std::strcmp(action,kOfxInteractActionKeyDown),repeat=!std::strcmp(action,kOfxInteractActionKeyRepeat),up=!std::strcmp(action,kOfxInteractActionKeyUp);
+  if(down||repeat||up){
+   int k=0;prop->propGetInt(in,"kOfxPropKeySym",0,&k);
+   if(k>=0xffe1&&k<=0xffee&&k!=0xffe5&&k!=0xffe6){const unsigned bit=1u<<(k-0xffe1);if(up)o.modifiers&=~bit;else o.modifiers|=bit;return kOfxStatReplyDefault;}
+   if(up||o.modifiers)return kOfxStatReplyDefault;  // chords (Cmd-Z, Shift-D...) stay with the host
+   const auto a=key(k);if(a==Action::None)return kOfxStatReplyDefault;
+   if(o.drawing||o.moving||o.adjusting)return kOfxStatOK;
+   if(!repeat||repeatable(a))command(e,a);
+   interacts->interactRedraw(h);return kOfxStatOK;
+  }
+  if(!std::strcmp(action,kOfxInteractActionPenDown))return penDown(o,h,in);
+  if(!std::strcmp(action,kOfxInteractActionPenMotion)){
+   if(!o.drawing&&!o.moving&&!o.adjusting){coordinates(o,in);interacts->interactRedraw(h);return kOfxStatReplyDefault;}
+   return penMove(o,h,in,false);
+  }
+  if(!std::strcmp(action,kOfxInteractActionPenUp)){if(!o.drawing&&!o.moving&&!o.adjusting)return kOfxStatReplyDefault;return penMove(o,h,in,true);}
+  return kOfxStatReplyDefault;
+ }catch(const std::exception&ex){
+  // A failed gesture must not leave a host undo group open. Strokes already stored stay.
+  adrlog::error(std::string("paint overlay ")+action+": "+ex.what());
+  if(active){active->drawing=active->moving=active->adjusting=false;
+   if(active->undo){try{active->undo->end();}catch(...){active->undo->active=false;}active->undo.reset();}
+   if(persistentMessages)persistentMessages->setPersistentMessage(active->effect,kOfxMessageError,"adr-paint","%s",ex.what());}
+  return kOfxStatFailed;
+ }
+}
+}

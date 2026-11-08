@@ -85,18 +85,65 @@ The **Recovery** group holds:
 
 | Control | Default | What it does |
 | --- | --- | --- |
-| Mask | Recovery | How the Mask input is used: **Recovery** or **Spanish dirt removal** (below). |
+| Mode | Recovery | How painting and the Mask input are used: **Recovery** or **Spanish dirt removal** (below). |
 | Calculate recovery | button | Calculates the auto-recovery matte for the whole shot now and turns Auto recovery on. |
 | Auto recovery | Off | On: give back repaired spots the model judges to be real picture detail. |
 | Confidence | 0.80 | Give back only spots the model is at least this sure about (0.50 to 0.99). Higher gives back less. |
 | Matte folder | empty | Where calculated mattes are stored. Empty: the user's application data folder (below). |
 
-### The recovery mask (Mask: Recovery)
+### The recovery mask (Mode: Recovery)
 
 Paint on the Mask input where the original should be kept. Painted areas show
 the source; everything else shows the repair. Soft edges and partial opacity
 blend between the two. The mask is the input's alpha (or its first channel if it
 has no alpha), so a Mask Paint, Magic Mask, roto shape or plain alpha all work.
+
+### Painting in Resolve
+
+Development build only. Existing 2.0 installers do not include viewer painting.
+
+Turn on **Paint in viewer** and the viewer's **Open FX Overlay**. On Color,
+**Enhanced Viewer** (Shift-F) gives the picture more room. Choose **Paint**,
+**Erase** or **Select**, then a **Round**, **Square** or **Rectangle** brush.
+Drag a rectangle from corner to corner. **Recovery** gives the original back;
+**Spanish dirt removal** repairs only where you paint.
+
+**Select** lets you move a stroke or resize a rectangle by its corner handles.
+The controls edit its size, softness, opacity and duration. **Delete stroke**
+removes it; Resolve's Undo brings it back. **Hold (frames)** defaults to one
+frame. Held strokes stay in the same position; they do not track automatically.
+**Tablet pressure**, under **Brush options**, varies the brush size with pressure.
+
+With the pointer in the active paint viewer:
+
+| Action | Keys |
+| --- | --- |
+| Paint / Erase / Select | B / E / V |
+| Round / Square / Rectangle | C / Q / R |
+| Size / softness | Shift-drag / Option-drag (Alt on Windows); [ and ] / - and = |
+| Previous / next stroke; delete | , / . ; Delete |
+| Recovery / Spanish; stroke on/off; outlines | I / X / H |
+
+Frame stepping and bypass use Resolve's own keys. Other hosts hide the paint
+controls. Shortcuts depend on host input delivery; the native controls remain
+available. Physical tablet pressure still needs an operator check.
+
+### A processed export on V2, original on V1
+
+Align the clips at the same native size and frame rate, without retiming,
+transforms or colour matching. Copy `tools/prepare_recovery_source.py` into
+Resolve's `Fusion/Scripts/Utility` folder, then run it from **Workspace →
+Scripts → Utility**. Choose V2 as the working export and V1 as the recovery scan.
+Preparation uses a separate timeline, verifies every source frame and restores
+the working timeline and Deliver settings. It disables V1's ordinary output
+only after verification; the clip and its media are preserved.
+
+On V2 add Advanced Dirt Removal. Under **Paint → Source setup**, choose
+**Prepared original**, select the verified **Original folder**, and leave
+**Original frame offset** at 0. Use **Video** input encoding and **Auto recovery:
+Off**. Painting now blends the export and original without running cleanup.
+Keep that source folder with the project. Missing, corrupt or mismatched source
+frames stop rendering with an error.
 
 ### Auto recovery
 

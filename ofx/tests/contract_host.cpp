@@ -52,6 +52,7 @@ int aborted(OfxImageEffectHandle){return abortEnabled&&++abortCount>12;}
 OfxStatus defineParameter(OfxParamSetHandle s,const char*t,const char*n,OfxPropertySetHandle*p){auto&v=(*reinterpret_cast<std::map<std::string,Parameter>*>(s))[n];v.choice=std::string(t)==kOfxParamTypeChoice||std::string(t)==kOfxParamTypeBoolean||std::string(t)==kOfxParamTypeInteger;v.text=std::string(t)==kOfxParamTypeString;*p=H(v.props);return 0;}
 OfxStatus parameterHandle(OfxParamSetHandle s,const char*n,OfxParamHandle*h,OfxPropertySetHandle*p){auto&v=(*reinterpret_cast<std::map<std::string,Parameter>*>(s))[n];*h=reinterpret_cast<OfxParamHandle>(&v);if(p)*p=H(v.props);return 0;}
 OfxStatus value(OfxParamHandle h,OfxTime t,...){auto&p=*reinterpret_cast<Parameter*>(h);va_list a;va_start(a,t);if(p.text){auto&s=p.props.strings[kOfxParamPropDefault];if(s.empty())s.push_back("");*va_arg(a,char**)=s[0].data();}else if(p.choice)*va_arg(a,int*)=p.props.ints[kOfxParamPropDefault][0];else *va_arg(a,double*)=p.props.doubles[kOfxParamPropDefault][0];va_end(a);return 0;}
+OfxStatus currentValue(OfxParamHandle h,...){auto&p=*reinterpret_cast<Parameter*>(h);va_list a;va_start(a,h);if(p.text){auto&v=p.props.strings[kOfxParamPropDefault];if(v.empty())v.push_back("");*va_arg(a,char**)=v[0].data();}else if(p.choice)*va_arg(a,int*)=p.props.ints[kOfxParamPropDefault][0];else *va_arg(a,double*)=p.props.doubles[kOfxParamPropDefault][0];va_end(a);return kOfxStatOK;}
 std::string lastHostMessage,lastCadenceMessage,lastRenderActionMessage;
 std::string progressiveBothMessage;
 OfxStatus message(void*handle,const char*,const char*,const char*format,...){++messageCalls;if(!isLiveInstance(reinterpret_cast<OfxImageEffectHandle>(handle)))++descriptorMessages;char buffer[4096];va_list args;va_start(args,format);std::vsnprintf(buffer,sizeof(buffer),format,args);va_end(args);lastHostMessage=buffer;if(lastHostMessage.find("Fabiocolor cadence diagnostic:")!=std::string::npos)lastCadenceMessage=buffer;if(lastHostMessage.find("Fabiocolor render action diagnostic:")!=std::string::npos)lastRenderActionMessage=buffer;if(lastHostMessage.find("Fabiocolor progressive action quirk admitted:")!=std::string::npos)progressiveBothMessage=buffer;return kOfxStatOK;}
@@ -68,7 +69,7 @@ void environment(const char*k,const std::string&v){
 #endif
 }
 void verify(bool okay,const char*m){if(!okay){std::cerr<<"FAIL: "<<m<<"\n";std::exit(1);}}
-void configureSuites(){ts.getTime=timeCursor;ts.getTimeBounds=timeBounds;ms.message=message;ps.propSetInt=setInt;ps.propGetInt=getInt;ps.propSetDouble=setDouble;ps.propGetDouble=getDouble;ps.propSetString=setString;ps.propGetString=getString;ps.propSetPointer=setPointer;ps.propGetPointer=getPointer;ps.propSetIntN=setIntN;ps.propGetIntN=getIntN;ps.propSetDoubleN=setDoubleN;ps.propGetDoubleN=getDoubleN;pas.paramDefine=defineParameter;pas.paramGetHandle=parameterHandle;pas.paramGetValueAtTime=value;es.getPropertySet=effectProps;es.getParamSet=paramSet;es.clipDefine=defineClip;es.clipGetHandle=clipHandle;es.clipGetPropertySet=clipProps;es.clipGetImage=getImage;es.clipReleaseImage=releaseImage;es.clipGetRegionOfDefinition=rod;es.abort=aborted;}
+void configureSuites(){ts.getTime=timeCursor;ts.getTimeBounds=timeBounds;ms.message=message;ps.propSetInt=setInt;ps.propGetInt=getInt;ps.propSetDouble=setDouble;ps.propGetDouble=getDouble;ps.propSetString=setString;ps.propGetString=getString;ps.propSetPointer=setPointer;ps.propGetPointer=getPointer;ps.propSetIntN=setIntN;ps.propGetIntN=getIntN;ps.propSetDoubleN=setDoubleN;ps.propGetDoubleN=getDoubleN;pas.paramDefine=defineParameter;pas.paramGetHandle=parameterHandle;pas.paramGetValueAtTime=value;pas.paramGetValue=currentValue;es.getPropertySet=effectProps;es.getParamSet=paramSet;es.clipDefine=defineClip;es.clipGetHandle=clipHandle;es.clipGetPropertySet=clipProps;es.clipGetImage=getImage;es.clipReleaseImage=releaseImage;es.clipGetRegionOfDefinition=rod;es.abort=aborted;}
 std::unique_ptr<TestImage> frameImage(const std::vector<float>&rgb,int frame,int w,int h,bool negative,bool output){
  auto im=std::make_unique<TestImage>();int stride=w*4+5;im->backing.resize(size_t(stride)*h,-1234);auto*data=im->backing.data()+(negative?stride*(h-1):0);auto p=H(im->props);
  setString(p,kOfxImageEffectPropPixelDepth,0,kOfxBitDepthFloat);setString(p,kOfxImageEffectPropComponents,0,kOfxImageComponentRGBA);setString(p,kOfxImageEffectPropPreMultiplication,0,kOfxImageUnPreMultiplied);setDouble(p,kOfxImagePropPixelAspectRatio,0,1.);setDouble(p,kOfxImageEffectPropRenderScale,0,1.);setDouble(p,kOfxImageEffectPropRenderScale,1,1.);setString(p,kOfxImagePropField,0,kOfxImageFieldNone);
@@ -109,6 +110,18 @@ int main(int argc,char**argv){
   untrackInstance(stable);verify(!isLiveInstance(stable),"stable dummy instance removed");
   std::cout<<"concurrent instance membership: 10000 mutations, "<<lookups.load()<<" lookup passes\n";
  }
+ verify(paint_ui::key('+')==paint_ui::Action::SoftUp&&paint_ui::key('=')==paint_ui::Action::SoftUp&&paint_ui::key(0xffff)==paint_ui::Action::Delete&&paint_ui::key(0xff08)==paint_ui::Action::Delete,"brush key aliases and both delete symbols");
+ // Parameter-write brackets can reenter while the lifecycle lock is held.
+ // A deadline makes this a deterministic failure instead of a hung test.
+ {
+  std::lock_guard<std::mutex> lifecycle(mutex);
+  auto job=std::async(std::launch::async,[]{
+   return entry(kOfxActionBeginInstanceChanged,nullptr,nullptr,nullptr)==kOfxStatReplyDefault
+       &&entry(kOfxActionEndInstanceChanged,nullptr,nullptr,nullptr)==kOfxStatReplyDefault;
+  });
+  if(job.wait_for(std::chrono::seconds(2))!=std::future_status::ready){std::cerr<<"FAIL: parameter-write bracket deadlocks during initialization\n";std::_Exit(1);}
+  verify(job.get(),"reentrant parameter-write brackets");
+ }
  environment("ADR_BACKEND",argv[1]);
  // The diagnostic log is on by default; keep the test's log in a private folder and check it at the end.
  const auto logFolder=std::filesystem::temp_directory_path()/("adr-contract-log-"+std::to_string(adrlog::pid()));std::filesystem::remove_all(logFolder);environment("ADR_LOG",logFolder.u8string());int w=std::stoi(argv[4]),h=std::stoi(argv[5]),count=std::stoi(argv[6]);
@@ -121,10 +134,10 @@ int main(int argc,char**argv){
  verify(rejectedMetalSupport>=2,"CPU-only host rejects optional GPU extensions without preventing discovery");
 #endif
  rejectMetalSupport=false;verify(plugin->mainEntry(kOfxActionDescribe,handle,nullptr,nullptr)==kOfxStatOK,"GPU-capable descriptor also accepted");
- verify(plugin->mainEntry(kOfxImageEffectActionDescribeInContext,handle,ip,nullptr)==0,"context");verify(e.parameters.size()==38,"all controls, groups and pages exposed");for(auto pg:{"page_cleaning","page_recovery","page_view"})verify(e.parameters.count(pg)==1,"inspector page defined");for(auto g:{"detection","processing","safeguards"})verify(e.parameters.count(g)==1,"control group defined");verify(e.parameters["sensitivity"].props.strings[kOfxParamPropParent]==std::vector<std::string>{"detection"},"controls are grouped");verify(plugin->mainEntry(kOfxActionCreateInstance,handle,nullptr,nullptr)==0,"create");
+ verify(plugin->mainEntry(kOfxImageEffectActionDescribeInContext,handle,ip,nullptr)==0,"context");verify(e.parameters.size()==64,"all controls, groups and pages exposed");verify(e.parameters.count("page_paint")==0&&e.parameters["paint"].props.ints[kOfxParamPropSecret]==std::vector<int>{1}&&e.parameters["paint_tool"].props.ints[kOfxParamPropSecret]==std::vector<int>{1},"viewer painting hidden outside Resolve");verify(e.props.pointers.count(kOfxImageEffectPluginPropOverlayInteractV1)==0,"no viewer overlay outside Resolve");for(auto pg:{"page_cleaning","page_recovery","page_view"})verify(e.parameters.count(pg)==1,"inspector page defined");for(auto g:{"detection","processing","safeguards"})verify(e.parameters.count(g)==1,"control group defined");verify(e.parameters["sensitivity"].props.strings[kOfxParamPropParent]==std::vector<std::string>{"detection"},"controls are grouped");verify(plugin->mainEntry(kOfxActionCreateInstance,handle,nullptr,nullptr)==0,"create");
  // ADR_TEST_CONTROLS="name=value;...": render with these control values (by OFX parameter name) instead of the defaults.
  if(const char*overrides=std::getenv("ADR_TEST_CONTROLS")){std::string list=overrides;size_t start=0;while(start<list.size()){size_t end=list.find(';',start);if(end==std::string::npos)end=list.size();std::string item=list.substr(start,end-start);start=end+1;if(item.empty())continue;auto eq=item.find('=');verify(eq!=std::string::npos,"ADR_TEST_CONTROLS item needs name=value");auto it=e.parameters.find(item.substr(0,eq));verify(it!=e.parameters.end(),"ADR_TEST_CONTROLS names an existing control");const double v=std::stod(item.substr(eq+1));if(it->second.choice)setInt(H(it->second.props),kOfxParamPropDefault,0,int(v));else setDouble(H(it->second.props),kOfxParamPropDefault,0,v);std::cout<<"control "<<item<<"\n";}}
- double range[]={100,100.+count-1};setDoubleN(H(e.source.props),kOfxImageEffectPropFrameRange,2,range);setDouble(H(e.source.props),kOfxImageEffectPropFrameRate,0,24);
+ double range[]={100,100.+count-1};setDoubleN(H(e.source.props),kOfxImageEffectPropFrameRange,2,range);setDouble(H(e.source.props),kOfxImageEffectPropFrameRate,0,24);setDouble(H(e.props),kOfxImageEffectPropFrameRate,0,24);
  for(int f=0;f<count;++f){e.source.images[f+100]=frameImage(sourcePixels,f,w,h,f%2,false);e.output.images[f+100]=frameImage(sourcePixels,f,w,h,f%2==0,true);}
  double scale[]={1,1};setDoubleN(ip,kOfxImageEffectPropRenderScale,2,scale);int bounds[]={-7,11,w-7,h+11};setIntN(ip,kOfxImageEffectPropRenderWindow,4,bounds);setString(ip,kOfxImageEffectPropFieldToRender,0,kOfxImageFieldNone);
  auto renderFrame=[&](int f){setDouble(ip,kOfxPropTime,0,f+100);Properties needed;verify(plugin->mainEntry(kOfxImageEffectActionGetFramesNeeded,handle,ip,H(needed))==kOfxStatOK,"query actual render dependencies");auto range=needed.doubles["OfxImageClipPropFrameRange_Source"];verify(range.size()==2,"one declared source interval");declaredFrameRange[0]=range[0];declaredFrameRange[1]=range[1];enforceFrameRange=true;auto status=plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr);if(status)std::cerr<<lastHostMessage<<'\n';verify(status==0,"engine render");Image result(reinterpret_cast<OfxImageClipHandle>(&e.output),f+100);Image original(reinterpret_cast<OfxImageClipHandle>(&e.source),f+100);for(int y=0;y<h;++y)for(int x=0;x<w;++x){for(int c=0;c<3;++c)verify(result.read(x,y,c)==targetPixels[((size_t(f)*h+y)*w+x)*3+c],"engine RGB equality");verify(result.read(x,y,3)==original.read(x,y,3),"alpha preservation");}for(int y=0;y<h;++y)for(int pad=0;pad<5;++pad)verify(e.output.images[f+100]->backing[size_t(y)*(w*4+5)+w*4+pad]==-1234,"padding preservation");std::cout<<"frame "<<f<<" exact\n";};
@@ -168,6 +181,55 @@ int main(int argc,char**argv){
  for(int f=0;f<count;++f){renderFrame(f);auto before=instance(handle).sequence;verify(plugin->mainEntry(kOfxImageEffectActionEndSequenceRender,handle,ip,nullptr)==0,"end bracket");verify(instance(handle).sequence==before,"end bracket preserves bounded history");}
  verify(messageCalls==0,"normal rendering does not call host logging or UI callbacks");
  verify(plugin->mainEntry(kOfxActionPurgeCaches,handle,nullptr,nullptr)==kOfxStatOK,"purge caches");verify(!instance(handle).sequence,"purge releases live sequence");renderFrame(count/2);
+ // Paint: a hard rectangle on one frame. Recovery: the source inside, the exact repair outside.
+ // Spanish dirt removal: the repair inside only; with nothing painted, the source everywhere.
+ {
+  const int f=3;paint::Document d;d.width=w;d.height=h;d.nextId=2;paint::Stroke s;s.id=1;s.first=s.last=100+f;s.shape=paint::Shape::Rectangle;s.softness=0;s.points={{.25,.25,1},{.5,.75,1}};d.strokes.push_back(s);
+  auto&data=e.parameters["paint_data"].props.strings[kOfxParamPropDefault];auto&mode=e.parameters["mask_mode"].props.ints[kOfxParamPropDefault];
+  auto inside=[&](int x,int y){const double px=x+.5,py=h-1-y+.5;return px>.25*w&&px<.5*w&&py>.25*h&&py<.75*h;};
+  auto paintRender=[&](int frame,int spanish,const char*name){
+   mode={spanish};setDouble(ip,kOfxPropTime,0,frame+100);Properties needed;verify(plugin->mainEntry(kOfxImageEffectActionGetFramesNeeded,handle,ip,H(needed))==kOfxStatOK,"paint frames needed");
+   declaredFrameRange[0]=needed.doubles["OfxImageClipPropFrameRange_Source"][0];declaredFrameRange[1]=needed.doubles["OfxImageClipPropFrameRange_Source"][1];
+   verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)==0,name);
+   Image result(reinterpret_cast<OfxImageClipHandle>(&e.output),frame+100);size_t in=0,repaired=0;
+   for(int y=0;y<h;++y)for(int x=0;x<w;++x){const bool painted=frame==f&&inside(x,y);const bool repair=spanish?painted:!painted;if(painted)++in;
+    for(int c=0;c<3;++c){const size_t k=((size_t(frame)*h+y)*w+x)*3+c;const float want=repair?targetPixels[k]:sourcePixels[k];verify(result.read(x,y,c)==want,name);}
+    if(repair&&targetPixels[((size_t(frame)*h+y)*w+x)*3]!=sourcePixels[((size_t(frame)*h+y)*w+x)*3])++repaired;}
+   std::cout<<name<<": "<<in<<" painted pixels, "<<repaired<<" repaired pixels exact\n";
+  };
+  data={paint::encode(d)};
+  paintRender(f,0,"paint recovery rectangle");paintRender(f-1,0,"paint on another frame changes nothing");
+  paintRender(f,1,"paint Spanish dirt removal rectangle");paintRender(f+1,1,"Spanish dirt removal with nothing painted");
+  data={""};mode={0};renderFrame(f);
+ }
+
+ // A finished processed input recovers a separately prepared original. No temporal
+ // fetch or cleaning sequence is allowed on this route, including after brush edits.
+ {
+  const auto folder=logFolder/"prepared-original";std::vector<float> original(size_t(w)*h*3,.375f);
+  paint_source::writeSourceInfo(folder.string(),w,h,24);paint_source::write(folder.string(),5,w,h,original,original);
+  {std::ofstream marker(folder/"source-ready.txt");marker<<"ADRREADY1 5 1\n";}
+  setInt(H(e.parameters["paint_source_kind"].props),kOfxParamPropDefault,0,1);
+  setInt(H(e.parameters["paint_source_offset"].props),kOfxParamPropDefault,0,-95);
+  setString(H(e.parameters["paint_source_folder"].props),kOfxParamPropDefault,0,folder.string().c_str());
+  setDouble(ip,kOfxPropTime,0,100);OfxInteractSuiteV1 overlaySuite{};interacts=&overlaySuite;setString(H(hostProperties),kOfxPropName,0,"DaVinciResolve");
+  auto&data=e.parameters["paint_data"].props.strings[kOfxParamPropDefault];
+  paint::Document doc;doc.width=w;doc.height=h;doc.nextId=2;paint::Stroke stroke;stroke.id=1;stroke.first=stroke.last=100;stroke.shape=paint::Shape::Rectangle;stroke.softness=0;stroke.points={{-1,-1,1},{2,2,1}};doc.strokes.push_back(stroke);
+  for(int spanish:{0,1})for(int painted:{0,1}){
+   data={painted?paint::encode(doc):""};setInt(H(e.parameters["mask_mode"].props),kOfxParamPropDefault,0,spanish);
+   Properties needed;verify(plugin->mainEntry(kOfxImageEffectActionGetFramesNeeded,handle,ip,H(needed))==0,"prepared dependencies");
+   verify(needed.doubles["OfxImageClipPropFrameRange_Source"]==std::vector<double>{100,100},"prepared input needs only the current frame");declaredFrameRange[0]=declaredFrameRange[1]=100;fetched.clear();
+   {auto status=plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr);if(status)std::cerr<<lastHostMessage<<"\n";verify(status==0,"prepared render");}
+   verify(!instance(handle).sequence&&!instance(handle).history,"prepared painting never creates the cleaning engine sequence");
+   verify(fetched==std::vector<int>{100,100},"prepared painting fetches only the processed frame");
+   Image result(reinterpret_cast<OfxImageClipHandle>(&e.output),100);const bool useOriginal=spanish?!painted:painted;
+   for(int y=0;y<h;++y)for(int x=0;x<w;++x)for(int c=0;c<3;++c)verify(result.read(x,y,c)==(useOriginal?.375f:sourcePixels[(size_t(y)*w+x)*3+c]),"prepared original/processed endpoints exact");
+  }
+  data={""};setInt(H(e.parameters["mask_mode"].props),kOfxParamPropDefault,0,0);
+  interacts=nullptr;verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)!=0,"prepared source rejected outside Resolve");
+  setInt(H(e.parameters["paint_source_kind"].props),kOfxParamPropDefault,0,0);renderFrame(0);
+  std::cout<<"Prepared original: exact Recovery/Spanish endpoints, current frame only, no engine sequence, host gating passed\n";
+ }
 
  // Progressive "Both" renders: some hosts report an inclusive full-frame window.
  setString(H(e.source.props),kOfxImageClipPropFieldOrder,0,kOfxImageFieldNone);setString(H(e.output.props),kOfxImageClipPropFieldOrder,0,kOfxImageFieldNone);setString(ip,kOfxImageEffectPropFieldToRender,0,kOfxImageFieldBoth);
@@ -239,13 +301,13 @@ int main(int argc,char**argv){
  }
  setDouble(ip,kOfxPropTime,0,100.5);verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)!=0,"fractional time rejected");
  verify(plugin->mainEntry(kOfxActionDestroyInstance,handle,nullptr,nullptr)==0,"destroy");verify(acquired==released,"all image handles released");verify(undeclaredFetches==0,"all source fetches inside actual render declaration");verify(plugin->mainEntry(kOfxActionUnload,nullptr,nullptr,nullptr)==0,"unload");
- {std::vector<std::filesystem::path> logs;for(auto&f:std::filesystem::directory_iterator(logFolder))logs.push_back(f.path());verify(logs.size()==1,"one diagnostic log per process");
+ {std::vector<std::filesystem::path> logs;for(auto&f:std::filesystem::directory_iterator(logFolder))if(f.is_regular_file())logs.push_back(f.path());verify(logs.size()==1,"one diagnostic log per process");
   std::string text;{std::ifstream in(logs[0]);text.assign(std::istreambuf_iterator<char>(in),std::istreambuf_iterator<char>());}
   for(auto want:{"Advanced Dirt Removal ","plugin binary: ","host: ","system: ","environment overrides: ","GPU: ","instance #1 created","sequence start: 512x512","frame 100 (1/21) rendered","history reset","ERROR","host failed to provide required in-range image","fractional frame times","sequence ended","instance #1 destroyed","unload"})
    if(text.find(want)==std::string::npos){std::cerr<<"FAIL: diagnostic log lacks \""<<want<<"\"\n"<<text;std::exit(1);}
   verify(lastHostMessage.find("Details in the Advanced Dirt Removal log: ")!=std::string::npos,"host error message names the log");
   environment("ADR_LOG","off");verify(plugin->mainEntry(kOfxActionLoad,nullptr,nullptr,nullptr)==0,"reload");verify(plugin->mainEntry(kOfxActionUnload,nullptr,nullptr,nullptr)==0,"unload again");
-  size_t after=0;for(auto&f:std::filesystem::directory_iterator(logFolder)){(void)f;++after;}verify(after==1,"ADR_LOG=off writes nothing");
+  size_t after=0;for(auto&f:std::filesystem::directory_iterator(logFolder)){if(f.is_regular_file())++after;}verify(after==1,"ADR_LOG=off writes nothing");
   if(std::getenv("ADR_SHOW_LOG"))std::cout<<text;
   std::cout<<"diagnostic log: "<<text.size()<<" bytes, "<<std::count(text.begin(),text.end(),'\n')<<" lines\n";std::filesystem::remove_all(logFolder);}
  std::cout<<"contract passed\n";

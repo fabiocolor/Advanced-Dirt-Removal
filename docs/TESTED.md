@@ -12,6 +12,28 @@ Version 2.0.0, November 2026. Real-footage tests use a 2368×1712 film scan
 (float EXR): 56 frames on macOS, a 12-frame excerpt on Windows and Linux,
 compared frame by frame with the macOS result.
 
+## Viewer painting — development build, 8 November 2026
+
+On the Apple M5 Pro in Resolve Studio 21.1.1, the prepared-original workflow
+captured and verified 25 frames at 1920×1080, 25 fps. Fusion renders of the
+processed baseline, rectangle recovery, Spanish dirt removal, Red difference
+and True difference matched independent pixel computations on all 25 frames.
+The final candidate also matched for round and square dabs, a feathered
+rectangle at partial opacity, and an erased region: 225 output frames in total.
+Effect reload passed after fixing reentrant parameter-write locking during
+instance initialization; a bounded contract regression covers the callbacks.
+The prepared route bypasses the cleaning engine; the contract tests verify
+current-frame-only input access and that no cleaning sequence is created.
+
+The Color viewer accepted mouse strokes, a rectangle, selection and size and
+softness-reduction keys. Strokes survived project reopening. Full Color/Edit
+interaction qualification still needs move/resize, Undo/Redo,
+held-modifier and final Mac Delete/softness-increase checks. The screen-control
+bridge could not attach to the Edit window.
+Physical tablet pressure and the new brush on Windows/Linux remain untested.
+Held strokes are static; automatic tracking is not implemented. The existing
+installers and their qualification tables below are unchanged.
+
 ## Memory fix — 8 November 2026
 
 We tested the update on macOS, Windows and Linux, including Resolve, Nuke,
