@@ -19,22 +19,37 @@ A free, open-source temporal dirt-repair plugin that anyone can build and use:
 
 See [docs/TESTED.md](docs/TESTED.md) for exactly what has been tested and
 [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md) for the 2.0.0 notes.
-The final candidate and remaining publication actions are recorded in
-[docs/RELEASE_READINESS.md](docs/RELEASE_READINESS.md).
+The current candidate and remaining integration/publication actions are
+recorded in [docs/RELEASE_READINESS.md](docs/RELEASE_READINESS.md).
 
 | Milestone | State |
 | --- | --- |
 | Engine on Metal, CUDA, OpenCL and CPU | done, byte-identical across backends and systems |
 | OFX plugin with recovery, auto recovery, Spanish dirt removal and views | done |
-| macOS: every feature in Resolve (Fusion page) and Nuke | done |
-| Windows: CUDA and OpenCL (NVIDIA and AMD), Resolve and Nuke | done |
-| Linux: CUDA and OpenCL, Resolve and Nuke | done |
-| Installers for macOS, Windows and Linux | built and tested; macOS empty-target install and installed Resolve renders now pass |
+| Initial macOS host qualification: Resolve Fusion and Nuke features | done; memory-candidate scope is documented separately below |
+| Initial Windows qualification: NVIDIA/AMD, Resolve and Nuke | done; memory-candidate scope is documented separately below |
+| Initial Linux qualification: CUDA/OpenCL, Resolve and Nuke | done; memory-candidate scope is documented separately below |
+| Installers for macOS, Windows and Linux | initial candidate built and tested; rebuild and requalify after integration |
 | Resolve Color page | planned |
 | Premiere Pro / After Effects adapter | planned (the Adobe SDK is a separate download and cannot be redistributed) |
-| First public 2.0 release | waiting for the owner's review |
+| Resolve memory-usage fix | qualified on the documented GPU host paths; CPU-only host transport remains a limit |
+| Further matte recovery integration | pending; complete before pushing |
+| First public 2.0 release | held for matte recovery integration, integrated-candidate package checks and owner publication approval |
 
-## Release checklist (2.0.0)
+## Memory-fix follow-up — 8 November 2026
+
+The [memory qualification](docs/MEMORY_QUALIFICATION.md) records the completed
+candidate campaign: original engine/OFX regressions across macOS, Windows and
+Linux; licensed Windows/Linux Nuke; Pascal fallback; portable Linux ABI and
+runtime; and 28 file-format variants with 448 exact original/candidate frame
+pairs. It preserves interrupted runs and the CPU-only host-image limitation.
+The existing auto-recovery features remain implemented and tested; the further
+matte recovery integration requested before pushing is still pending.
+
+The installer table below records the earlier candidate. Those packages do
+not contain the memory fix and must be rebuilt and requalified after integration.
+
+## Initial release checklist (2.0.0, 1–2 November 2026)
 
 Pass/fail per platform; "not run" says why. Machines: macOS = Apple M5 Pro
 (Metal), macOS 27; Windows NVIDIA = Windows 11, RTX A5000 and RTX 3090;
@@ -84,9 +99,9 @@ entry points.
 | `AdvancedDirtRemoval-2.0.0-linux-x86_64.tar.gz` | `d13f028` | `10ef9b50c5bc92a59bbbe1c661b0fcaf8c1af4cf782d777e27efc0752a20f315` |
 
 The exact candidate installers are pinned in [release/2.0.0.json](release/2.0.0.json).
-Later commits change only the Linux link step, documentation and release tools,
-so the macOS and Windows plugin code is current. A new build changes the
-candidate: repeat its package/hash/host checks and update the manifest before
+The later memory-fix source changes are absent from these installers. This
+manifest is a historical qualification record, not the current release
+candidate. A new build changes the candidate: repeat its package/hash/host checks and update the manifest before
 shipping it. The sanitizer checks unpacked payloads and newly introduced
 history separately from the accepted older public history.
 
@@ -97,7 +112,9 @@ hashes match the manifest; see [docs/MAINTAINERS_RELEASE.md](docs/MAINTAINERS_RE
 
 ### Before publishing (owner)
 
-- Review the assembled candidate and the documented untested host/OS scope.
+- Complete matte recovery integration before pushing; then repeat the applicable
+  integrated-source, package, sanitizer and host checks and update the manifest.
+- Review that assembled candidate and the documented untested host/OS scope.
 - The Mac package is unsigned (the bundle is ad hoc signed). No Developer ID
   identity is installed on the build Mac. Signing/notarization can be added
   when an identity is available; the unsigned installation path is documented.

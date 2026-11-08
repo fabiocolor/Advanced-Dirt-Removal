@@ -25,7 +25,7 @@ bundle to your host's OFX plugin folder (see [INSTALL.md](INSTALL.md)).
 | `ADR_WITH_OPENCL` | OFF | OpenCL 1.2 backend (AMD, Intel and NVIDIA GPUs) |
 | `ADR_WITH_CUDA` | OFF | CUDA backend (NVIDIA, compute capability 7.5 and newer); needs the CUDA toolkit (`nvcc`) at build time |
 | `ADR_WITH_CPU` | ON | CPU fallback, used when no GPU backend can start |
-| `ADR_BUILD_TESTS` | ON | OFX contract test host (`adr_ofx_contract`) |
+| `ADR_BUILD_TESTS` | ON | OFX contract host and host-image transport tests |
 | `CMAKE_OSX_ARCHITECTURES` | `arm64;x86_64` | macOS universal binary; set `arm64` for a faster local build |
 | `ADR_CODESIGN_IDENTITY` | `-` (ad hoc) | macOS signing identity for the bundle |
 
@@ -59,6 +59,24 @@ starts. Set `ADR_BACKEND` to force one, optionally with a device index:
 `ADR_BACKEND=opencl:1`. The engine writes a diagnostic log (backend, device,
 timings and any error); `ADR_LOG=off` disables it.
 
+## Host-image transport
+
+The OFX target automatically builds Metal host-image support on macOS and
+CUDA/OpenCL host-image support on Windows/Linux. These extensions are optional
+at runtime; hosts rejecting them still discover the effect and use CPU images.
+No additional GPU SDK is needed for host-image transport. CUDA engine kernel
+compilation retains its existing toolkit requirement.
+
+`ADR_BACKEND` selects the cleaning engine, independently of how the host
+supplies images. Staging is render-scoped and host context is restored around
+engine work. See [MEMORY_QUALIFICATION.md](MEMORY_QUALIFICATION.md) for the
+validated memory behaviour and CPU-only host-path limitation.
+
+Linux builds keep the two-export OFX boundary and static C++ runtime. The
+simulated transport test explicitly links `Threads::Threads` for older glibc.
+The qualified AlmaLinux 8/GCC 14 build keeps a GLIBC 2.27 symbol ceiling;
+building on a newer distribution is not portable-build qualification.
+
 ## The auto-recovery model
 
 `ofx/resources/recovery-model.bin` holds the weights of the auto-recovery
@@ -86,6 +104,18 @@ There is no CI service. Run the checks locally before a release:
 python3 tools/check_release.py build                      # build, engine hashes on each backend, OFX contract
 python3 tools/check_release.py build --backends cuda,opencl,cpu   # e.g. on Windows or Linux
 ```
+
+Run the transport tests separately; the release-check build command above
+runs engine hashes and contracts but does not invoke CTest:
+
+```sh
+ctest --test-dir build -C Release --output-on-failure
+```
+
+`adr_host_metal_transport` uses real Metal buffers on macOS.
+`adr_host_gpu_transport` simulates CUDA/OpenCL driver calls on Windows/Linux
+and checks context restoration, staging lifetime and partial/error paths; it
+is not a substitute for native-driver host renders.
 
 `tests/engine_hashes.json` lists synthetic clips (generated deterministically
 by `adr_bench --synthetic`), control settings and the expected output hash.

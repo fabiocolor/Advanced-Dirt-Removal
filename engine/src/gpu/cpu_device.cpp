@@ -100,6 +100,11 @@ struct Fiber {
   Worker* owner = nullptr;
 #if defined(_WIN32)
   void* handle = nullptr;
+  // Pool destruction joins its worker threads before releasing these suspended
+  // fibers. Freeing the C++ wrapper alone leaves the Windows fiber stack live.
+  ~Fiber() {
+    if (handle) DeleteFiber(handle);
+  }
 #else
   void* sp = nullptr;
   std::unique_ptr<unsigned char[]> stack;

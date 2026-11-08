@@ -43,6 +43,11 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#if ADR_HOST_METAL_TRANSPORT
+#include "host_metal.h"
+#elif ADR_HOST_GPU_TRANSPORT
+#include "host_gpu.h"
+#endif
 namespace {
 OfxHost* host=nullptr;
 OfxImageEffectSuiteV1* fx=nullptr;
@@ -53,6 +58,45 @@ OfxMessageSuiteV2* persistentMessages=nullptr;
 std::mutex mutex;
 std::mutex liveInstancesMutex;
 std::set<OfxImageEffectHandle> liveInstances;
+#if ADR_HOST_METAL_TRANSPORT
+// Image fetches (including recovery and prefetch) execute on the host render
+// thread. Nested upstream renders restore its previous transport context.
+thread_local void* hostMetalQueue=nullptr;
+struct HostMetalScope {
+ void* previous=hostMetalQueue;
+ explicit HostMetalScope(OfxPropertySetHandle in) {
+  int enabled=0;prop->propGetInt(in,"OfxImageEffectPropMetalEnabled",0,&enabled);
+  hostMetalQueue=nullptr;
+  if(enabled) {
+   void* queue=nullptr;
+   if(prop->propGetPointer(in,"OfxImageEffectPropMetalCommandQueue",0,&queue)!=kOfxStatOK||!queue) {
+    hostMetalQueue=previous;
+    throw std::runtime_error("Metal host transport: missing render command queue");
+   }
+   hostMetalQueue=queue;
+  }
+ }
+ ~HostMetalScope(){hostMetalQueue=previous;}
+};
+#endif
+#if ADR_HOST_GPU_TRANSPORT
+struct HostGpuScope:adr_host::GpuScope {
+ struct Request {adr_host::GpuBackend backend;void* queue;};
+ static Request request(OfxPropertySetHandle in){
+  int cuda=0,cl=0,metal=0;
+  prop->propGetInt(in,"OfxImageEffectPropCudaEnabled",0,&cuda);
+  prop->propGetInt(in,"OfxImageEffectPropOpenCLEnabled",0,&cl);
+  prop->propGetInt(in,"OfxImageEffectPropMetalEnabled",0,&metal);
+  if(metal||(cuda&&cl))throw std::runtime_error("Unsupported or conflicting host GPU transport request");
+  void* queue=nullptr;
+  if(cuda||cl){const char* key=cuda?"OfxImageEffectPropCudaStream":"OfxImageEffectPropOpenCLCommandQueue";
+   if(prop->propGetPointer(in,key,0,&queue)!=kOfxStatOK||(cl&&!queue))throw std::runtime_error("GPU host transport: missing host stream/queue");}
+  return {cuda?adr_host::GpuBackend::Cuda:cl?adr_host::GpuBackend::OpenCL:adr_host::GpuBackend::Cpu,queue};
+ }
+ explicit HostGpuScope(Request r):adr_host::GpuScope(r.backend,r.queue){}
+ explicit HostGpuScope(OfxPropertySetHandle in):HostGpuScope(request(in)){}
+};
+#endif
 // Instance actions and other instances' lifecycle actions can overlap. Protect
 // only set membership here; never hold this lock while calling the host/log.
 bool isLiveInstance(OfxImageEffectHandle e){std::lock_guard<std::mutex> guard(liveInstancesMutex);return liveInstances.count(e)!=0;}
@@ -64,6 +108,14 @@ void require(bool ok,const std::string&m,OfxStatus s=kOfxStatErrFormat){if(!ok)t
 // Build the identical diagnostic only on failure; dynamic strings retain their overload.
 void require(bool ok,const char*m,OfxStatus s=kOfxStatErrFormat){if(!ok)throw Error(s,std::string(m)+" (OFX status="+std::to_string(s)+")");}
 void check(OfxStatus s,const char*m){if(s!=kOfxStatOK)throw Error(s,std::string(m)+" (OFX status="+std::to_string(s)+")");}
+void releaseHostImage(OfxPropertySetHandle image){
+ const auto status=fx->clipReleaseImage(image);
+#if ADR_HOST_GPU_TRANSPORT
+ adr_host::gpuHostReleaseStatus(status);
+#else
+ (void)status;
+#endif
+}
 std::string str(OfxPropertySetHandle p,const char*k){char*v=nullptr;check(prop->propGetString(p,k,0,&v),k);return v?v:"";}
 int integer(OfxPropertySetHandle p,const char*k,int i=0){int v=0;check(prop->propGetInt(p,k,i,&v),k);return v;}
 double number(OfxPropertySetHandle p,const char*k,int i=0){double v=0;check(prop->propGetDouble(p,k,i,&v),k);require(std::isfinite(v),std::string("nonfinite property ")+k);return v;}
@@ -114,7 +166,15 @@ uint16_t encodeHalf(float value){
 }
 struct Image {
  OfxPropertySetHandle handle=nullptr; char*data=nullptr; std::array<int,4>b{};int stride=0,channels=0,sampleBytes=0;PixelDepth depth=PixelDepth::Float;bool premult=false;
+#if ADR_HOST_METAL_TRANSPORT
+ std::unique_ptr<adr_host::MetalImage> metalImage;
+#elif ADR_HOST_GPU_TRANSPORT
+ std::unique_ptr<adr_host::GpuImage> gpuImage;
+#endif
  Image(OfxImageClipHandle clip,int t,OfxImageEffectHandle=nullptr,const char*role="probe"){
+#if ADR_HOST_GPU_TRANSPORT
+  adr_host::HostContextScope hostContext;
+#endif
   if(auto status=fx->clipGetImage(clip,t,nullptr,&handle);status!=kOfxStatOK)throw Error(status,std::string("host failed to provide required in-range image: ")+role+" frame "+std::to_string(t)+" (OFX status="+std::to_string(status)+")");
   try {
    require(handle,"null host image");
@@ -131,15 +191,51 @@ struct Image {
    require(data&&b[2]>b[0]&&b[3]>b[1]&&int64_t(b[2])-b[0]<=16384&&int64_t(b[3])-b[1]<=16384,"invalid image bounds/data");
    require(std::abs(int64_t(stride))>=int64_t(width())*channels*sampleBytes,"insufficient rowBytes");
    std::array<int,4>rod{};check(prop->propGetIntN(handle,kOfxImagePropRegionOfDefinition,4,rod.data()),"image RoD");require(rod==b,"full-frame host images required");
-  }catch(...){if(handle)fx->clipReleaseImage(handle);handle=nullptr;throw;}
+#if ADR_HOST_METAL_TRANSPORT
+   if(hostMetalQueue) {
+    require(stride>0,"Metal host transport requires positive rowBytes");
+    const size_t bytes=size_t(height()-1)*size_t(stride)+size_t(width())*channels*sampleBytes;
+    metalImage=adr_host::stageMetalImage(hostMetalQueue,data,bytes,std::strcmp(role,"output")!=0);
+    data=metalImage->data();
+   }
+#elif ADR_HOST_GPU_TRANSPORT
+   if(adr_host::gpuTransportActive()){
+    require(stride>0,"GPU host transport requires positive rowBytes");
+    const size_t bytes=size_t(height()-1)*size_t(stride)+size_t(width())*channels*sampleBytes;
+    gpuImage=adr_host::stageGpuImage(data,bytes,std::strcmp(role,"output")!=0);data=gpuImage->data();
+   }
+#endif
+  }catch(...){if(handle)releaseHostImage(handle);handle=nullptr;throw;}
  }
- ~Image(){if(handle)fx->clipReleaseImage(handle);} Image(const Image&)=delete;
+ ~Image(){
+#if ADR_HOST_GPU_TRANSPORT
+  // Destruction cannot throw while unwinding an acquisition/render error.
+  try{adr_host::HostContextScope hostContext;if(handle)releaseHostImage(handle);}catch(...){if(handle)releaseHostImage(handle);}
+#else
+  if(handle)releaseHostImage(handle);
+#endif
+ } Image(const Image&)=delete;
  int width()const{return b[2]-b[0];}int height()const{return b[3]-b[1];}
  char*row(int topdown)const{return data+int64_t(height()-1-topdown)*stride;}
  char*sample(int x,int y,int c)const{return row(y)+(int64_t(x)*channels+c)*sampleBytes;}
  float read(int x,int y,int c)const{if(sampleBytes==4){float v;std::memcpy(&v,sample(x,y,c),4);return v;}uint16_t v;std::memcpy(&v,sample(x,y,c),2);return depth==PixelDepth::Half?decodeHalf(v):decodeShort(v);}
  bool opaque(int x,int y)const{if(sampleBytes==4)return read(x,y,3)==1.f;uint16_t v;std::memcpy(&v,sample(x,y,3),2);return v==(depth==PixelDepth::Half?0x3c00u:65535u);}
  void write(int x,int y,int c,float v)const{if(sampleBytes==4)std::memcpy(sample(x,y,c),&v,4);else{auto q=depth==PixelDepth::Half?encodeHalf(v):encodeShort(v);std::memcpy(sample(x,y,c),&q,2);}}
+ void publish(const std::array<int,4>& window) {
+#if ADR_HOST_METAL_TRANSPORT
+  if(metalImage) {
+   const size_t start=size_t(window[1]-b[1])*size_t(stride)+size_t(window[0]-b[0])*channels*sampleBytes;
+   metalImage->uploadRows(start,size_t(stride),size_t(window[2]-window[0])*channels*sampleBytes,size_t(window[3]-window[1]));
+  }
+#elif ADR_HOST_GPU_TRANSPORT
+  if(gpuImage){
+   const size_t start=size_t(window[1]-b[1])*size_t(stride)+size_t(window[0]-b[0])*channels*sampleBytes;
+   gpuImage->uploadRows(start,size_t(stride),size_t(window[2]-window[0])*channels*sampleBytes,size_t(window[3]-window[1]));
+  }
+#else
+  (void)window;
+#endif
+ }
 };
 struct Control {const char*name;const char*label;bool boolean;double initial,maximum;int minimum=0;const char*const* choices=nullptr;bool integral=false;const char*hint=nullptr;const char*group=nullptr;};
 const char*const analyseChoices[]={"Luma","RGB"};
@@ -598,16 +694,34 @@ void calculateShot(OfxImageEffectHandle e,Instance&i){
 }
 // The optional Mask input as coverage m and stroke colour s (white 1, black 0) per source pixel, top-down.
 bool readMask(Instance&i,int time,int w,int h,const std::array<int,4>&bounds,std::vector<float>&m,std::vector<float>&s){
+#if ADR_HOST_GPU_TRANSPORT
+ adr_host::HostContextScope hostContext;
+#endif
  if(!i.mask)return false;
  OfxPropertySetHandle cp=nullptr;if(fx->clipGetPropertySet(i.mask,&cp)!=kOfxStatOK)return false;int connected=0;prop->propGetInt(cp,kOfxImageClipPropConnected,0,&connected);if(!connected)return false;
  OfxPropertySetHandle img=nullptr;if(fx->clipGetImage(i.mask,time,nullptr,&img)!=kOfxStatOK||!img)return false;
- struct Release{OfxPropertySetHandle h;~Release(){fx->clipReleaseImage(h);}}release{img};
+ struct Release{OfxPropertySetHandle h;~Release(){releaseHostImage(h);}}release{img};
  const std::string depth=str(img,kOfxImageEffectPropPixelDepth),comp=str(img,kOfxImageEffectPropComponents);
  const int ch=comp==kOfxImageComponentRGBA?4:comp==kOfxImageComponentRGB?3:comp==kOfxImageComponentAlpha?1:0;
  const int bytes=depth==kOfxBitDepthFloat?4:depth==kOfxBitDepthHalf||depth==kOfxBitDepthShort?2:depth==kOfxBitDepthByte?1:0;
  require(ch&&bytes,"Mask input: unsupported image format",kOfxStatFailed);
  std::array<int,4> mb{};check(prop->propGetIntN(img,kOfxImagePropBounds,4,mb.data()),"mask bounds");const int stride=integer(img,kOfxImagePropRowBytes);
  void*data=nullptr;check(prop->propGetPointer(img,kOfxImagePropData,0,&data),"mask pixels");
+#if ADR_HOST_METAL_TRANSPORT
+ std::unique_ptr<adr_host::MetalImage> metalMask;
+ if(hostMetalQueue) {
+  require(mb[2]>mb[0]&&mb[3]>mb[1]&&int64_t(mb[2])-mb[0]<=16384&&int64_t(mb[3])-mb[1]<=16384&&stride>0&&int64_t(stride)>=int64_t(mb[2]-mb[0])*ch*bytes,"Metal mask: invalid bounds/rowBytes");
+  const size_t length=size_t(mb[3]-mb[1]-1)*size_t(stride)+size_t(mb[2]-mb[0])*ch*bytes;
+  metalMask=adr_host::stageMetalImage(hostMetalQueue,data,length,true);data=metalMask->data();
+ }
+#elif ADR_HOST_GPU_TRANSPORT
+ std::unique_ptr<adr_host::GpuImage> gpuMask;
+ if(adr_host::gpuTransportActive()){
+  require(mb[2]>mb[0]&&mb[3]>mb[1]&&int64_t(mb[2])-mb[0]<=16384&&int64_t(mb[3])-mb[1]<=16384&&stride>0&&int64_t(stride)>=int64_t(mb[2]-mb[0])*ch*bytes,"GPU mask: invalid bounds/rowBytes");
+  const size_t length=size_t(mb[3]-mb[1]-1)*size_t(stride)+size_t(mb[2]-mb[0])*ch*bytes;
+  gpuMask=adr_host::stageGpuImage(data,length,true);data=gpuMask->data();
+ }
+#endif
  auto val=[&](const char*px,int c)->float{const char*q=px+c*bytes;if(bytes==4){float v;std::memcpy(&v,q,4);return v;}if(bytes==1)return uint8_t(*q)/255.f;uint16_t v;std::memcpy(&v,q,2);return depth==kOfxBitDepthHalf?decodeHalf(v):v/65535.f;};
  m.assign(size_t(w)*h,0.f);s.assign(size_t(w)*h,1.f);
  // On canvas hosts the mask is read at the same pixel position (outside its window is 0). On
@@ -656,6 +770,13 @@ void finish(const Settings&s,int time,int w,int h,const std::vector<float>&src,c
 OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
  auto&i=instance(e);
  try{
+#if ADR_HOST_METAL_TRANSPORT
+  HostMetalScope transport(in);
+  if(hostMetalQueue&&i.rendered==0)adrlog::info(i.label()+" using Metal host image transport (engine unchanged)");
+#elif ADR_HOST_GPU_TRANSPORT
+  HostGpuScope transport(in);
+  if(adr_host::gpuTransportActive()&&i.rendered==0)adrlog::info(i.label()+" using "+adr_host::gpuTransportName()+" host image transport (engine unchanged)");
+#endif
   if(persistentMessages)persistentMessages->clearPersistentMessage(e);
   scaleOne(in);int time=frameTime(in);auto range=sourceRange(i);require(time>=range[0]&&time<=range[1],"time outside source");
   Image source(i.source,time,e,"current"),output(i.output,time,e,"output");int w=source.width(),h=source.height();
@@ -770,6 +891,7 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
     }
    }
   });
+  output.publish(window);
   trace(&i,time-range[0],-1,"write",std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-tw).count());
   return kOfxStatOK;
  }catch(...){i.close();throw;}
@@ -813,9 +935,25 @@ OfxStatus entry(const char*action,const void*handle,OfxPropertySetHandle in,OfxP
    return kOfxStatOK;}}
  if(!std::strcmp(action,kOfxActionInstanceChanged)&&!invalidatesHistory(in))return kOfxStatReplyDefault;
  if(perInstance)lock=std::unique_lock<std::mutex>(instance(e).lock);else if(!metadata)lock=std::unique_lock<std::mutex>(mutex);
+#if ADR_HOST_GPU_TRANSPORT
+ // Purge/unload can free CUDA engine resources too. Preserve the caller's
+ // context without adding driver operations to reentrant metadata actions.
+ adr_host::GpuScope lifecycleTransport(adr_host::GpuBackend::Cpu,nullptr,!std::strcmp(action,kOfxActionUnload)||!std::strcmp(action,kOfxActionPurgeCaches),!std::strcmp(action,kOfxActionUnload));
+#endif
  if(!std::strcmp(action,kOfxActionLoad)){require(host,"missing host");fx=(OfxImageEffectSuiteV1*)host->fetchSuite(host->host,kOfxImageEffectSuite,1);prop=(OfxPropertySuiteV1*)host->fetchSuite(host->host,kOfxPropertySuite,1);params=(OfxParameterSuiteV1*)host->fetchSuite(host->host,kOfxParameterSuite,1);messages=(OfxMessageSuiteV1*)host->fetchSuite(host->host,kOfxMessageSuite,1);persistentMessages=(OfxMessageSuiteV2*)host->fetchSuite(host->host,kOfxMessageSuite,2);require(fx&&prop&&params,"required OFX suites unavailable",kOfxStatErrMissingHostFeature);logStartup();return kOfxStatOK;}
  if(!std::strcmp(action,kOfxActionUnload)){if(engineContext){uint64_t a=0,p=0;adr_context_memory(engineContext,&a,&p);adrlog::info("unload: GPU memory peak "+std::to_string(p>>20)+" MiB");adr_context_destroy(engineContext);}else adrlog::info("unload");engineContext=nullptr;adrlog::close();return kOfxStatOK;}
- if(!std::strcmp(action,kOfxActionDescribe)){auto p=properties(e);ss(p,kOfxPropLabel,"Advanced Dirt Removal");ss(p,kOfxImageEffectPluginPropGrouping,"FabioColor");{auto status=prop->propSetString(p,kOfxPropPluginDescription,0,("Open-source temporal dirt and dust removal for film scans (Metal, CUDA, OpenCL or CPU). Works on the RGB values as delivered; review moving shots before delivery."+(adrlog::path().empty()?std::string():" Diagnostic log: "+adrlog::path())).c_str());if(status!=kOfxStatErrUnknown)check(status,"optional plugin description");}ss(p,kOfxImageEffectPropSupportedContexts,kOfxImageEffectContextFilter);ss(p,kOfxImageEffectPropSupportedPixelDepths,kOfxBitDepthFloat,0);ss(p,kOfxImageEffectPropSupportedPixelDepths,kOfxBitDepthHalf,1);ss(p,kOfxImageEffectPropSupportedPixelDepths,kOfxBitDepthShort,2);ss(p,kOfxImageEffectPluginRenderThreadSafety,kOfxImageEffectRenderInstanceSafe);si(p,kOfxImageEffectPluginPropHostFrameThreading,0);si(p,kOfxImageEffectPropSupportsTiles,0);si(p,kOfxImageEffectPropSupportsMultiResolution,0);si(p,kOfxImageEffectPropTemporalClipAccess,1);si(p,kOfxImageEffectPropSupportsMultipleClipPARs,0);si(p,kOfxImageEffectPropSupportsMultipleClipDepths,0);return kOfxStatOK;}
+ if(!std::strcmp(action,kOfxActionDescribe)){auto p=properties(e);
+#if ADR_HOST_METAL_TRANSPORT
+ // GPU extensions are optional. CPU-only hosts may reject this property;
+ // they must still be able to discover and render the existing CPU path.
+ {auto s=prop->propSetString(p,"OfxImageEffectPropMetalRenderSupported",0,"true");
+  if(s!=kOfxStatErrUnknown&&s!=kOfxStatErrUnsupported)check(s,"optional Metal host transport");}
+#elif ADR_HOST_GPU_TRANSPORT
+ for(auto key:{"OfxImageEffectPropCudaRenderSupported","OfxImageEffectPropCudaStreamSupported","OfxImageEffectPropOpenCLRenderSupported"}){
+  const auto status=prop->propSetString(p,key,0,"true");if(status!=kOfxStatErrUnknown&&status!=kOfxStatErrUnsupported)check(status,"optional GPU host transport");
+ }
+#endif
+ss(p,kOfxPropLabel,"Advanced Dirt Removal");ss(p,kOfxImageEffectPluginPropGrouping,"FabioColor");{auto status=prop->propSetString(p,kOfxPropPluginDescription,0,("Open-source temporal dirt and dust removal for film scans (Metal, CUDA, OpenCL or CPU). Works on the RGB values as delivered; review moving shots before delivery."+(adrlog::path().empty()?std::string():" Diagnostic log: "+adrlog::path())).c_str());if(status!=kOfxStatErrUnknown)check(status,"optional plugin description");}ss(p,kOfxImageEffectPropSupportedContexts,kOfxImageEffectContextFilter);ss(p,kOfxImageEffectPropSupportedPixelDepths,kOfxBitDepthFloat,0);ss(p,kOfxImageEffectPropSupportedPixelDepths,kOfxBitDepthHalf,1);ss(p,kOfxImageEffectPropSupportedPixelDepths,kOfxBitDepthShort,2);ss(p,kOfxImageEffectPluginRenderThreadSafety,kOfxImageEffectRenderInstanceSafe);si(p,kOfxImageEffectPluginPropHostFrameThreading,0);si(p,kOfxImageEffectPropSupportsTiles,0);si(p,kOfxImageEffectPropSupportsMultiResolution,0);si(p,kOfxImageEffectPropTemporalClipAccess,1);si(p,kOfxImageEffectPropSupportsMultipleClipPARs,0);si(p,kOfxImageEffectPropSupportsMultipleClipDepths,0);return kOfxStatOK;}
  if(!std::strcmp(action,kOfxImageEffectActionDescribeInContext)){require(str(in,kOfxImageEffectPropContext)==kOfxImageEffectContextFilter,"Filter context required");for(auto name:{"Source","Output"}){OfxPropertySetHandle p;check(fx->clipDefine(e,name,&p),"define clip");ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGB,0);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGBA,1);si(p,kOfxImageEffectPropSupportsTiles,0);if(!std::strcmp(name,"Source"))si(p,kOfxImageEffectPropTemporalClipAccess,1);}{OfxPropertySetHandle p;check(fx->clipDefine(e,"Mask",&p),"define mask clip");ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentAlpha,0);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGBA,1);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGB,2);si(p,kOfxImageClipPropOptional,1);si(p,kOfxImageClipPropIsMask,1);si(p,kOfxImageEffectPropSupportsTiles,0);}OfxParamSetHandle ps;check(fx->getParamSet(e,&ps),"parameters");defineEncodingParam(ps);std::set<std::string> definedGroups;for(auto&c:controls){if(c.group&&!definedGroups.count("top")){definedGroups.insert("top");defineExtraParams(ps,true);}if(c.group&&definedGroups.insert(c.group).second)for(auto&g:groups)if(!std::strcmp(g.name,c.group)){OfxPropertySetHandle gp;check(params->paramDefine(ps,kOfxParamTypeGroup,g.name,&gp),"define group");ss(gp,kOfxPropLabel,g.label);si(gp,kOfxParamPropGroupOpen,!std::strcmp(g.name,"detection"));}OfxPropertySetHandle p;check(params->paramDefine(ps,c.boolean?kOfxParamTypeBoolean:c.choices?kOfxParamTypeChoice:c.integral?kOfxParamTypeInteger:kOfxParamTypeDouble,c.name,&p),"define control");ss(p,kOfxPropLabel,c.label);if(c.group)ss(p,kOfxParamPropParent,c.group);if(!std::strcmp(c.name,"enabled"))si(p,kOfxParamPropSecret,1);if(c.hint)ss(p,kOfxParamPropHint,c.hint);si(p,kOfxParamPropAnimates,0);if(c.boolean||c.integral){si(p,kOfxParamPropDefault,int(c.initial));if(c.choices){for(int index=0;index<=int(c.maximum);++index)ss(p,kOfxParamPropChoiceOption,c.choices[index],index);}else if(c.integral){for(auto key:{kOfxParamPropMin,kOfxParamPropDisplayMin})si(p,key,c.minimum);for(auto key:{kOfxParamPropMax,kOfxParamPropDisplayMax})si(p,key,int(c.maximum));}}else{for(auto v:{std::make_pair(kOfxParamPropDefault,c.initial),{kOfxParamPropMin,0.},{kOfxParamPropMax,c.maximum},{kOfxParamPropDisplayMin,0.},{kOfxParamPropDisplayMax,c.maximum}})check(prop->propSetDouble(p,v.first,0,v.second),"control range");}}defineExtraParams(ps,false);definePages(ps);
  return kOfxStatOK;}
  if(!std::strcmp(action,kOfxActionCreateInstance)){auto i=std::make_unique<Instance>();check(fx->clipGetHandle(e,"Source",&i->source,nullptr),"source clip");check(fx->clipGetHandle(e,"Output",&i->output,nullptr),"output clip");OfxParamSetHandle ps;check(fx->getParamSet(e,&ps),"parameters");for(auto&c:controls)check(params->paramGetHandle(ps,c.name,&i->parameters[c.name],nullptr),"control handle");check(params->paramGetHandle(ps,"encoding",&i->parameters["encoding"],nullptr),"encoding handle");for(auto&x:extras)check(params->paramGetHandle(ps,x.name,&i->parameters[x.name],nullptr),"extra handle");if(fx->clipGetHandle(e,"Mask",&i->mask,nullptr)!=kOfxStatOK)i->mask=nullptr;check(prop->propSetPointer(properties(e),kOfxPropInstanceData,0,i.get()),"instance data");static int created=0;i->id=++created;trackInstance(e);adrlog::info(i->label()+" created");try{updateRecoveryEnabled(*i);}catch(...){}i.release();return kOfxStatOK;}

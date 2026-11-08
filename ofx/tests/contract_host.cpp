@@ -24,8 +24,10 @@ OfxStatus get##NAME(OfxPropertySetHandle p,const char*k,int i,TYPE*v){auto it=P(
 SCALAR(Int,int,ints) SCALAR(Double,double,doubles) SCALAR(Pointer,void*,pointers)
 std::function<void()> duringImage;
 bool rejectLabel=false;int descriptorMessages=0,messageCalls=0;
+bool rejectMetalSupport=true;int rejectedMetalSupport=0;
+
 OfxPropertySetHandle strictPreferences=nullptr;int forbiddenPreferenceWrites=0;
-OfxStatus setString(OfxPropertySetHandle p,const char*k,int i,const char*v){if(std::strcmp(k,kOfxPropPluginDescription)==0||(rejectLabel&&std::strcmp(k,kOfxPropLabel)==0))return kOfxStatErrUnknown;if(p==strictPreferences&&(std::string(k).find("OfxImageClipPropDepth_")==0||std::string(k).find("OfxImageClipPropComponents_")==0)){++forbiddenPreferenceWrites;return kOfxStatErrValue;}auto&a=P(p).strings[k];a.resize(std::max(a.size(),size_t(i+1)));a[i]=v;return 0;}
+OfxStatus setString(OfxPropertySetHandle p,const char*k,int i,const char*v){if(rejectMetalSupport&&(!std::strcmp(k,"OfxImageEffectPropMetalRenderSupported")||!std::strcmp(k,"OfxImageEffectPropCudaRenderSupported")||!std::strcmp(k,"OfxImageEffectPropCudaStreamSupported")||!std::strcmp(k,"OfxImageEffectPropOpenCLRenderSupported"))){++rejectedMetalSupport;return kOfxStatErrUnknown;}if(std::strcmp(k,kOfxPropPluginDescription)==0||(rejectLabel&&std::strcmp(k,kOfxPropLabel)==0))return kOfxStatErrUnknown;if(p==strictPreferences&&(std::string(k).find("OfxImageClipPropDepth_")==0||std::string(k).find("OfxImageClipPropComponents_")==0)){++forbiddenPreferenceWrites;return kOfxStatErrValue;}auto&a=P(p).strings[k];a.resize(std::max(a.size(),size_t(i+1)));a[i]=v;return 0;}
 OfxStatus getString(OfxPropertySetHandle p,const char*k,int i,char**v){auto it=P(p).strings.find(k);if(it==P(p).strings.end()||i<0||i>=int(it->second.size()))return kOfxStatErrUnknown;*v=it->second[i].data();return 0;}
 #define ARRAY(NAME,TYPE) \
 OfxStatus set##NAME##N(OfxPropertySetHandle p,const char*k,int n,const TYPE*v){for(int i=0;i<n;++i)set##NAME(p,k,i,v[i]);return 0;} \
@@ -36,13 +38,14 @@ struct TestImage {Properties props;std::vector<float> backing;};
 struct Clip {Properties props;std::map<int,std::unique_ptr<TestImage>> images;bool output=false;};
 struct Effect {Properties props;std::map<std::string,Parameter> parameters;Clip source,output;};
 Effect& E(OfxImageEffectHandle e){return *reinterpret_cast<Effect*>(e);}
+bool enforceFrameRange=false;double declaredFrameRange[2]{};int undeclaredFetches=0;
 std::vector<int> fetched;int acquired=0,released=0,abortCount=0;bool abortEnabled=false,slowImageOnce=false;int missing=-999;
 OfxStatus effectProps(OfxImageEffectHandle e,OfxPropertySetHandle*p){*p=H(E(e).props);return 0;}
 OfxStatus paramSet(OfxImageEffectHandle e,OfxParamSetHandle*p){*p=reinterpret_cast<OfxParamSetHandle>(&E(e).parameters);return 0;}
 OfxStatus defineClip(OfxImageEffectHandle e,const char*n,OfxPropertySetHandle*p){*p=H(std::string(n)=="Source"?E(e).source.props:E(e).output.props);return 0;}
 OfxStatus clipHandle(OfxImageEffectHandle e,const char*n,OfxImageClipHandle*c,OfxPropertySetHandle*p){auto&clip=std::string(n)=="Source"?E(e).source:E(e).output;*c=reinterpret_cast<OfxImageClipHandle>(&clip);if(p)*p=H(clip.props);return 0;}
 OfxStatus clipProps(OfxImageClipHandle c,OfxPropertySetHandle*p){*p=H(reinterpret_cast<Clip*>(c)->props);return 0;}
-OfxStatus getImage(OfxImageClipHandle c,double t,const OfxRectD*,OfxPropertySetHandle*p){auto&clip=*reinterpret_cast<Clip*>(c);if(duringImage){auto callback=std::move(duringImage);duringImage=nullptr;callback();}if(slowImageOnce){slowImageOnce=false;std::this_thread::sleep_for(std::chrono::milliseconds(5300));}if(!clip.output)fetched.push_back(int(t));if(!clip.output&&int(t)==missing)return kOfxStatFailed;auto it=clip.images.find(int(t));if(it==clip.images.end())return kOfxStatFailed;*p=H(it->second->props);++acquired;return 0;}
+OfxStatus getImage(OfxImageClipHandle c,double t,const OfxRectD*,OfxPropertySetHandle*p){auto&clip=*reinterpret_cast<Clip*>(c);if(!clip.output&&enforceFrameRange&&(t<declaredFrameRange[0]||t>declaredFrameRange[1])){++undeclaredFetches;std::cerr<<"FAIL: source fetch "<<t<<" outside declared range "<<declaredFrameRange[0]<<".."<<declaredFrameRange[1]<<"\n";return kOfxStatFailed;}if(duringImage){auto callback=std::move(duringImage);duringImage=nullptr;callback();}if(slowImageOnce){slowImageOnce=false;std::this_thread::sleep_for(std::chrono::milliseconds(5300));}if(!clip.output)fetched.push_back(int(t));if(!clip.output&&int(t)==missing)return kOfxStatFailed;auto it=clip.images.find(int(t));if(it==clip.images.end())return kOfxStatFailed;*p=H(it->second->props);++acquired;return 0;}
 OfxStatus releaseImage(OfxPropertySetHandle){++released;return 0;}
 OfxStatus rod(OfxImageClipHandle,double,OfxRectD*r){*r={-7,11,-3,14};return 0;}
 int aborted(OfxImageEffectHandle){return abortEnabled&&++abortCount>12;}
@@ -113,13 +116,18 @@ int main(int argc,char**argv){
  configureSuites();Properties hostProperties;OfxHost provider{H(hostProperties),fetch};auto*plugin=OfxGetPlugin(0);plugin->setHost(&provider);verify(plugin->mainEntry(kOfxActionLoad,nullptr,nullptr,nullptr)==0,"load");
  Effect e;e.output.output=true;auto handle=reinterpret_cast<OfxImageEffectHandle>(&e);Properties in,out;auto ip=H(in);setString(ip,kOfxImageEffectPropContext,0,kOfxImageEffectContextFilter);
  rejectLabel=true;verify(plugin->mainEntry(kOfxActionDescribe,handle,nullptr,nullptr)==kOfxStatErrUnknown,"descriptor rejection returns status without instance message");verify(descriptorMessages==0,"no descriptor messages");rejectLabel=false;
- verify(plugin->mainEntry(kOfxActionDescribe,handle,nullptr,nullptr)==0,"describe with absent optional description");verify(plugin->mainEntry(kOfxImageEffectActionDescribeInContext,handle,ip,nullptr)==0,"context");verify(e.parameters.size()==38,"all controls, groups and pages exposed");for(auto pg:{"page_cleaning","page_recovery","page_view"})verify(e.parameters.count(pg)==1,"inspector page defined");for(auto g:{"detection","processing","safeguards"})verify(e.parameters.count(g)==1,"control group defined");verify(e.parameters["sensitivity"].props.strings[kOfxParamPropParent]==std::vector<std::string>{"detection"},"controls are grouped");verify(plugin->mainEntry(kOfxActionCreateInstance,handle,nullptr,nullptr)==0,"create");
+ verify(plugin->mainEntry(kOfxActionDescribe,handle,nullptr,nullptr)==0,"describe with absent optional description");
+#if ADR_HOST_METAL_TRANSPORT || ADR_HOST_GPU_TRANSPORT
+ verify(rejectedMetalSupport>=2,"CPU-only host rejects optional GPU extensions without preventing discovery");
+#endif
+ rejectMetalSupport=false;verify(plugin->mainEntry(kOfxActionDescribe,handle,nullptr,nullptr)==kOfxStatOK,"GPU-capable descriptor also accepted");
+ verify(plugin->mainEntry(kOfxImageEffectActionDescribeInContext,handle,ip,nullptr)==0,"context");verify(e.parameters.size()==38,"all controls, groups and pages exposed");for(auto pg:{"page_cleaning","page_recovery","page_view"})verify(e.parameters.count(pg)==1,"inspector page defined");for(auto g:{"detection","processing","safeguards"})verify(e.parameters.count(g)==1,"control group defined");verify(e.parameters["sensitivity"].props.strings[kOfxParamPropParent]==std::vector<std::string>{"detection"},"controls are grouped");verify(plugin->mainEntry(kOfxActionCreateInstance,handle,nullptr,nullptr)==0,"create");
  // ADR_TEST_CONTROLS="name=value;...": render with these control values (by OFX parameter name) instead of the defaults.
  if(const char*overrides=std::getenv("ADR_TEST_CONTROLS")){std::string list=overrides;size_t start=0;while(start<list.size()){size_t end=list.find(';',start);if(end==std::string::npos)end=list.size();std::string item=list.substr(start,end-start);start=end+1;if(item.empty())continue;auto eq=item.find('=');verify(eq!=std::string::npos,"ADR_TEST_CONTROLS item needs name=value");auto it=e.parameters.find(item.substr(0,eq));verify(it!=e.parameters.end(),"ADR_TEST_CONTROLS names an existing control");const double v=std::stod(item.substr(eq+1));if(it->second.choice)setInt(H(it->second.props),kOfxParamPropDefault,0,int(v));else setDouble(H(it->second.props),kOfxParamPropDefault,0,v);std::cout<<"control "<<item<<"\n";}}
  double range[]={100,100.+count-1};setDoubleN(H(e.source.props),kOfxImageEffectPropFrameRange,2,range);setDouble(H(e.source.props),kOfxImageEffectPropFrameRate,0,24);
  for(int f=0;f<count;++f){e.source.images[f+100]=frameImage(sourcePixels,f,w,h,f%2,false);e.output.images[f+100]=frameImage(sourcePixels,f,w,h,f%2==0,true);}
  double scale[]={1,1};setDoubleN(ip,kOfxImageEffectPropRenderScale,2,scale);int bounds[]={-7,11,w-7,h+11};setIntN(ip,kOfxImageEffectPropRenderWindow,4,bounds);setString(ip,kOfxImageEffectPropFieldToRender,0,kOfxImageFieldNone);
- auto renderFrame=[&](int f){setDouble(ip,kOfxPropTime,0,f+100);auto status=plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr);if(status)std::cerr<<lastHostMessage<<'\n';verify(status==0,"engine render");Image result(reinterpret_cast<OfxImageClipHandle>(&e.output),f+100);Image original(reinterpret_cast<OfxImageClipHandle>(&e.source),f+100);for(int y=0;y<h;++y)for(int x=0;x<w;++x){for(int c=0;c<3;++c)verify(result.read(x,y,c)==targetPixels[((size_t(f)*h+y)*w+x)*3+c],"engine RGB equality");verify(result.read(x,y,3)==original.read(x,y,3),"alpha preservation");}for(int y=0;y<h;++y)for(int pad=0;pad<5;++pad)verify(e.output.images[f+100]->backing[size_t(y)*(w*4+5)+w*4+pad]==-1234,"padding preservation");std::cout<<"frame "<<f<<" exact\n";};
+ auto renderFrame=[&](int f){setDouble(ip,kOfxPropTime,0,f+100);Properties needed;verify(plugin->mainEntry(kOfxImageEffectActionGetFramesNeeded,handle,ip,H(needed))==kOfxStatOK,"query actual render dependencies");auto range=needed.doubles["OfxImageClipPropFrameRange_Source"];verify(range.size()==2,"one declared source interval");declaredFrameRange[0]=range[0];declaredFrameRange[1]=range[1];enforceFrameRange=true;auto status=plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr);if(status)std::cerr<<lastHostMessage<<'\n';verify(status==0,"engine render");Image result(reinterpret_cast<OfxImageClipHandle>(&e.output),f+100);Image original(reinterpret_cast<OfxImageClipHandle>(&e.source),f+100);for(int y=0;y<h;++y)for(int x=0;x<w;++x){for(int c=0;c<3;++c)verify(result.read(x,y,c)==targetPixels[((size_t(f)*h+y)*w+x)*3+c],"engine RGB equality");verify(result.read(x,y,3)==original.read(x,y,3),"alpha preservation");}for(int y=0;y<h;++y)for(int pad=0;pad<5;++pad)verify(e.output.images[f+100]->backing[size_t(y)*(w*4+5)+w*4+pad]==-1234,"padding preservation");std::cout<<"frame "<<f<<" exact\n";};
  // Reproduce Resolve's render/host lock inversion: clipGetImage cannot return
  // until another host thread finishes metadata, save or cursor callbacks on
  // this same instance. Each callback has its own two-second deadline, so the
@@ -155,8 +163,12 @@ int main(int argc,char**argv){
   std::cout<<"concurrent host metadata/save/bracket/ignored-change callbacks passed\n";
  };
  verify(e.props.strings[kOfxImageEffectPluginRenderThreadSafety][0]==kOfxImageEffectRenderInstanceSafe,"instances are protected by the plugin lock");
+ // A genuinely cold late-frame request must replay exactly and stay within its declaration.
+ renderFrame(count-1);
  for(int f=0;f<count;++f){renderFrame(f);auto before=instance(handle).sequence;verify(plugin->mainEntry(kOfxImageEffectActionEndSequenceRender,handle,ip,nullptr)==0,"end bracket");verify(instance(handle).sequence==before,"end bracket preserves bounded history");}
  verify(messageCalls==0,"normal rendering does not call host logging or UI callbacks");
+ verify(plugin->mainEntry(kOfxActionPurgeCaches,handle,nullptr,nullptr)==kOfxStatOK,"purge caches");verify(!instance(handle).sequence,"purge releases live sequence");renderFrame(count/2);
+
  // Progressive "Both" renders: some hosts report an inclusive full-frame window.
  setString(H(e.source.props),kOfxImageClipPropFieldOrder,0,kOfxImageFieldNone);setString(H(e.output.props),kOfxImageClipPropFieldOrder,0,kOfxImageFieldNone);setString(ip,kOfxImageEffectPropFieldToRender,0,kOfxImageFieldBoth);
  int inclusive[]={bounds[0],bounds[1],bounds[2]-1,bounds[3]-1};setIntN(ip,kOfxImageEffectPropRenderWindow,4,inclusive);
@@ -184,8 +196,49 @@ int main(int argc,char**argv){
  setDouble(ip,kOfxPropTime,0,100+count/2);verify(plugin->mainEntry(kOfxImageEffectActionGetFramesNeeded,handle,ip,H(out))==0,"frames needed");verify(P(H(out)).doubles["OfxImageClipPropFrameRange_Source"]==std::vector<double>({100.,double(std::min(100+count-1,104+count/2))}),"declared complete motion history");setDouble(ip,kOfxPropTime,0,99);verify(plugin->mainEntry(kOfxImageEffectActionGetFramesNeeded,handle,ip,H(out))==0&&P(H(out)).doubles["OfxImageClipPropFrameRange_Source"]==std::vector<double>({99.,99.}),"time outside the source needs only itself");
  verify(plugin->mainEntry(kOfxActionInstanceChanged,handle,ip,nullptr)==kOfxStatReplyDefault,"invalidate");verify(!instance(handle).sequence,"edited source releases the sequence");
  auto saved=e.output.images[100]->backing;missing=101;setDouble(ip,kOfxPropTime,0,100);verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)!=0,"missing temporal frame fails");verify(e.output.images[100]->backing==saved,"failure publishes no pixels");verify(!instance(handle).sequence,"failed render releases the sequence");missing=-999;
+ // Missing-image failure left no sequence: cancellation now exercises cold replay.
+ auto beforeAbort=e.output.images[count-1+100]->backing;
+ setDouble(ip,kOfxPropTime,0,count-1+100);Properties abortNeeded;
+ verify(plugin->mainEntry(kOfxImageEffectActionGetFramesNeeded,handle,ip,H(abortNeeded))==kOfxStatOK,"abort dependencies");
+ auto abortRange=abortNeeded.doubles["OfxImageClipPropFrameRange_Source"];verify(abortRange.size()==2,"abort source range");
+ declaredFrameRange[0]=abortRange[0];declaredFrameRange[1]=abortRange[1];
+ abortEnabled=true;abortCount=0;
+ verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)!=kOfxStatOK&&abortCount>12,"cold replay cancellation fails explicitly");
+ abortEnabled=false;
+ verify(e.output.images[count-1+100]->backing==beforeAbort,"cancellation publishes no pixels");verify(!instance(handle).sequence,"cancellation releases sequence");
+ renderFrame(count-1);renderFrame(0);
+ // Change the actual delivered image dimensions on this same instance. A
+ // host resize node can keep its canvas unchanged, so do not rely on that
+ // alone to exercise geometry invalidation. Compare the smaller render to
+ // a separate direct-engine sequence, then restore the existing fixture.
+ {
+  const int sw=256,sh=256;
+  std::vector<float> small(size_t(count)*sw*sh*3),expected(size_t(sw)*sh*3);
+  for(int f=0;f<count;++f)for(int y=0;y<sh;++y)for(int x=0;x<sw;++x)for(int c=0;c<3;++c)
+   small[((size_t(f)*sh+y)*sw+x)*3+c]=sourcePixels[((size_t(f)*h+y*2)*w+x*2)*3+c];
+  adr_controls controls;adr_controls_default(&controls);char error[2048]={};
+  auto* reference=adr_sequence_create(context(),&controls,sw,sh,count,error,sizeof(error));
+  verify(reference,"geometry direct-engine sequence");
+  for(;;){int output=adr_sequence_pull(reference,expected.data(),size_t(sw)*12,error,sizeof(error));
+   if(output==0)break;
+   verify(output==-1,"geometry reference pending input");
+   int next=adr_sequence_next_source(reference);verify(next>=0&&next<count,"geometry reference source");
+   verify(adr_sequence_push(reference,small.data()+size_t(next)*sw*sh*3,size_t(sw)*12,error,sizeof(error))==0,"geometry reference push");
+  }
+  adr_sequence_destroy(reference);
+  auto sourceImages=std::move(e.source.images),outputImages=std::move(e.output.images);
+  for(int f=0;f<count;++f){e.source.images[f+100]=frameImage(small,f,sw,sh,false,false);e.output.images[f+100]=frameImage(small,f,sw,sh,false,true);}
+  int smallBounds[]={-7,11,sw-7,sh+11};setIntN(ip,kOfxImageEffectPropRenderWindow,4,smallBounds);setDouble(ip,kOfxPropTime,0,100);
+  declaredFrameRange[0]=100;declaredFrameRange[1]=std::min(104,100+count-1);
+  verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)==0,"changed geometry renders");
+  {Image result(reinterpret_cast<OfxImageClipHandle>(&e.output),100);for(int y=0;y<sh;++y)for(int x=0;x<sw;++x)for(int c=0;c<3;++c)
+   verify(result.read(x,y,c)==expected[(size_t(y)*sw+x)*3+c],"changed geometry exact direct-engine pixels");}
+  verify(instance(handle).key.find("256x256")!=std::string::npos,"sequence uses changed dimensions");
+  e.source.images=std::move(sourceImages);e.output.images=std::move(outputImages);setIntN(ip,kOfxImageEffectPropRenderWindow,4,bounds);renderFrame(0);
+  std::cout<<"same-instance 512 -> 256 -> 512 geometry exact\n";
+ }
  setDouble(ip,kOfxPropTime,0,100.5);verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)!=0,"fractional time rejected");
- verify(plugin->mainEntry(kOfxActionDestroyInstance,handle,nullptr,nullptr)==0,"destroy");verify(acquired==released,"all image handles released");verify(plugin->mainEntry(kOfxActionUnload,nullptr,nullptr,nullptr)==0,"unload");
+ verify(plugin->mainEntry(kOfxActionDestroyInstance,handle,nullptr,nullptr)==0,"destroy");verify(acquired==released,"all image handles released");verify(undeclaredFetches==0,"all source fetches inside actual render declaration");verify(plugin->mainEntry(kOfxActionUnload,nullptr,nullptr,nullptr)==0,"unload");
  {std::vector<std::filesystem::path> logs;for(auto&f:std::filesystem::directory_iterator(logFolder))logs.push_back(f.path());verify(logs.size()==1,"one diagnostic log per process");
   std::string text;{std::ifstream in(logs[0]);text.assign(std::istreambuf_iterator<char>(in),std::istreambuf_iterator<char>());}
   for(auto want:{"Advanced Dirt Removal ","plugin binary: ","host: ","system: ","environment overrides: ","GPU: ","instance #1 created","sequence start: 512x512","frame 100 (1/21) rendered","history reset","ERROR","host failed to provide required in-range image","fractional frame times","sequence ended","instance #1 destroyed","unload"})
