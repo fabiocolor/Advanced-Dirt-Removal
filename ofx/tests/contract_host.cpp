@@ -53,6 +53,14 @@ OfxStatus defineParameter(OfxParamSetHandle s,const char*t,const char*n,OfxPrope
 OfxStatus parameterHandle(OfxParamSetHandle s,const char*n,OfxParamHandle*h,OfxPropertySetHandle*p){auto&v=(*reinterpret_cast<std::map<std::string,Parameter>*>(s))[n];*h=reinterpret_cast<OfxParamHandle>(&v);if(p)*p=H(v.props);return 0;}
 OfxStatus value(OfxParamHandle h,OfxTime t,...){auto&p=*reinterpret_cast<Parameter*>(h);va_list a;va_start(a,t);if(p.text){auto&s=p.props.strings[kOfxParamPropDefault];if(s.empty())s.push_back("");*va_arg(a,char**)=s[0].data();}else if(p.choice)*va_arg(a,int*)=p.props.ints[kOfxParamPropDefault][0];else *va_arg(a,double*)=p.props.doubles[kOfxParamPropDefault][0];va_end(a);return 0;}
 OfxStatus currentValue(OfxParamHandle h,...){auto&p=*reinterpret_cast<Parameter*>(h);va_list a;va_start(a,h);if(p.text){auto&v=p.props.strings[kOfxParamPropDefault];if(v.empty())v.push_back("");*va_arg(a,char**)=v[0].data();}else if(p.choice)*va_arg(a,int*)=p.props.ints[kOfxParamPropDefault][0];else *va_arg(a,double*)=p.props.doubles[kOfxParamPropDefault][0];va_end(a);return kOfxStatOK;}
+// UI writes must occur in host callbacks, even when a native key arrived first.
+bool inPaintCallback=false;int paintUndoDepth=0,paintUndoBegins=0,paintWrongContext=0,paintRedraws=0;
+OfxStatus paintSetValue(OfxParamHandle h,...){auto&p=*reinterpret_cast<Parameter*>(h);va_list a;va_start(a,h);if(p.text)p.props.strings[kOfxParamPropDefault]={va_arg(a,const char*)};else if(p.choice)p.props.ints[kOfxParamPropDefault]={va_arg(a,int)};else p.props.doubles[kOfxParamPropDefault]={va_arg(a,double)};va_end(a);return kOfxStatOK;}
+OfxStatus paintEditBegin(OfxParamSetHandle,const char*){if(!inPaintCallback){++paintWrongContext;return kOfxStatErrBadHandle;}++paintUndoDepth;++paintUndoBegins;return kOfxStatOK;}
+OfxStatus paintEditEnd(OfxParamSetHandle){if(!inPaintCallback||paintUndoDepth<=0){++paintWrongContext;return kOfxStatErrBadHandle;}--paintUndoDepth;return kOfxStatOK;}
+OfxStatus paintParameterProperties(OfxParamHandle h,OfxPropertySetHandle*p){*p=H(reinterpret_cast<Parameter*>(h)->props);return kOfxStatOK;}
+OfxStatus paintInteractProperties(OfxInteractHandle h,OfxPropertySetHandle*p){*p=reinterpret_cast<OfxPropertySetHandle>(h);return kOfxStatOK;}
+OfxStatus paintRedraw(OfxInteractHandle){++paintRedraws;return kOfxStatOK;}
 std::string lastHostMessage,lastCadenceMessage,lastRenderActionMessage;
 std::string progressiveBothMessage;
 OfxStatus message(void*handle,const char*,const char*,const char*format,...){++messageCalls;if(!isLiveInstance(reinterpret_cast<OfxImageEffectHandle>(handle)))++descriptorMessages;char buffer[4096];va_list args;va_start(args,format);std::vsnprintf(buffer,sizeof(buffer),format,args);va_end(args);lastHostMessage=buffer;if(lastHostMessage.find("Fabiocolor cadence diagnostic:")!=std::string::npos)lastCadenceMessage=buffer;if(lastHostMessage.find("Fabiocolor render action diagnostic:")!=std::string::npos)lastRenderActionMessage=buffer;if(lastHostMessage.find("Fabiocolor progressive action quirk admitted:")!=std::string::npos)progressiveBothMessage=buffer;return kOfxStatOK;}
@@ -134,7 +142,72 @@ int main(int argc,char**argv){
  verify(rejectedMetalSupport>=2,"CPU-only host rejects optional GPU extensions without preventing discovery");
 #endif
  rejectMetalSupport=false;verify(plugin->mainEntry(kOfxActionDescribe,handle,nullptr,nullptr)==kOfxStatOK,"GPU-capable descriptor also accepted");
- verify(plugin->mainEntry(kOfxImageEffectActionDescribeInContext,handle,ip,nullptr)==0,"context");verify(e.parameters.size()==64,"all controls, groups and pages exposed");verify(e.parameters.count("page_paint")==0&&e.parameters["paint"].props.ints[kOfxParamPropSecret]==std::vector<int>{1}&&e.parameters["paint_tool"].props.ints[kOfxParamPropSecret]==std::vector<int>{1},"viewer painting hidden outside Resolve");verify(e.props.pointers.count(kOfxImageEffectPluginPropOverlayInteractV1)==0,"no viewer overlay outside Resolve");for(auto pg:{"page_cleaning","page_recovery","page_view"})verify(e.parameters.count(pg)==1,"inspector page defined");for(auto g:{"detection","processing","safeguards"})verify(e.parameters.count(g)==1,"control group defined");verify(e.parameters["sensitivity"].props.strings[kOfxParamPropParent]==std::vector<std::string>{"detection"},"controls are grouped");verify(plugin->mainEntry(kOfxActionCreateInstance,handle,nullptr,nullptr)==0,"create");
+ verify(plugin->mainEntry(kOfxImageEffectActionDescribeInContext,handle,ip,nullptr)==0,"context");verify(e.parameters.size()==66,"all controls, groups and pages exposed");verify(e.parameters.count("page_paint")==0&&e.parameters["paint"].props.ints[kOfxParamPropSecret]==std::vector<int>{1}&&e.parameters["paint_tool"].props.ints[kOfxParamPropSecret]==std::vector<int>{1},"viewer painting hidden outside Resolve");verify(e.props.pointers.count(kOfxImageEffectPluginPropOverlayInteractV1)==0,"no viewer overlay outside Resolve");for(auto pg:{"page_cleaning","page_recovery","page_view"})verify(e.parameters.count(pg)==1,"inspector page defined");for(auto g:{"detection","processing","safeguards"})verify(e.parameters.count(g)==1,"control group defined");verify(e.parameters["sensitivity"].props.strings[kOfxParamPropParent]==std::vector<std::string>{"detection"},"controls are grouped");verify(plugin->mainEntry(kOfxActionCreateInstance,handle,nullptr,nullptr)==0,"create");
+ // Native keys request redraw without editing OFX parameters outside a
+ // callback. A host-delayed mouse-up must preserve the queued command order.
+ {
+  const auto savedParameters=e.parameters;
+  pas.paramSetValue=paintSetValue;pas.paramEditBegin=paintEditBegin;pas.paramEditEnd=paintEditEnd;pas.paramGetPropertySet=paintParameterProperties;
+  OfxInteractSuiteV1 testInteract{};testInteract.interactGetPropertySet=paintInteractProperties;testInteract.interactRedraw=paintRedraw;
+  auto* savedInteract=interacts;interacts=&testInteract;
+  paint_ui::Overlay o;o.effect=handle;o.hasCursor=true;Properties overlayProperties;o.handle=reinterpret_cast<OfxInteractHandle>(&overlayProperties);setPointer(H(overlayProperties),kOfxPropInstanceData,0,&o);
+  setInt(H(e.parameters.at("paint").props),kOfxParamPropDefault,0,1);
+  setDouble(H(e.parameters.at("paint_softness").props),kOfxParamPropDefault,0,.5);
+  verify(paint_ui::nativeKey(&o,'=',false),"native softness key accepted");
+  verify(paint_ui::getDouble(handle,"paint_softness")==.5&&paintUndoBegins==0&&paintRedraws==1,"native key only schedules a callback");
+  inPaintCallback=true;verify(paint_ui::overlay(kOfxInteractActionGainFocus,o.handle,nullptr,nullptr)==kOfxStatOK,"host focus callback drains queued key");inPaintCallback=false;
+  verify(paint_ui::getDouble(handle,"paint_softness")==.6&&paintUndoBegins==1&&paintUndoDepth==0,"key edit is balanced inside host callback");
+  o.drawing=true;
+  verify(paint_ui::nativeKey(&o,'v',false)&&paint_ui::nativeKey(&o,'-',false),"keys accepted before delayed mouse-up");
+  inPaintCallback=true;verify(paint_ui::overlay(kOfxInteractActionGainFocus,o.handle,nullptr,nullptr)==kOfxStatOK,"host redraw during open gesture");inPaintCallback=false;
+  verify(paint_ui::getInt(handle,"paint_tool")==paint_ui::ToolPaint&&paint_ui::getDouble(handle,"paint_softness")==.6,"open gesture keeps queued keys pending");
+  inPaintCallback=true;verify(paint_ui::overlay(kOfxInteractActionLoseFocus,o.handle,nullptr,nullptr)==kOfxStatOK,"host completes delayed gesture");inPaintCallback=false;
+  verify(paint_ui::getInt(handle,"paint_tool")==paint_ui::ToolSelect&&paint_ui::getDouble(handle,"paint_softness")==.5&&o.pendingKeys.empty(),"queued tool and softness changes survive gesture completion");
+  verify(paintUndoDepth==0&&paintWrongContext==0,"all paint undo groups stay inside host callbacks");
+  // Resolve Edit restores brush controls and the hidden document together.
+  // A stale control must never rewrite that restored document or clear Redo.
+  paint::Document restored;restored.width=1920;restored.height=1080;restored.nextId=2;
+  paint::Stroke stroke;stroke.id=1;stroke.diameter=40;stroke.points.push_back({.5,.5,1});restored.strokes.push_back(stroke);
+  const auto encoded=paint::encode(restored);
+  Properties notification;setString(H(notification),kOfxPropChangeReason,0,kOfxChangeUserEdited);
+  for(bool documentFirst:{false,true}){
+   const int undoBefore=paintUndoBegins;
+   paint_ui::setInt(handle,"paint_stroke",1);paint_ui::store(handle,restored);
+   paint_ui::beginChanges(handle);
+   auto notify=[&](const char*name){setString(H(notification),kOfxPropName,0,name);paint_ui::changed(handle,H(notification));};
+   if(documentFirst)notify("paint_data");
+   paint_ui::setDouble(handle,"paint_size",80);notify("paint_size");
+   if(!documentFirst)notify("paint_data");
+   verify(paint_ui::getText(handle,"paint_data")==encoded,"grouped restore never rewrites strokes between notifications");
+   paint_ui::endChanges(handle);
+   verify(paint_ui::getText(handle,"paint_data")==encoded&&paint_ui::getDouble(handle,"paint_size")==40,"stored document wins in either host restoration order");
+   verify(paintUndoBegins==undoBefore,"restoring a host undo group creates no new undo entry");
+  }
+  paint_ui::beginChanges(handle);paint_ui::setDouble(handle,"paint_size",90);setString(H(notification),kOfxPropName,0,"paint_size");paint_ui::changed(handle,H(notification));paint_ui::endChanges(handle);
+  verify(paint_ui::document(handle).strokes[0].diameter==90,"a grouped user control edit still updates the selected stroke");
+  verify(paintWrongContext==0&&paintUndoDepth==0,"grouped controls use the host's existing undo transaction");
+  std::cout<<"grouped parameter restoration and brush edits: passed\n";
+  paint_ui::histories.erase(handle);o.hasCursor=true;inPaintCallback=true;
+  paint_ui::command(handle,paint_ui::Action::SizeUp);const auto edited=paint_ui::getText(handle,"paint_data");
+  paint_ui::command(handle,paint_ui::Action::Delete);const auto deleted=paint_ui::getText(handle,"paint_data");
+  verify(edited!=deleted&&paint_ui::canPaintUndo(handle,false),"paint edits have their own undo history");
+  verify(paint_ui::nativeKey(&o,paint_input::UndoKey,false),"viewer undo is accepted");
+  verify(paint_ui::overlay(kOfxInteractActionGainFocus,o.handle,nullptr,nullptr)==kOfxStatOK,"undo is applied in host callback");
+  verify(paint_ui::getText(handle,"paint_data")==edited&&paint_ui::getInt(handle,"paint_stroke")==1,"undo delete restores exact properties and selection");
+  verify(paint_ui::nativeKey(&o,paint_input::RedoKey,false),"viewer redo is accepted");
+  verify(paint_ui::overlay(kOfxInteractActionGainFocus,o.handle,nullptr,nullptr)==kOfxStatOK,"redo is applied in host callback");
+  verify(paint_ui::getText(handle,"paint_data")==deleted,"redo delete restores exact document");
+  paint_ui::restorePaint(handle,false);paint_ui::command(handle,paint_ui::Action::SoftDown);
+  verify(!paint_ui::canPaintUndo(handle,true),"new paint edit clears the redo branch");
+  for(int n=0;n<80;++n)paint_ui::command(handle,n%2?paint_ui::Action::SizeDown:paint_ui::Action::SizeUp);
+  verify(paint_ui::histories.at(handle).undo.size()<=64,"paint history count is bounded");
+  inPaintCallback=false;paint_ui::histories.erase(handle);
+  std::cout<<"viewer paint undo/redo, property restoration and bounds: passed\n";
+
+  interacts=savedInteract;pas.paramSetValue=nullptr;pas.paramEditBegin=nullptr;pas.paramEditEnd=nullptr;pas.paramGetPropertySet=nullptr;
+  for(auto&saved:savedParameters)e.parameters.at(saved.first)=saved.second;
+  std::cout<<"native key scheduling and delayed mouse-up: passed\n";
+ }
  // ADR_TEST_CONTROLS="name=value;...": render with these control values (by OFX parameter name) instead of the defaults.
  if(const char*overrides=std::getenv("ADR_TEST_CONTROLS")){std::string list=overrides;size_t start=0;while(start<list.size()){size_t end=list.find(';',start);if(end==std::string::npos)end=list.size();std::string item=list.substr(start,end-start);start=end+1;if(item.empty())continue;auto eq=item.find('=');verify(eq!=std::string::npos,"ADR_TEST_CONTROLS item needs name=value");auto it=e.parameters.find(item.substr(0,eq));verify(it!=e.parameters.end(),"ADR_TEST_CONTROLS names an existing control");const double v=std::stod(item.substr(eq+1));if(it->second.choice)setInt(H(it->second.props),kOfxParamPropDefault,0,int(v));else setDouble(H(it->second.props),kOfxParamPropDefault,0,v);std::cout<<"control "<<item<<"\n";}}
  double range[]={100,100.+count-1};setDoubleN(H(e.source.props),kOfxImageEffectPropFrameRange,2,range);setDouble(H(e.source.props),kOfxImageEffectPropFrameRate,0,24);setDouble(H(e.props),kOfxImageEffectPropFrameRate,0,24);

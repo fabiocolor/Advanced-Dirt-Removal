@@ -25,11 +25,37 @@ instance initialization; a bounded contract regression covers the callbacks.
 The prepared route bypasses the cleaning engine; the contract tests verify
 current-frame-only input access and that no cleaning sequence is created.
 
-The Color viewer accepted mouse strokes, a rectangle, selection and size and
-softness-reduction keys. Strokes survived project reopening. Full Color/Edit
-interaction qualification still needs move/resize, Undo/Redo,
-held-modifier and final Mac Delete/softness-increase checks. The screen-control
-bridge could not attach to the Edit window.
+Native scripted input passed on Color and Edit: round and square brushes,
+rectangles, selection, move and corner resize, size and softness keys,
+Shift-drag size, Option-drag softness, Delete, paint Undo/Redo and frame stepping.
+Color's Enhanced Viewer passed these paint-history checks too. Resolve disables
+Enhanced Viewer and Full Page Viewer on Edit in this version; Edit checks used
+its standard Open FX viewer. Edit's explicit Undo paint/Redo paint buttons and
+an erased square dab also passed after reopening the final candidate.
+
+The paint history fixes a Resolve Edit limitation: keyboard-only OFX changes
+can share a host undo entry. Viewer Undo/Redo now restores one paint edit,
+including the selected stroke's properties, without undoing timeline operations.
+History is bounded to 64 states and 64 MiB per instance and resets on reload.
+Contract checks cover delayed mouse-up/key ordering, host callback boundaries,
+grouped parameter restoration, exact undo/redo and history bounds.
+
+With a processed export on V2 and its aligned original on V1, source offset 0,
+all 100 direct Edit outputs (25 frames each in Recovery, Spanish, Red difference
+and True difference) matched independent computations exactly. Logs confirmed
+prepared-source access for every frame on both pages, bypassing the cleaner.
+The complex soft-stroke Color fixture was also compared on all 100 frames:
+maximum absolute RGB differences were 1.49e-8 (Recovery), 5.96e-8 (Spanish and
+Red difference), and 2.38e-7 (True difference). These comparisons are not an
+exact-parity pass. After a full application restart, both stroke documents
+matched exactly and all 50 repeated Color/Edit Recovery outputs matched their
+own pre-restart output pixel for pixel.
+
+Final local checks passed: 58 engine cases on each of Metal, OpenCL and CPU,
+the OFX contract on all three, three CTest checks, five source-preparation tests
+and three release-tool tests. Native interaction was driven through the test
+application's own event/accessibility interfaces; it does not qualify physical
+pen feel or human picture-quality approval.
 Physical tablet pressure and the new brush on Windows/Linux remain untested.
 Held strokes are static; automatic tracking is not implemented. The existing
 installers and their qualification tables below are unchanged.
@@ -98,7 +124,7 @@ per frame (a 56-frame shot in 90 to 155 s).
 | Host | System | Status |
 | --- | --- | --- |
 | DaVinci Resolve Studio 21.1, Fusion page | macOS, Metal | Tested: every feature (table above) |
-| DaVinci Resolve, Color and Edit pages | any | Not tested |
+| DaVinci Resolve, Color and Edit pages | macOS | Development viewer-paint checks above; existing 2.0 installers do not include them |
 | Nuke 17.1 | macOS, Metal | Tested: every feature (table above) |
 | DaVinci Resolve Studio 21.0.4, Fusion page | Windows 11, RTX 3090 (CUDA) | Tested with the release installer on a 12-frame scan: plugin and controls load, every frame identical to macOS, Red difference, auto recovery (maps identical to macOS), the Spanish + auto recovery error and rendering again after fixing it, Cineon log |
 | DaVinci Resolve Studio 21.0.4, Fusion page | Ubuntu 24.04, RTX 3090 (CUDA) | Tested with the release tarball installed in `/usr/OFX/Plugins` on a 12-frame scan: plugin and controls load, every frame identical to macOS, Red difference, auto recovery (maps identical to macOS), the Spanish + auto recovery error and rendering again after fixing it, Cineon log |

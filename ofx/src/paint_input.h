@@ -6,6 +6,7 @@
 #endif
 namespace paint_input {
 enum Modifier : unsigned {Shift=1,Alt=2,HostCommand=4};
+constexpr int UndoKey=0x110000,RedoKey=0x110001;
 #ifdef __APPLE__
 unsigned nativeModifiers();
 using KeyHandler=bool(*)(void*,int,bool);

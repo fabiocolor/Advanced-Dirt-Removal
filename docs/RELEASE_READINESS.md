@@ -69,6 +69,8 @@ notarization are an optional additional distribution path and would require
 their own candidate checks. The unsigned route is documented; interactive
 Gatekeeper approval and macOS uninstall were not exercised in this pass.
 
-Fresh-OS and Intel-Mac installation, Resolve Color/Edit, additional OFX hosts
-and the future Adobe adapter retain their explicitly untested/planned status.
-They are not represented as completed 2.0 qualifications.
+Fresh-OS and Intel-Mac installation, packaged Resolve Color/Edit support,
+additional OFX hosts and the future Adobe adapter retain their explicitly
+untested/planned status. The separate development viewer-paint checks are
+recorded in [TESTED.md](TESTED.md); the installers listed here do not include
+that work.

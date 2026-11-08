@@ -962,9 +962,14 @@ OfxStatus entry(const char*action,const void*handle,OfxPropertySetHandle in,OfxP
  // Taking the render lock here creates a host/plugin lock inversion.
  if(!std::strcmp(action,kOfxActionSyncPrivateData))return kOfxStatReplyDefault;
  // Hosts may bracket a programmatic parameter write with these notifications,
- // including while CreateInstance is refreshing the paint controls. They own
- // no state and must not reacquire the lifecycle or render locks.
- if(!std::strcmp(action,kOfxActionBeginInstanceChanged)||!std::strcmp(action,kOfxActionEndInstanceChanged))return kOfxStatReplyDefault;
+ // including while CreateInstance is refreshing the paint controls. Track
+ // only UI changes here; never reacquire the lifecycle or render locks.
+ if(!std::strcmp(action,kOfxActionBeginInstanceChanged)||!std::strcmp(action,kOfxActionEndInstanceChanged)){
+  auto effect=(OfxImageEffectHandle)handle;
+  try{if(isLiveInstance(effect)){if(!std::strcmp(action,kOfxActionBeginInstanceChanged))paint_ui::beginChanges(effect);else paint_ui::endChanges(effect);}}
+  catch(const std::exception&ex){paint_ui::changeBatches.erase(effect);adrlog::error(std::string("paint changes: ")+ex.what());return kOfxStatFailed;}
+  return kOfxStatReplyDefault;
+ }
  // Some hosts bracket every frame. These callbacks do not own or change the
  // bounded temporal history; PurgeCaches, edits and destruction release it.
  // Hosts may issue them while a render waits for host image acquisition.
@@ -1024,7 +1029,7 @@ ss(p,kOfxPropLabel,ADR_PLUGIN_LABEL);ss(p,kOfxImageEffectPluginPropGrouping,"Fab
  if(!std::strcmp(action,kOfxImageEffectActionDescribeInContext)){require(str(in,kOfxImageEffectPropContext)==kOfxImageEffectContextFilter,"Filter context required");for(auto name:{"Source","Output"}){OfxPropertySetHandle p;check(fx->clipDefine(e,name,&p),"define clip");ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGB,0);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGBA,1);si(p,kOfxImageEffectPropSupportsTiles,0);if(!std::strcmp(name,"Source"))si(p,kOfxImageEffectPropTemporalClipAccess,1);}{OfxPropertySetHandle p;check(fx->clipDefine(e,"Mask",&p),"define mask clip");ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentAlpha,0);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGBA,1);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGB,2);si(p,kOfxImageClipPropOptional,1);si(p,kOfxImageClipPropIsMask,1);si(p,kOfxImageEffectPropSupportsTiles,0);}OfxParamSetHandle ps;check(fx->getParamSet(e,&ps),"parameters");defineEncodingParam(ps);std::set<std::string> definedGroups;for(auto&c:controls){if(c.group&&!definedGroups.count("top")){definedGroups.insert("top");defineExtraParams(ps,nullptr);defineExtraParams(ps,"auto_recovery_group");paint_ui::define(ps,paintHost());}if(c.group&&definedGroups.insert(c.group).second)for(auto&g:groups)if(!std::strcmp(g.name,c.group)){OfxPropertySetHandle gp;check(params->paramDefine(ps,kOfxParamTypeGroup,g.name,&gp),"define group");ss(gp,kOfxPropLabel,g.label);si(gp,kOfxParamPropGroupOpen,!std::strcmp(g.name,"detection"));}OfxPropertySetHandle p;check(params->paramDefine(ps,c.boolean?kOfxParamTypeBoolean:c.choices?kOfxParamTypeChoice:c.integral?kOfxParamTypeInteger:kOfxParamTypeDouble,c.name,&p),"define control");ss(p,kOfxPropLabel,c.label);if(c.group)ss(p,kOfxParamPropParent,c.group);if(!std::strcmp(c.name,"enabled"))si(p,kOfxParamPropSecret,1);if(c.hint)ss(p,kOfxParamPropHint,c.hint);si(p,kOfxParamPropAnimates,0);if(c.boolean||c.integral){si(p,kOfxParamPropDefault,int(c.initial));if(c.choices){for(int index=0;index<=int(c.maximum);++index)ss(p,kOfxParamPropChoiceOption,c.choices[index],index);}else if(c.integral){for(auto key:{kOfxParamPropMin,kOfxParamPropDisplayMin})si(p,key,c.minimum);for(auto key:{kOfxParamPropMax,kOfxParamPropDisplayMax})si(p,key,int(c.maximum));}}else{for(auto v:{std::make_pair(kOfxParamPropDefault,c.initial),{kOfxParamPropMin,0.},{kOfxParamPropMax,c.maximum},{kOfxParamPropDisplayMin,0.},{kOfxParamPropDisplayMax,c.maximum}})check(prop->propSetDouble(p,v.first,0,v.second),"control range");}}defineExtraParams(ps,"view_group");definePages(ps,paintHost());
  return kOfxStatOK;}
  if(!std::strcmp(action,kOfxActionCreateInstance)){auto i=std::make_unique<Instance>();check(fx->clipGetHandle(e,"Source",&i->source,nullptr),"source clip");check(fx->clipGetHandle(e,"Output",&i->output,nullptr),"output clip");OfxParamSetHandle ps;check(fx->getParamSet(e,&ps),"parameters");for(auto&c:controls)check(params->paramGetHandle(ps,c.name,&i->parameters[c.name],nullptr),"control handle");check(params->paramGetHandle(ps,"encoding",&i->parameters["encoding"],nullptr),"encoding handle");for(auto&x:extras)check(params->paramGetHandle(ps,x.name,&i->parameters[x.name],nullptr),"extra handle");for(auto n:{"paint","paint_data","paint_source_kind","paint_source_folder","paint_source_offset"})check(params->paramGetHandle(ps,n,&i->parameters[n],nullptr),"paint handle");if(fx->clipGetHandle(e,"Mask",&i->mask,nullptr)!=kOfxStatOK)i->mask=nullptr;check(prop->propSetPointer(properties(e),kOfxPropInstanceData,0,i.get()),"instance data");static int created=0;i->id=++created;trackInstance(e);adrlog::info(i->label()+" created");i.release();lock.unlock();/* Host parameter writes can synchronously reenter the adapter. */try{updateRecoveryEnabled(instance(e));}catch(...){}try{paint_ui::refresh(e);}catch(...){}return kOfxStatOK;}
- if(!std::strcmp(action,kOfxActionDestroyInstance)){auto&i=instance(e);i.close();adrlog::info(i.label()+" destroyed");untrackInstance(e);delete &i;check(prop->propSetPointer(properties(e),kOfxPropInstanceData,0,nullptr),"clear instance");return kOfxStatOK;}
+ if(!std::strcmp(action,kOfxActionDestroyInstance)){auto&i=instance(e);i.close();adrlog::info(i.label()+" destroyed");untrackInstance(e);paint_ui::changeBatches.erase(e);paint_ui::histories.erase(e);delete &i;check(prop->propSetPointer(properties(e),kOfxPropInstanceData,0,nullptr),"clear instance");return kOfxStatOK;}
  if(!std::strcmp(action,kOfxActionInstanceChanged)){auto&i=instance(e);if(invalidatesHistory(in)){++i.generation;if(i.sequence){char*type=nullptr;char*name=nullptr;char*why=nullptr;if(in){prop->propGetString(in,kOfxPropType,0,&type);prop->propGetString(in,kOfxPropName,0,&name);prop->propGetString(in,kOfxPropChangeReason,0,&why);}adrlog::info(i.label()+" history reset: host reported a change ("+(type?type:"?")+" "+(name?name:"?")+", "+(why?why:"?")+")");}i.close();}return kOfxStatReplyDefault;}
  if(!std::strcmp(action,kOfxActionPurgeCaches)){auto&i=instance(e);adrlog::info(i.label()+" host asked to purge caches");i.purge();return kOfxStatOK;}
  if(!std::strcmp(action,kOfxImageEffectActionGetFramesNeeded)){int t=frameTime(in);if(paint_ui::getInt(e,"paint_source_kind")==1){double v[2]={double(t),double(t)};return prop->propSetDoubleN(out,"OfxImageClipPropFrameRange_Source",2,v);}auto r=sourceRange(instance(e));/* Hosts may ask about a time outside the clip (Nuke validates at its current frame): it needs only itself, and a render there still fails clearly. */if(t<r[0]||t>r[1]){double v[2]={double(t),double(t)};return prop->propSetDoubleN(out,"OfxImageClipPropFrameRange_Source",2,v);}double v[2]={double(r[0]),double(std::min(r[1],t+4))};/* t+4 is prefetched while the GPU renders t */return prop->propSetDoubleN(out,"OfxImageClipPropFrameRange_Source",2,v);}
@@ -1055,3 +1060,27 @@ OfxPlugin plugin={kOfxImageEffectPluginApi,1,ADR_PLUGIN_ID,2,0,setHost,entry};
 #endif
 extern "C" EXPORT int OfxGetNumberOfPlugins(){return 2;}
 extern "C" EXPORT OfxPlugin* OfxGetPlugin(int index){return index==0?&plugin:index==1?adrCapturePlugin():nullptr;}
+#if defined(ADR_PAINT_TEST_HOOKS)
+// Read-only, opt-in native-host evidence. Absent from production builds. The
+// test driver invokes this on the host UI thread with a new output directory.
+extern "C" EXPORT int ADRPaintTestSnapshot(const char* folder){
+ try{
+  require(folder&&*folder,"missing test output folder");
+  std::vector<OfxImageEffectHandle> effects;
+  {std::lock_guard<std::mutex> guard(liveInstancesMutex);effects.assign(liveInstances.begin(),liveInstances.end());}
+  const auto root=std::filesystem::u8path(folder);std::filesystem::create_directories(root);
+  for(auto effect:effects){
+   auto& item=instance(effect);auto file=root/("instance-"+std::to_string(item.id)+".txt");require(!std::filesystem::exists(file),"test snapshot already exists");
+   std::ofstream out(file);require(bool(out),"cannot write test snapshot");
+   for(auto name:{"paint","paint_tool","paint_shape","paint_stroke","paint_hold","mask_mode","view","paint_source_kind","paint_source_offset"})out<<name<<'='<<paint_ui::getInt(effect,name)<<'\n';
+   out<<std::setprecision(17);for(auto name:{"paint_size","paint_softness","paint_opacity"})out<<name<<'='<<paint_ui::getDouble(effect,name)<<'\n';
+   int overlayIndex=0;for(auto*overlay:paint_ui::testOverlays)if(overlay->effect==effect){
+    const auto prefix="overlay"+std::to_string(overlayIndex++)+"_";
+    out<<prefix<<"drawing="<<overlay->drawing<<'\n'<<prefix<<"moving="<<overlay->moving<<'\n'<<prefix<<"adjusting="<<overlay->adjusting<<'\n'<<prefix<<"cursor="<<overlay->hasCursor<<'\n'<<prefix<<"index="<<overlay->index<<'\n'<<prefix<<"frame="<<overlay->frame<<'\n'<<prefix<<"x="<<overlay->cursor.x<<'\n'<<prefix<<"y="<<overlay->cursor.y<<'\n'<<prefix<<"down_x="<<overlay->down.x<<'\n'<<prefix<<"down_y="<<overlay->down.y<<'\n'<<prefix<<"pending="<<overlay->pendingKeys.size()<<'\n';
+   }
+   out<<"paint_data:\n"<<paint_ui::getText(effect,"paint_data");require(bool(out),"test snapshot write failed");
+  }
+  return 0;
+ }catch(...){return 1;}
+}
+#endif

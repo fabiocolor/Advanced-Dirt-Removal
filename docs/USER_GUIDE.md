@@ -105,14 +105,19 @@ Development build only. Existing 2.0 installers do not include viewer painting.
 Turn on **Paint in viewer** and the viewer's **Open FX Overlay**. On Color,
 **Enhanced Viewer** (Shift-F) gives the picture more room. Choose **Paint**,
 **Erase** or **Select**, then a **Round**, **Square** or **Rectangle** brush.
+Resolve 21.1.1 disables Enhanced Viewer on Edit; use its standard viewer with
+Open FX Overlay enabled there.
 Drag a rectangle from corner to corner. **Recovery** gives the original back;
 **Spanish dirt removal** repairs only where you paint.
 
 **Select** lets you move a stroke or resize a rectangle by its corner handles.
 The controls edit its size, softness, opacity and duration. **Delete stroke**
-removes it; Resolve's Undo brings it back. **Hold (frames)** defaults to one
+removes it; **Undo paint** brings it back, including its properties and selection.
+**Redo paint** repeats the edit. Paint history is kept for the current editing
+session and resets when the effect or project is reloaded. **Hold (frames)** defaults to one
 frame. Held strokes stay in the same position; they do not track automatically.
 **Tablet pressure**, under **Brush options**, varies the brush size with pressure.
+**Smoothing** in the same group smooths the pen path while drawing.
 
 With the pointer in the active paint viewer:
 
@@ -122,8 +127,11 @@ With the pointer in the active paint viewer:
 | Round / Square / Rectangle | C / Q / R |
 | Size / softness | Shift-drag / Option-drag (Alt on Windows); [ and ] / - and = |
 | Previous / next stroke; delete | , / . ; Delete |
+| Undo / redo paint | Cmd-Z / Cmd-Shift-Z on Mac; Ctrl-Z / Ctrl-Shift-Z when delivered by the host |
 | Recovery / Spanish; stroke on/off; outlines | I / X / H |
 
+Paint shortcuts act in the active paint viewer and leave text editors alone.
+With no applicable paint history, Undo and Redo pass through to Resolve.
 Frame stepping and bypass use Resolve's own keys. Other hosts hide the paint
 controls. Shortcuts depend on host input delivery; the native controls remain
 available. Physical tablet pressure still needs an operator check.
