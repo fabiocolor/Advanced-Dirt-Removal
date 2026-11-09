@@ -148,24 +148,15 @@ frame. Held strokes stay in the same position; they do not track automatically.
 **Tablet pressure**, under **Brush options**, varies the brush size with pressure.
 **Smoothing** in the same group smooths the pen path while drawing.
 
-With the pointer in the active paint viewer:
+Brush adjustments stay under the pointer: **Shift-drag** changes size and
+**Option/Alt-drag** changes softness. Use the Tool and Brush selectors, and the
+buttons under **Strokes**, for the other paint operations.
 
-| Action | Keys |
-| --- | --- |
-| Paint / Erase / Select | B / E / V |
-| Round / Square / Rectangle | C / Q / R |
-| Size / softness | Shift-drag / Option-drag (Alt on Windows); [ and ] / - and = |
-| Previous / next stroke; delete | , / . ; Delete |
-| Undo / redo paint | Cmd-Z / Cmd-Shift-Z on Mac; Ctrl-Z / Ctrl-Shift-Z on Windows |
-| Recovery / Spanish; stroke on/off; outlines | I / X / H |
-
-Paint shortcuts act in the focused paint viewer and leave text editors alone.
-After editing an Inspector field, return keyboard focus to the viewer before
-using brush shortcuts.
-With no applicable paint history, Undo and Redo pass through to Resolve.
-Frame stepping and bypass use Resolve's own keys. Other hosts hide the paint
-controls. Shortcuts depend on host input delivery; the native controls remain
-available. Physical tablet pressure still needs an operator check.
+The plugin does not register or consume keyboard shortcuts. Resolve keeps its
+frame navigation, bypass, undo/redo, text editing and other keyboard commands.
+For the paint editor's separate history, use **Undo paint** and **Redo paint**.
+Other hosts hide the viewer-paint controls. Physical tablet pressure still needs
+an operator check.
 
 ### A processed export on V2, original on V1
 

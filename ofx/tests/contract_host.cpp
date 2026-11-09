@@ -118,7 +118,7 @@ int main(int argc,char**argv){
   untrackInstance(stable);verify(!isLiveInstance(stable),"stable dummy instance removed");
   std::cout<<"concurrent instance membership: 10000 mutations, "<<lookups.load()<<" lookup passes\n";
  }
- verify(paint_ui::key('+')==paint_ui::Action::SoftUp&&paint_ui::key('=')==paint_ui::Action::SoftUp&&paint_ui::key(0xffff)==paint_ui::Action::Delete&&paint_ui::key(0xff08)==paint_ui::Action::Delete,"brush key aliases and both delete symbols");
+
  // Parameter-write brackets can reenter while the lifecycle lock is held.
  // A deadline makes this a deterministic failure instead of a hung test.
  {
@@ -173,8 +173,7 @@ int main(int argc,char**argv){
   const auto&children=compact.parameters.at("page_paint").props.strings.at(kOfxParamPropPageChild);for(auto name:{"paint_undo","paint_redo"})verify(std::find(children.begin(),children.end(),name)!=children.end(),"page-respecting hosts retain paint history buttons");
   hostProperties=savedHost;interacts=savedInteracts;std::cout<<"compact UI parameter contract and group defaults: passed\n";
  }
- // Native keys request redraw without editing OFX parameters outside a
- // callback. A host-delayed mouse-up must preserve the queued command order.
+ // Every keyboard event belongs to Resolve, even during a paint gesture.
  {
   const auto savedParameters=e.parameters;
   pas.paramSetValue=paintSetValue;pas.paramEditBegin=paintEditBegin;pas.paramEditEnd=paintEditEnd;pas.paramGetPropertySet=paintParameterProperties;
@@ -183,17 +182,23 @@ int main(int argc,char**argv){
   paint_ui::Overlay o;o.effect=handle;o.hasCursor=true;Properties overlayProperties;o.handle=reinterpret_cast<OfxInteractHandle>(&overlayProperties);setPointer(H(overlayProperties),kOfxPropInstanceData,0,&o);
   setInt(H(e.parameters.at("paint").props),kOfxParamPropDefault,0,1);
   setDouble(H(e.parameters.at("paint_softness").props),kOfxParamPropDefault,0,.5);
-  verify(paint_ui::nativeKey(&o,'=',false),"native softness key accepted");
-  verify(paint_ui::getDouble(handle,"paint_softness")==.5&&paintUndoBegins==0&&paintRedraws==1,"native key only schedules a callback");
-  inPaintCallback=true;verify(paint_ui::overlay(kOfxInteractActionGainFocus,o.handle,nullptr,nullptr)==kOfxStatOK,"host focus callback drains queued key");inPaintCallback=false;
-  verify(paint_ui::getDouble(handle,"paint_softness")==.6&&paintUndoBegins==1&&paintUndoDepth==0,"key edit is balanced inside host callback");
-  o.drawing=true;
-  verify(paint_ui::nativeKey(&o,'v',false)&&paint_ui::nativeKey(&o,'-',false),"keys accepted before delayed mouse-up");
-  inPaintCallback=true;verify(paint_ui::overlay(kOfxInteractActionGainFocus,o.handle,nullptr,nullptr)==kOfxStatOK,"host redraw during open gesture");inPaintCallback=false;
-  verify(paint_ui::getInt(handle,"paint_tool")==paint_ui::ToolPaint&&paint_ui::getDouble(handle,"paint_softness")==.6,"open gesture keeps queued keys pending");
-  inPaintCallback=true;verify(paint_ui::overlay(kOfxInteractActionLoseFocus,o.handle,nullptr,nullptr)==kOfxStatOK,"host completes delayed gesture");inPaintCallback=false;
-  verify(paint_ui::getInt(handle,"paint_tool")==paint_ui::ToolSelect&&paint_ui::getDouble(handle,"paint_softness")==.5&&o.pendingKeys.empty(),"queued tool and softness changes survive gesture completion");
-  verify(paintUndoDepth==0&&paintWrongContext==0,"all paint undo groups stay inside host callbacks");
+  const auto beforeKeys=e.parameters;const int undoBeforeKeys=paintUndoBegins;
+  Properties keyProperties;
+  for(int phase=0;phase<4;++phase){
+   o.drawing=phase==1;o.moving=phase==2;o.adjusting=phase==3;
+   for(int k:std::initializer_list<int>{'b','e','v','c','q','r','i','h','x','1','2','3','4','[',']','-','=','+',',','.','z',0xffff,0xff08,0xff09,0xff51,0xff53,0xffe1,0xffe3,0xffe7,0xffe9}){
+    setInt(H(keyProperties),"kOfxPropKeySym",0,k);
+    for(auto event:{kOfxInteractActionKeyDown,kOfxInteractActionKeyRepeat,kOfxInteractActionKeyUp}){
+     inPaintCallback=true;auto status=paint_ui::overlay(event,o.handle,H(keyProperties),nullptr);inPaintCallback=false;
+     verify(status==kOfxStatReplyDefault,"paint overlay leaves every keyboard command with Resolve");
+    }
+   }
+   verify(o.drawing==(phase==1)&&o.moving==(phase==2)&&o.adjusting==(phase==3),"keyboard events do not finish or alter pointer gestures");
+  }
+  for(const auto&entry:beforeKeys){const auto&now=e.parameters.at(entry.first).props;const auto&before=entry.second.props;verify(now.ints==before.ints&&now.doubles==before.doubles&&now.strings==before.strings,"keyboard events leave all paint parameters and stroke data unchanged");}
+  verify(paintUndoBegins==undoBeforeKeys&&paintUndoDepth==0&&paintRedraws==0,"keyboard events create no paint history or redraw");
+  o.drawing=o.moving=o.adjusting=false;o.modifiers=0;
+  std::cout<<"Resolve keyboard pass-through during idle and all pointer gestures: passed\n";
   // Resolve Edit restores brush controls and the hidden document together.
   // A stale control must never rewrite that restored document or clear Redo.
   paint::Document restored;restored.width=1920;restored.height=1080;restored.nextId=2;
@@ -221,11 +226,9 @@ int main(int argc,char**argv){
   paint_ui::command(handle,paint_ui::Action::SizeUp);const auto edited=paint_ui::getText(handle,"paint_data");
   paint_ui::command(handle,paint_ui::Action::Delete);const auto deleted=paint_ui::getText(handle,"paint_data");
   verify(edited!=deleted&&paint_ui::canPaintUndo(handle,false),"paint edits have their own undo history");
-  verify(paint_ui::nativeKey(&o,paint_input::UndoKey,false),"viewer undo is accepted");
-  verify(paint_ui::overlay(kOfxInteractActionGainFocus,o.handle,nullptr,nullptr)==kOfxStatOK,"undo is applied in host callback");
+  setString(H(notification),kOfxPropName,0,"paint_undo");paint_ui::changed(handle,H(notification));
   verify(paint_ui::getText(handle,"paint_data")==edited&&paint_ui::getInt(handle,"paint_stroke")==1,"undo delete restores exact properties and selection");
-  verify(paint_ui::nativeKey(&o,paint_input::RedoKey,false),"viewer redo is accepted");
-  verify(paint_ui::overlay(kOfxInteractActionGainFocus,o.handle,nullptr,nullptr)==kOfxStatOK,"redo is applied in host callback");
+  setString(H(notification),kOfxPropName,0,"paint_redo");paint_ui::changed(handle,H(notification));
   verify(paint_ui::getText(handle,"paint_data")==deleted,"redo delete restores exact document");
   paint_ui::restorePaint(handle,false);paint_ui::command(handle,paint_ui::Action::SoftDown);
   verify(!paint_ui::canPaintUndo(handle,true),"new paint edit clears the redo branch");
@@ -254,7 +257,7 @@ int main(int argc,char**argv){
    const double fallbackRange[]={0,40};setDoubleN(H(e.source.props),kOfxImageEffectPropFrameRange,2,fallbackRange);
    paint_ui::cursorTimes[handle]=12;paint_ui::store(handle,strokes);paint_ui::setInt(handle,"paint_stroke",0);
    paint_ui::command(handle,paint_ui::Action::Next);verify(fallback==std::vector<double>({12,20}),"unsupported OFX timeline uses observed viewer time and the Resolve navigation fallback");
-   paint_ui::setInt(handle,"paint",0);paint_ui::command(handle,paint_ui::Action::Mode);verify(paint_ui::getInt(handle,"paint")==1,"method shortcut enables painting");
+   paint_ui::setInt(handle,"paint",0);paint_ui::command(handle,paint_ui::Action::Mode);verify(paint_ui::getInt(handle,"paint")==1,"manual mode command enables painting");
    paint_ui::setInt(handle,"paint",0);paint_ui::applyChanged(handle,"mask_mode",kOfxChangeUserEdited);verify(paint_ui::getInt(handle,"paint")==1&&paint_ui::getInt(handle,"paint_tool")==paint_ui::ToolPaint&&paint_ui::getInt(handle,"paint_stroke")==0,"choosing Recovery resumes painting instead of stroke review");
    paint_ui::setInt(handle,"paint",0);paint_ui::applyChanged(handle,"mask_mode",kOfxChangePluginEdited);verify(paint_ui::getInt(handle,"paint")==0,"loading settings preserves an explicitly disabled brush");
    paint_ui::setText(handle,"paint_data","");paint_ui::setInt(handle,"paint",1);setInt(H(e.mask.props),kOfxImageClipPropConnected,0,1);paint_ui::initializePainting(handle);

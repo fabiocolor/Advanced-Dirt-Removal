@@ -559,7 +559,7 @@ void defineExtraParam(OfxParamSetHandle ps,const Extra&x,const char*parent,const
  OfxPropertySetHandle p;
  const char*type=x.kind==ExtraChoice?kOfxParamTypeChoice:x.kind==ExtraBool?kOfxParamTypeBoolean:x.kind==ExtraDouble?kOfxParamTypeDouble:x.kind==ExtraInt?kOfxParamTypeInteger:x.kind==ExtraString?kOfxParamTypeString:kOfxParamTypePushButton;
   check(params->paramDefine(ps,type,x.name,&p),"define extra control");ss(p,kOfxPropLabel,label?label:x.label);ss(p,kOfxParamPropHint,x.hint);if(parent)ss(p,kOfxParamPropParent,parent);
-  if(label&&!std::strcmp(x.name,"mask_mode"))ss(p,kOfxParamPropHint,"Recovery: paint original detail back over automatic cleanup. Spanish dirt removal: apply cleanup only where painted. Paint directly in this effect's viewer; no separate Mask Paint is required. Key I.");
+  if(label&&!std::strcmp(x.name,"mask_mode"))ss(p,kOfxParamPropHint,"Recovery: paint original detail back over automatic cleanup. Spanish dirt removal: apply cleanup only where painted. Paint directly in this effect's viewer; no separate Mask Paint is required.");
   if(x.kind==ExtraButton)return;
   si(p,kOfxParamPropAnimates,0);
   if(x.kind==ExtraChoice){for(int k=0;k<x.count;++k)ss(p,kOfxParamPropChoiceOption,x.choices[k],k);si(p,kOfxParamPropDefault,int(x.initial));}
@@ -1060,7 +1060,7 @@ OfxStatus entry(const char*action,const void*handle,OfxPropertySetHandle in,OfxP
  adr_host::GpuScope lifecycleTransport(adr_host::GpuBackend::Cpu,nullptr,!std::strcmp(action,kOfxActionUnload)||!std::strcmp(action,kOfxActionPurgeCaches),!std::strcmp(action,kOfxActionUnload));
 #endif
  if(!std::strcmp(action,kOfxActionLoad)){require(host,"missing host");fx=(OfxImageEffectSuiteV1*)host->fetchSuite(host->host,kOfxImageEffectSuite,1);prop=(OfxPropertySuiteV1*)host->fetchSuite(host->host,kOfxPropertySuite,1);params=(OfxParameterSuiteV1*)host->fetchSuite(host->host,kOfxParameterSuite,1);messages=(OfxMessageSuiteV1*)host->fetchSuite(host->host,kOfxMessageSuite,1);persistentMessages=(OfxMessageSuiteV2*)host->fetchSuite(host->host,kOfxMessageSuite,2);interacts=(OfxInteractSuiteV1*)host->fetchSuite(host->host,kOfxInteractSuite,1);timeline=(OfxTimeLineSuiteV1*)host->fetchSuite(host->host,kOfxTimeLineSuite,1);require(fx&&prop&&params,"required OFX suites unavailable",kOfxStatErrMissingHostFeature);logStartup();return kOfxStatOK;}
- if(!std::strcmp(action,kOfxActionUnload)){paint_input::shutdownKeys();paint_navigation::shutdown();if(engineContext){uint64_t a=0,p=0;adr_context_memory(engineContext,&a,&p);adrlog::info("unload: GPU memory peak "+std::to_string(p>>20)+" MiB");adr_context_destroy(engineContext);}else adrlog::info("unload");engineContext=nullptr;adrlog::close();return kOfxStatOK;}
+ if(!std::strcmp(action,kOfxActionUnload)){paint_navigation::shutdown();if(engineContext){uint64_t a=0,p=0;adr_context_memory(engineContext,&a,&p);adrlog::info("unload: GPU memory peak "+std::to_string(p>>20)+" MiB");adr_context_destroy(engineContext);}else adrlog::info("unload");engineContext=nullptr;adrlog::close();return kOfxStatOK;}
  if(!std::strcmp(action,kOfxActionDescribe)){auto p=properties(e);
 #if ADR_HOST_METAL_TRANSPORT
  // GPU extensions are optional. CPU-only hosts may reject this property;
@@ -1126,7 +1126,7 @@ extern "C" EXPORT int ADRPaintTestSnapshot(const char* folder){
    {double hostTime=0;const auto status=timeline&&timeline->getTime?timeline->getTime(effect,&hostTime):kOfxStatErrUnsupported;out<<"host_time_status="<<status<<'\n'<<"host_time="<<hostTime<<'\n';}
    int overlayIndex=0;for(auto*overlay:paint_ui::testOverlays)if(overlay->effect==effect){
     const auto prefix="overlay"+std::to_string(overlayIndex++)+"_";
-    out<<prefix<<"drawing="<<overlay->drawing<<'\n'<<prefix<<"moving="<<overlay->moving<<'\n'<<prefix<<"adjusting="<<overlay->adjusting<<'\n'<<prefix<<"cursor="<<overlay->hasCursor<<'\n'<<prefix<<"index="<<overlay->index<<'\n'<<prefix<<"frame="<<overlay->frame<<'\n'<<prefix<<"x="<<overlay->cursor.x<<'\n'<<prefix<<"y="<<overlay->cursor.y<<'\n'<<prefix<<"down_x="<<overlay->down.x<<'\n'<<prefix<<"down_y="<<overlay->down.y<<'\n'<<prefix<<"pending="<<overlay->pendingKeys.size()<<'\n';
+    out<<prefix<<"drawing="<<overlay->drawing<<'\n'<<prefix<<"moving="<<overlay->moving<<'\n'<<prefix<<"adjusting="<<overlay->adjusting<<'\n'<<prefix<<"cursor="<<overlay->hasCursor<<'\n'<<prefix<<"index="<<overlay->index<<'\n'<<prefix<<"frame="<<overlay->frame<<'\n'<<prefix<<"x="<<overlay->cursor.x<<'\n'<<prefix<<"y="<<overlay->cursor.y<<'\n'<<prefix<<"down_x="<<overlay->down.x<<'\n'<<prefix<<"down_y="<<overlay->down.y<<'\n';
    }
    out<<"paint_data:\n"<<paint_ui::getText(effect,"paint_data");require(bool(out),"test snapshot write failed");
   }

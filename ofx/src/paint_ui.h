@@ -9,22 +9,6 @@ namespace paint_ui {
 void gestureTrace(const char* message){if(std::getenv("ADR_PAINT_INPUT_TRACE"))std::fprintf(stderr,"ADR paint gesture: %s\n",message);}
 enum class Action {None,Paint,Erase,Select,Round,Square,Rectangle,SizeDown,SizeUp,SoftDown,SoftUp,OpacityDown,OpacityUp,Previous,Next,Delete,Toggle,Outlines,Mode,UndoPaint,RedoPaint,View1,View2,View3,View4};
 enum Tool {ToolPaint=0,ToolErase=1,ToolSelect=2};
-// Keys the overlay handles when the host delivers them; everything else stays with the host.
-inline Action key(int k){
- if(k>='A'&&k<='Z')k+=32;
- switch(k){
-  case 'b':return Action::Paint;case 'e':return Action::Erase;case 'v':return Action::Select;
-  case 'c':return Action::Round;case 'q':return Action::Square;case 'r':return Action::Rectangle;
-  case '[':return Action::SizeDown;case ']':return Action::SizeUp;case '-':return Action::SoftDown;case '=':case '+':return Action::SoftUp;
-  case ';':return Action::OpacityDown;case '\'':return Action::OpacityUp;
-  case ',':return Action::Previous;case '.':return Action::Next;case 'x':return Action::Toggle;case 'h':return Action::Outlines;case 'i':return Action::Mode;
-  case '1':return Action::View1;case '2':return Action::View2;case '3':return Action::View3;case '4':return Action::View4;
-  case paint_input::UndoKey:return Action::UndoPaint;case paint_input::RedoKey:return Action::RedoPaint;
-  case 0xffff:case 0xff08:return Action::Delete;
-  default:return Action::None;
- }
-}
-inline bool repeatable(Action a){return a==Action::SizeDown||a==Action::SizeUp||a==Action::SoftDown||a==Action::SoftUp||a==Action::OpacityDown||a==Action::OpacityUp;}
 inline bool isParam(const char*name){return name&&!std::strncmp(name,"paint",5);}
 
 OfxParamSetHandle paramSet(OfxImageEffectHandle e){OfxParamSetHandle ps;check(fx->getParamSet(e,&ps),"parameters");return ps;}
@@ -42,7 +26,7 @@ void setText(OfxImageEffectHandle e,const char*n,const std::string&v){if(getText
 void enable(OfxImageEffectHandle e,const char*n,bool on){if(!params->paramGetPropertySet)return;OfxPropertySetHandle p=nullptr;if(params->paramGetPropertySet(parameter(e,n),&p)==kOfxStatOK&&p)prop->propSetInt(p,kOfxParamPropEnabled,0,on?1:0);}
 void store(OfxImageEffectHandle e,const paint::Document&d){setText(e,"paint_data",paint::encode(d));}
 // Resolve Edit coalesces keyboard-only OFX edits into a host entry. Keep a
-// bounded paint history so viewer keys and the explicit paint buttons undo
+// bounded paint history so the explicit paint buttons undo
 // exactly one stroke/property edit without touching a timeline operation.
 struct PaintState {std::string data;int selected=0;};
 struct PaintHistory {std::vector<PaintState> undo,redo;int depth=0;bool restoring=false;PaintState before;};
@@ -150,7 +134,7 @@ void step(OfxImageEffectHandle e,const paint::Document&d,int selected,bool next)
   }
  }
 }
-// Keys, buttons and Inspector edits share the same paint history.
+// Buttons and Inspector edits share the same paint history.
 void command(OfxImageEffectHandle e,Action action){
  using A=Action;
  auto d=document(e);int selected=getInt(e,"paint_stroke");const bool has=selected>0&&selected<=int(d.strokes.size());const int count=int(d.strokes.size());
@@ -246,31 +230,31 @@ void define(OfxParamSetHandle ps,bool visible,bool groupDefined=false){
  auto label=[&](const char*name,const char*text,const char*parent,const char*initial){auto p=make(kOfxParamTypeString,name,text,parent,nullptr);ss(p,kOfxParamPropStringMode,kOfxParamStringIsLabel);ss(p,kOfxParamPropDefault,initial);si(p,kOfxParamPropPersistant,0);};
  if(!groupDefined){auto p=make(kOfxParamTypeGroup,"paint_group","Paint",nullptr,nullptr);si(p,kOfxParamPropGroupOpen,1);}
  boolean("paint","Paint in viewer","paint_group","Paint directly in this effect's viewer (turn on Open FX Overlay). Recovery gives original detail back; Spanish dirt removal repairs only where painted. No separate Mask Paint is needed. While editing is enabled or strokes exist, the built-in brush replaces the legacy external mask.",visible?1:0,true);
- choice("paint_tool","Tool","paint_group","Paint, Erase (take paint away) or Select (click a stroke to select, move or resize it). Keys B, E, V.",{"Paint","Erase","Select"});
- choice("paint_shape","Brush","paint_group","Round or square brush, or a rectangle dragged from corner to corner. Keys C, Q, R.",{"Round","Square","Rectangle"});
- real("paint_size","Size","paint_group","Brush diameter in picture pixels. Shift-drag in the viewer, or [ and ].",80,1,2048,400);
- real("paint_softness","Softness","paint_group","0 is a hard edge. Option/Alt-drag in the viewer, or - and =.",.5,0,1,1);
- real("paint_opacity","Opacity","paint_group","How much one stroke gives back. Keys ; and '.",1,0,1,1);
+ choice("paint_tool","Tool","paint_group","Paint, Erase (take paint away) or Select (click a stroke to select, move or resize it).",{"Paint","Erase","Select"});
+ choice("paint_shape","Brush","paint_group","Round or square brush, or a rectangle dragged from corner to corner.",{"Round","Square","Rectangle"});
+ real("paint_size","Size","paint_group","Brush diameter in picture pixels. Shift-drag in the viewer.",80,1,2048,400);
+ real("paint_softness","Softness","paint_group","0 is a hard edge. Option/Alt-drag in the viewer.",.5,0,1,1);
+ real("paint_opacity","Opacity","paint_group","How much one stroke gives back.",1,0,1,1);
  label("paint_stroke_info","Selected","paint_group","No strokes yet");
- make(kOfxParamTypePushButton,"paint_undo","Undo paint","paint_group","Undo one paint stroke or property edit. Cmd/Ctrl-Z while the viewer has paint focus. History is kept for this editing session.");
- make(kOfxParamTypePushButton,"paint_redo","Redo paint","paint_group","Redo a paint edit. Cmd/Ctrl-Shift-Z while the viewer has paint focus.");
+ make(kOfxParamTypePushButton,"paint_undo","Undo paint","paint_group","Undo one paint stroke or property edit. History is kept for this editing session.");
+ make(kOfxParamTypePushButton,"paint_redo","Redo paint","paint_group","Redo a paint edit. ");
  {auto p=make(kOfxParamTypeGroup,"stroke_details_group","Strokes",detailsParent,nullptr);si(p,kOfxParamPropGroupOpen,0);}
  {auto p=make(kOfxParamTypeInteger,"paint_hold","Hold (frames)","stroke_details_group","How many frames a new stroke lasts, from the frame it is painted on. 1 paints only the current frame.");si(p,kOfxParamPropDefault,1);si(p,kOfxParamPropMin,1);si(p,kOfxParamPropMax,100000);si(p,kOfxParamPropDisplayMin,1);si(p,kOfxParamPropDisplayMax,250);}
- make(kOfxParamTypePushButton,"paint_previous","Previous stroke","stroke_details_group","Select the previous stroke in frame order and go to its frame (key ,).");
- make(kOfxParamTypePushButton,"paint_next","Next stroke","stroke_details_group","Select the next stroke in frame order and go to its frame (key .).");
- make(kOfxParamTypePushButton,"paint_delete","Delete stroke","stroke_details_group","Delete the selected stroke (Delete key). Undo brings it back.");
- boolean("paint_stroke_on","Stroke on","stroke_details_group","Turn the selected stroke off to compare without it (key X).",1);
+ make(kOfxParamTypePushButton,"paint_previous","Previous stroke","stroke_details_group","Select the previous stroke in frame order and go to its frame.");
+ make(kOfxParamTypePushButton,"paint_next","Next stroke","stroke_details_group","Select the next stroke in frame order and go to its frame.");
+ make(kOfxParamTypePushButton,"paint_delete","Delete stroke","stroke_details_group","Delete the selected stroke. Undo brings it back.");
+ boolean("paint_stroke_on","Stroke on","stroke_details_group","Turn the selected stroke off to compare without it.",1);
  real("paint_rect_width","Rectangle width","stroke_details_group","Width of the selected rectangle in picture pixels.",80,1,32768,2048);
  real("paint_rect_height","Rectangle height","stroke_details_group","Height of the selected rectangle in picture pixels.",80,1,32768,2048);
  {auto p=make(kOfxParamTypeGroup,"paint_options_group","Brush options",detailsParent,nullptr);si(p,kOfxParamPropGroupOpen,0);}
  real("paint_smoothing","Smoothing","paint_options_group","Smooths the pen path while you paint.",.2,0,.95,.95);
  boolean("paint_pressure","Tablet pressure","paint_options_group","Pen pressure changes the brush size. Leave off for a mouse.",0);
- boolean("paint_outlines","Show strokes","paint_options_group","Outline every stroke in the viewer (key H). Off: you see only the result and the brush; a stroke you select with Select is outlined. Never rendered.",0);
+ boolean("paint_outlines","Show strokes","paint_options_group","Outline every stroke in the viewer. Off: you see only the result and the brush; a stroke you select with Select is outlined. Never rendered.",0);
  {auto p=make(kOfxParamTypeGroup,"paint_source_group","Source setup",detailsParent,nullptr);si(p,kOfxParamPropGroupOpen,0);}
  {auto p=make(kOfxParamTypeChoice,"paint_source_kind","Paint source","paint_source_group","Clean this clip: repair this input, then recover the original. Prepared original: the input is a finished processed export; painting uses its prepared original without running cleanup again.",true);ss(p,kOfxParamPropChoiceOption,"Clean this clip",0);ss(p,kOfxParamPropChoiceOption,"Prepared original",1);si(p,kOfxParamPropDefault,0);}
  {auto p=make(kOfxParamTypeString,"paint_source_folder","Original folder","paint_source_group","Run Prepare ADR Recovery Source with the processed export on V2 and the aligned original on V1. Keep the verified source folder with the project.",true);ss(p,kOfxParamPropStringMode,kOfxParamStringIsDirectoryPath);ss(p,kOfxParamPropDefault,"");}
  {auto p=make(kOfxParamTypeInteger,"paint_source_offset","Original frame offset","paint_source_group","Prepared frame = working frame + offset. Leave at 0 for the prepared V2/V1 workflow.",true);si(p,kOfxParamPropDefault,0);si(p,kOfxParamPropMin,-1000000000);si(p,kOfxParamPropMax,1000000000);}
- label("paint_keys","Keys","paint_options_group","Shift-drag size, Option/Alt-drag softness, B E V tool, C Q R brush, [ ] size, Delete");
+ label("paint_keys","Gestures","paint_options_group","Shift-drag: size; Option/Alt-drag: softness. Keyboard commands stay with Resolve.");
  {auto p=make(kOfxParamTypeInteger,"paint_stroke","Selected stroke","paint_group",nullptr);si(p,kOfxParamPropDefault,0);si(p,kOfxParamPropMin,0);si(p,kOfxParamPropMax,4096);si(p,kOfxParamPropSecret,1);}
  {auto p=make(kOfxParamTypeString,"paint_data","Strokes","paint_group",nullptr,true);ss(p,kOfxParamPropDefault,"");ss(p,kOfxParamPropStringMode,kOfxParamStringIsMultiLine);si(p,kOfxParamPropSecret,1);si(p,kOfxParamPropPersistant,1);}
 }
@@ -283,7 +267,6 @@ struct Overlay {
  std::array<double,2> screen{},screenDown{},pixelScale{1,1};
  int adjustment=0,corner=-1;double startSize=80,startSoftness=.5;
  unsigned modifiers=0;
- std::vector<Action> pendingKeys;
  paint::Document work;size_t index=0;std::unique_ptr<Undo> undo;
 };
 #if defined(ADR_PAINT_TEST_HOOKS)
@@ -297,7 +280,7 @@ void geometry(Overlay&o,double time){
 }
 void readScale(Overlay&o,OfxPropertySetHandle in){for(int j=0;j<2;++j){double scale=1;if(prop->propGetDouble(in,kOfxInteractPropPixelScale,j,&scale)==kOfxStatOK&&std::isfinite(scale)&&scale>0)o.pixelScale[j]=scale;}}
 void coordinates(Overlay&o,OfxPropertySetHandle in){
- o.frame=frameTime(in);observeTime(o.effect,in);geometry(o,o.frame);paint_input::focusKeys(&o);
+ o.frame=frameTime(in);observeTime(o.effect,in);geometry(o,o.frame);
  const double x=number(in,kOfxInteractPropPenPosition,0),y=number(in,kOfxInteractPropPenPosition,1);double pressure=1;
  if(getInt(o.effect,"paint_pressure"))prop->propGetDouble(in,kOfxInteractPropPenPressure,0,&pressure);if(!std::isfinite(pressure))pressure=1;
  o.cursor={(x-o.rod.x1)/(o.rod.x2-o.rod.x1),(y-o.rod.y1)/(o.rod.y2-o.rod.y1),std::clamp(pressure,0.,1.)};o.hasCursor=true;
@@ -308,31 +291,10 @@ void coordinates(Overlay&o,OfxPropertySetHandle in){
 }
 int pictureWidth(const Overlay&o){return int(std::llround((o.rod.x2-o.rod.x1)/o.par));}
 int pictureHeight(const Overlay&o){return int(std::llround(o.rod.y2-o.rod.y1));}
-void queueCommand(Overlay&o,Action action,bool repeat){
- if(repeat&&!repeatable(action))return;
- if(o.pendingKeys.size()==256)o.pendingKeys.erase(o.pendingKeys.begin());
- o.pendingKeys.push_back(action);
-}
-void flushCommands(Overlay&o){
- if(o.pendingKeys.empty()||o.drawing||o.moving||o.adjusting)return;
- if(!getInt(o.effect,"paint")){o.pendingKeys.clear();return;}
- auto pending=std::move(o.pendingKeys);o.pendingKeys.clear();
- for(auto action:pending)command(o.effect,action);
-}
 void finishGesture(Overlay&o){
  if(!o.drawing&&!o.moving&&!o.adjusting&&!o.undo)return;
  gestureTrace("finish");o.drawing=o.moving=o.adjusting=false;o.corner=-1;o.adjustment=0;
  if(o.undo){o.undo->end();o.undo.reset();}refresh(o.effect);
- // Resolve can deliver a key before its queued OFX mouse-up callback. Close
- // the stroke's undo group before applying those commands, in their order.
- flushCommands(o);
-}
-void viewerCommand(Overlay&o,Action action,bool repeat){
- if(repeat&&!repeatable(action))return;
- if(o.drawing||o.moving||o.adjusting){
-  queueCommand(o,action,repeat);return;
- }
- command(o.effect,action);
 }
 unsigned (*modifierQuery)()=paint_input::nativeModifiers;
 // macOS and Windows: the current keyboard state, sampled only during a pointer
@@ -463,24 +425,12 @@ OfxStatus penMove(Overlay&o,OfxInteractHandle h,OfxPropertySetHandle in,bool up)
  if(up)finishGesture(o);
  interacts->interactRedraw(h);return kOfxStatOK;
 }
-bool nativeKey(void*owner,int keyCode,bool repeat){
- auto&o=*static_cast<Overlay*>(owner);
- if(!isLiveInstance(o.effect)||!o.hasCursor||!getInt(o.effect,"paint"))return false;
- const auto a=key(keyCode);if(a==Action::None)return false;
- if((a==Action::UndoPaint||a==Action::RedoPaint)&&!o.drawing&&!o.moving&&!o.adjusting&&o.pendingKeys.empty()&&!canPaintUndo(o.effect,a==Action::RedoPaint))return false;
- if(o.drawing||o.moving||o.adjusting)gestureTrace("shortcut during unfinished gesture");
- // Parameter edits/undo groups belong inside an OFX interact callback, not
- // the NSEvent monitor. Redraw schedules that callback on the host UI thread.
- try{queueCommand(o,a,repeat);interacts->interactRedraw(o.handle);}
- catch(const std::exception&ex){adrlog::error(std::string("paint key: ")+ex.what());}
- return true;
-}
 OfxStatus overlay(const char*action,const void*handle,OfxPropertySetHandle in,OfxPropertySetHandle){
  auto h=(OfxInteractHandle)handle;Overlay*active=nullptr;
  try{
   if(!std::strcmp(action,kOfxActionDescribe))return kOfxStatOK;
   OfxPropertySetHandle ip=nullptr;check(interacts->interactGetPropertySet(h,&ip),"overlay properties");
-  if(!std::strcmp(action,kOfxActionCreateInstance)){auto o=std::make_unique<Overlay>();void*e=nullptr;check(prop->propGetPointer(ip,kOfxPropEffectInstance,0,&e),"overlay effect");o->effect=(OfxImageEffectHandle)e;o->handle=h;check(prop->propSetPointer(ip,kOfxPropInstanceData,0,o.get()),"overlay instance");paint_input::registerKeys(o.get(),nativeKey);
+  if(!std::strcmp(action,kOfxActionCreateInstance)){auto o=std::make_unique<Overlay>();void*e=nullptr;check(prop->propGetPointer(ip,kOfxPropEffectInstance,0,&e),"overlay effect");o->effect=(OfxImageEffectHandle)e;o->handle=h;check(prop->propSetPointer(ip,kOfxPropInstanceData,0,o.get()),"overlay instance");
 #if defined(ADR_PAINT_TEST_HOOKS)
    testOverlays.insert(o.get());
 #endif
@@ -489,31 +439,22 @@ OfxStatus overlay(const char*action,const void*handle,OfxPropertySetHandle in,Of
   if(!std::strcmp(action,kOfxActionDestroyInstance)){
    // Resolve can destroy the effect before its overlay: no parameter or undo
    // calls here. Every stroke was already stored while painting.
-   paint_input::unregisterKeys(&o);
 #if defined(ADR_PAINT_TEST_HOOKS)
    testOverlays.erase(&o);
 #endif
    if(o.undo)o.undo->active=false;delete &o;return kOfxStatOK;
   }
-  if(!std::strcmp(action,kOfxInteractActionGainFocus)){o.modifiers=0;flushCommands(o);return kOfxStatOK;}
-  if(!std::strcmp(action,kOfxInteractActionLoseFocus)){paint_input::blurKeys(&o);o.modifiers=0;finishGesture(o);flushCommands(o);o.hasCursor=false;return kOfxStatOK;}
-  if(!getInt(e,"paint")){o.pendingKeys.clear();if(o.drawing||o.moving||o.adjusting)finishGesture(o);return kOfxStatReplyDefault;}
-  flushCommands(o);
+  if(!std::strcmp(action,kOfxInteractActionGainFocus)){o.modifiers=0;return kOfxStatOK;}
+  if(!std::strcmp(action,kOfxInteractActionLoseFocus)){o.modifiers=0;finishGesture(o);o.hasCursor=false;return kOfxStatOK;}
+  if(!getInt(e,"paint")){if(o.drawing||o.moving||o.adjusting)finishGesture(o);return kOfxStatReplyDefault;}
   if(!std::strcmp(action,kOfxInteractActionDraw)){draw(o,in);return kOfxStatOK;}
   const bool down=!std::strcmp(action,kOfxInteractActionKeyDown),repeat=!std::strcmp(action,kOfxInteractActionKeyRepeat),up=!std::strcmp(action,kOfxInteractActionKeyUp);
   if(down||repeat||up){
    int k=0;prop->propGetInt(in,"kOfxPropKeySym",0,&k);
    if(k>=0xffe1&&k<=0xffee&&k!=0xffe5&&k!=0xffe6){const unsigned bit=1u<<(k-0xffe1);if(up)o.modifiers&=~bit;else o.modifiers|=bit;return kOfxStatReplyDefault;}
-   if(up)return kOfxStatReplyDefault;
-   const unsigned undoModifiers=(1u<<2)|(1u<<3)|(1u<<6)|(1u<<7)|(1u<<10)|(1u<<11);
-   if((k=='z'||k=='Z')&&(o.modifiers&undoModifiers)&&!(o.modifiers&((1u<<8)|(1u<<9)))){
-    const bool redo=o.modifiers&3;if(!canPaintUndo(e,redo)&&!o.drawing&&!o.moving&&!o.adjusting)return kOfxStatReplyDefault;
-    viewerCommand(o,redo?Action::RedoPaint:Action::UndoPaint,repeat);interacts->interactRedraw(h);return kOfxStatOK;
-   }
-   if(o.modifiers)return kOfxStatReplyDefault;  // other host chords stay with the host
-   const auto a=key(k);if(a==Action::None)return kOfxStatReplyDefault;
-   viewerCommand(o,a,repeat);
-   interacts->interactRedraw(h);return kOfxStatOK;
+   // All keyboard commands belong to Resolve. Modifiers are observed only
+   // for pointer gestures and are passed through too.
+   return kOfxStatReplyDefault;
   }
   if(!std::strcmp(action,kOfxInteractActionPenDown))return penDown(o,h,in);
   if(!std::strcmp(action,kOfxInteractActionPenMotion)){

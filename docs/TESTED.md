@@ -264,10 +264,40 @@ pre-restart RGB samples exactly after a full Resolve restart: maximum absolute
 RGB difference 0. This is the same generated 640×360, 24 fps fixture used for
 the Windows navigation checks, not a new real-footage or tablet qualification.
 
-An open Mac UI issue remains in the automated native-input path: B/E/V and I
+**Superseded by the keyboard-removal build below.** An open Mac UI issue
+remained in the automated native-input path: B/E/V and I
 can change the active tool/method while the Inspector choice still displays
 its previous value. Parameter snapshots confirm the active state, and saving
 and reopening the project refreshes the menus. Callback-dispatch and parameter
 declaration experiments did not establish a fix and were removed. This prevents
 a complete Mac keyboard-workflow sign-off; painting/navigation/render passes
 must not be read as publication approval.
+
+### Resolve owns the keyboard — 9 November 2026
+
+The owner chose removal when the plugin shortcuts could not coexist reliably
+with Resolve. The current development build removes the Mac event monitor, the
+Windows key hook/F24 dispatch, and command-key handling in both the integrated
+brush and standalone Recovery Paint. Every OFX key-down, repeat and key-up is
+returned to the host. Modifier state is observed only for pointer gestures;
+Shift-drag size and Option/Alt-drag softness remain available. The inspector's
+shortcut hints and user-guide key tables were updated. Saved parameter IDs,
+choices, stroke documents and image processing are unchanged.
+
+Both callback suites verify that former brush keys, Delete, frame arrows,
+modifiers and undo keys pass through without changing parameters, paint
+history or an active draw/move/adjust gesture. Both sets of three CTests and
+the ADR CPU OFX contract pass. In Resolve Studio 21.1.1.10 on Apple M5 Pro,
+Color and Edit frame stepping and Shift-D bypass passed with the paint viewer
+active for both tools. ADR's Next stroke, Delete stroke and paint Undo/Redo
+buttons passed; Undo restored the exact stroke document. The standalone
+Larger/Smaller and Softer/Harder buttons passed. Its size-drag button changed
+80 to 113 pixels, and Resolve's native Cmd-Z restored 80 from the paint viewer.
+
+All 48 repeated ADR RGB-float EXR frames match the preceding build exactly
+(24 Color Recovery, 24 Edit Spanish; generated 640×360, 24 fps fixture).
+The prior stale-menu shortcut path has been removed, rather than qualified.
+Fresh Windows/Linux execution of this removal build and physical tablet feel
+have not been tested. Public installers, production ADR installation and
+recovery weights remain unchanged; publication still requires owner approval
+and the accepted recovery-training candidate.
