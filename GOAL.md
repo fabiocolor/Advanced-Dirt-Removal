@@ -30,7 +30,7 @@ The final candidate and remaining publication actions are recorded in
 | Windows: CUDA and OpenCL (NVIDIA and AMD), Resolve and Nuke | done |
 | Linux: CUDA and OpenCL, Resolve and Nuke | done |
 | Installers for macOS, Windows and Linux | built and tested; macOS empty-target install and installed Resolve renders now pass |
-| Resolve Color/Edit viewer painting | development build tested on the M5 Pro; native viewer controls and prepared-source renders, see docs/TESTED.md |
+| Resolve Color/Edit viewer painting | development build tested on the M5 Pro and Windows RTX 3090; native viewer controls, navigation and render/reopen checks, see docs/TESTED.md |
 | Premiere Pro / After Effects adapter | planned (the Adobe SDK is a separate download and cannot be redistributed) |
 | First public 2.0 release | waiting for the owner's review |
 

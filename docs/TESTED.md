@@ -96,7 +96,8 @@ the OFX contract on all three, three CTest checks, five source-preparation tests
 and three release-tool tests. Native interaction was driven through the test
 application's own event/accessibility interfaces; it does not qualify physical
 pen feel or human picture-quality approval.
-Physical tablet pressure and the new brush on Windows/Linux remain untested.
+Physical tablet pressure and native Linux viewer painting remain untested.
+Windows follow-up checks are recorded below.
 Held strokes are static; automatic tracking is not implemented. The existing
 installers and their qualification tables below are unchanged.
 
@@ -165,6 +166,7 @@ per frame (a 56-frame shot in 90 to 155 s).
 | --- | --- | --- |
 | DaVinci Resolve Studio 21.1, Fusion page | macOS, Metal | Tested: every feature (table above) |
 | DaVinci Resolve, Color and Edit pages | macOS | Development viewer-paint checks above; existing 2.0 installers do not include them |
+| DaVinci Resolve Studio 21.0.4.5, Color and Edit pages | Windows 11, RTX 3090 (OpenCL) | Development viewer-paint, stroke navigation and render/reopen checks below; existing installers do not include them |
 | Nuke 17.1 | macOS, Metal | Tested: every feature (table above) |
 | DaVinci Resolve Studio 21.0.4, Fusion page | Windows 11, RTX 3090 (CUDA) | Tested with the release installer on a 12-frame scan: plugin and controls load, every frame identical to macOS, Red difference, auto recovery (maps identical to macOS), the Spanish + auto recovery error and rendering again after fixing it, Cineon log |
 | DaVinci Resolve Studio 21.0.4, Fusion page | Ubuntu 24.04, RTX 3090 (CUDA) | Tested with the release tarball installed in `/usr/OFX/Plugins` on a 12-frame scan: plugin and controls load, every frame identical to macOS, Red difference, auto recovery (maps identical to macOS), the Spanish + auto recovery error and rendering again after fixing it, Cineon log |
@@ -223,5 +225,27 @@ Windows 11 on the RTX 3090 test workstation builds with MSVC 2022. The three
 paint/source/GPU-transport CTests pass, as do the CPU and OpenCL OFX contracts
 and all 77 Lua navigation mapping checks under Resolve's Windows `fuscript`.
 The build exposed a Windows header collision with a cache iterator named
-`far`; renaming it preserves the cache eviction rule. Native Windows viewer
-and playhead checks were blocked by Studio activation and remain unqualified.
+`far`; renaming it preserves the cache eviction rule.
+
+After normal Studio activation, native checks passed in Resolve 21.0.4.5:
+Color's Enhanced Viewer and Edit's Open FX viewer, round/square/rectangle
+painting, Recovery and Spanish, selection and property edits, Delete and paint
+Undo/Redo. Shift-drag changed size from 80 to 160; Alt-drag changed softness
+from 0.50 to 0.75 without adding strokes. Choosing a manual method resumed
+Paint after editing was disabled, with outlines off and selection cleared.
+
+Seven Color button jumps and nine Edit button jumps matched exact playhead
+readback, including wraparound and two strokes on one frame. Keyboard-only
+jumps also passed on both pages. A viewer-scoped Windows adapter prevents
+Resolve from taking brush letters as host shortcuts, leaves Inspector text
+editors alone, and dispatches queued edits inside OFX callbacks. These checks
+used Resolve's default keyboard mapping; its unassigned F24 dispatch key has
+not been qualified with custom host bindings. Brush keys require viewer focus.
+
+The saved Color/Edit OFX state was byte-identical before deletion and after
+paint Undo. After a full application restart, all 48 RGB-float EXR frames
+(24 Color Recovery, 24 Edit Spanish) matched their pre-restart RGB samples
+exactly. This used a generated 640×360, 24 fps fixture and an isolated test
+identity; it is not a real-footage quality or physical-tablet assessment.
+The production plugin, published installers, recovery weights and release
+approval remain unchanged.

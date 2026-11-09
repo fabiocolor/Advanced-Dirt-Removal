@@ -134,6 +134,9 @@ Strokes stay off the picture: you see only the result and the brush. A stroke
 you pick with **Select** is outlined; **Show strokes**, under **Brush options**,
 outlines all of them. **Previous stroke** and **Next stroke** go through the
 strokes in frame order and move the playhead to each one.
+On Resolve Studio, stroke navigation requires **Preferences → System → General →
+External scripting using: Local**. The plugin uses Resolve's bundled scripting
+interpreter; no separate Python installation is needed.
 
 **Select** lets you move a stroke or resize a rectangle by its corner handles.
 The visible controls edit its size, softness and opacity; open **Strokes**
@@ -153,10 +156,12 @@ With the pointer in the active paint viewer:
 | Round / Square / Rectangle | C / Q / R |
 | Size / softness | Shift-drag / Option-drag (Alt on Windows); [ and ] / - and = |
 | Previous / next stroke; delete | , / . ; Delete |
-| Undo / redo paint | Cmd-Z / Cmd-Shift-Z on Mac; Ctrl-Z / Ctrl-Shift-Z when delivered by the host |
+| Undo / redo paint | Cmd-Z / Cmd-Shift-Z on Mac; Ctrl-Z / Ctrl-Shift-Z on Windows |
 | Recovery / Spanish; stroke on/off; outlines | I / X / H |
 
-Paint shortcuts act in the active paint viewer and leave text editors alone.
+Paint shortcuts act in the focused paint viewer and leave text editors alone.
+After editing an Inspector field, return keyboard focus to the viewer before
+using brush shortcuts.
 With no applicable paint history, Undo and Redo pass through to Resolve.
 Frame stepping and bypass use Resolve's own keys. Other hosts hide the paint
 controls. Shortcuts depend on host input delivery; the native controls remain

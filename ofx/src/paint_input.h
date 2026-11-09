@@ -7,21 +7,22 @@
 namespace paint_input {
 enum Modifier : unsigned {Shift=1,Alt=2,HostCommand=4};
 constexpr int UndoKey=0x110000,RedoKey=0x110001;
-#ifdef __APPLE__
-unsigned nativeModifiers();
 using KeyHandler=bool(*)(void*,int,bool);
+#if defined(__APPLE__) || defined(_WIN32)
 void registerKeys(void* owner,KeyHandler handler);
 void focusKeys(void* owner);
 void blurKeys(void* owner);
 void unregisterKeys(void* owner);
 void shutdownKeys();
+#endif
+#ifdef __APPLE__
+unsigned nativeModifiers();
 #elif defined(_WIN32)
 inline unsigned nativeModifiers(){return (GetKeyState(VK_SHIFT)<0?Shift:0u)|(GetKeyState(VK_MENU)<0?Alt:0u)|((GetKeyState(VK_CONTROL)<0||GetKeyState(VK_LWIN)<0||GetKeyState(VK_RWIN)<0)?HostCommand:0u);}
 #else
 inline unsigned nativeModifiers(){return 0;}
 #endif
-#ifndef __APPLE__
-using KeyHandler=bool(*)(void*,int,bool);
+#if !defined(__APPLE__) && !defined(_WIN32)
 inline void registerKeys(void*,KeyHandler){}
 inline void focusKeys(void*){}
 inline void blurKeys(void*){}
