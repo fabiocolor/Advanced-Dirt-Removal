@@ -67,7 +67,8 @@ OfxPropertySuiteV1* prop=nullptr;
 OfxParameterSuiteV1* params=nullptr;
 OfxMessageSuiteV1* messages=nullptr;
 OfxMessageSuiteV2* persistentMessages=nullptr;
-OfxInteractSuiteV1* interacts=nullptr;  // viewer painting (Resolve only)
+OfxInteractSuiteV1* interacts=nullptr;
+OfxTimeLineSuiteV1* timeline=nullptr;  // stroke navigation moves the playhead (optional)  // viewer painting (Resolve only)
 std::mutex mutex;
 std::mutex liveInstancesMutex;
 std::set<OfxImageEffectHandle> liveInstances;
@@ -377,7 +378,11 @@ struct Instance {
   }
   rendered=servedCached=0;renderMs=0;sourceSeen=flatWarned=rangeWarned=false;
  }
- void close(){originalSource.clear();summary("closed");prefetchTime=std::numeric_limits<int>::min();if(sequence)adr_sequence_destroy(sequence);sequence=nullptr;if(history)adr_history_destroy(history);history=nullptr;key.clear();cachedFrame=std::numeric_limits<int>::min();cached.clear();recent.clear();}
+ void close(){originalSource.clear();summary("closed");prefetchTime=std::numeric_limits<int>::min();const bool live=sequence!=nullptr;if(sequence)adr_sequence_destroy(sequence);sequence=nullptr;if(history)adr_history_destroy(history);history=nullptr;key.clear();cachedFrame=std::numeric_limits<int>::min();cached.clear();recent.clear();
+  // A closed sequence (new settings or clip, error, instance gone) leaves its
+  // buffers in the engine's reuse pool. Release them: the next sequence may use
+  // other sizes, and on unified-memory Macs pooled buffers are system RAM.
+  if(live&&engineContext)adr_context_trim(engineContext);}
  // Host memory purges drop frames and GPU buffers but keep the few-KB
  // motion-history checkpoints, which stay valid for the same key.
  void purge(){originalSource.clear();summary("host purged caches");prefetchTime=std::numeric_limits<int>::min();prefetch.clear();prefetch.shrink_to_fit();if(sequence)adr_sequence_destroy(sequence);sequence=nullptr;if(engineContext)adr_context_trim(engineContext);cachedFrame=std::numeric_limits<int>::min();cached.clear();cached.shrink_to_fit();recent.clear();scratch.clear();scratch.shrink_to_fit();}
@@ -748,8 +753,8 @@ void calculateShot(OfxImageEffectHandle e,Instance&i){
    for(auto it=src.begin();it!=src.end();)if(it->first<time-2)it=src.erase(it);else ++it;
    if(done%10==0)adrlog::info(i.label()+" auto recovery: "+std::to_string(done)+"/"+std::to_string(count)+" frames");
   }
- }catch(...){adr_sequence_destroy(seq);throw;}
- adr_sequence_destroy(seq);
+ }catch(...){adr_sequence_destroy(seq);adr_context_trim(context());throw;}
+ adr_sequence_destroy(seq);adr_context_trim(context());  // the whole-shot pass's buffers
  const double secs=std::chrono::duration<double>(std::chrono::steady_clock::now()-t0).count();
  char line[200];std::snprintf(line,sizeof line," auto recovery: %d frames calculated in %.0f s (%.2f s/frame)",done,secs,secs/std::max(1,done));adrlog::info(i.label()+line);
 }
@@ -1051,7 +1056,7 @@ OfxStatus entry(const char*action,const void*handle,OfxPropertySetHandle in,OfxP
  // context without adding driver operations to reentrant metadata actions.
  adr_host::GpuScope lifecycleTransport(adr_host::GpuBackend::Cpu,nullptr,!std::strcmp(action,kOfxActionUnload)||!std::strcmp(action,kOfxActionPurgeCaches),!std::strcmp(action,kOfxActionUnload));
 #endif
- if(!std::strcmp(action,kOfxActionLoad)){require(host,"missing host");fx=(OfxImageEffectSuiteV1*)host->fetchSuite(host->host,kOfxImageEffectSuite,1);prop=(OfxPropertySuiteV1*)host->fetchSuite(host->host,kOfxPropertySuite,1);params=(OfxParameterSuiteV1*)host->fetchSuite(host->host,kOfxParameterSuite,1);messages=(OfxMessageSuiteV1*)host->fetchSuite(host->host,kOfxMessageSuite,1);persistentMessages=(OfxMessageSuiteV2*)host->fetchSuite(host->host,kOfxMessageSuite,2);interacts=(OfxInteractSuiteV1*)host->fetchSuite(host->host,kOfxInteractSuite,1);require(fx&&prop&&params,"required OFX suites unavailable",kOfxStatErrMissingHostFeature);logStartup();return kOfxStatOK;}
+ if(!std::strcmp(action,kOfxActionLoad)){require(host,"missing host");fx=(OfxImageEffectSuiteV1*)host->fetchSuite(host->host,kOfxImageEffectSuite,1);prop=(OfxPropertySuiteV1*)host->fetchSuite(host->host,kOfxPropertySuite,1);params=(OfxParameterSuiteV1*)host->fetchSuite(host->host,kOfxParameterSuite,1);messages=(OfxMessageSuiteV1*)host->fetchSuite(host->host,kOfxMessageSuite,1);persistentMessages=(OfxMessageSuiteV2*)host->fetchSuite(host->host,kOfxMessageSuite,2);interacts=(OfxInteractSuiteV1*)host->fetchSuite(host->host,kOfxInteractSuite,1);timeline=(OfxTimeLineSuiteV1*)host->fetchSuite(host->host,kOfxTimeLineSuite,1);require(fx&&prop&&params,"required OFX suites unavailable",kOfxStatErrMissingHostFeature);logStartup();return kOfxStatOK;}
  if(!std::strcmp(action,kOfxActionUnload)){paint_input::shutdownKeys();if(engineContext){uint64_t a=0,p=0;adr_context_memory(engineContext,&a,&p);adrlog::info("unload: GPU memory peak "+std::to_string(p>>20)+" MiB");adr_context_destroy(engineContext);}else adrlog::info("unload");engineContext=nullptr;adrlog::close();return kOfxStatOK;}
  if(!std::strcmp(action,kOfxActionDescribe)){auto p=properties(e);
 #if ADR_HOST_METAL_TRANSPORT

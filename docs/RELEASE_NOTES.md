@@ -4,6 +4,10 @@
 
 - Reduced memory use during GPU rendering in Resolve on macOS, Windows and Linux.
 - Fixed memory not being freed after CPU processing on Windows.
+- Auto recovery no longer keeps growing memory over a shot, which could fill
+  swap on long clips ([#9](https://github.com/fabiocolor/Advanced-Dirt-Removal/issues/9)).
+- GPU memory is freed when a shot or its settings change, instead of being kept
+  for later.
 - Cleaning results and controls are unchanged.
 
 ## 2.0.0

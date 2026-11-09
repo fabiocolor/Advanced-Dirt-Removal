@@ -128,6 +128,11 @@ Open FX Overlay enabled there.
 Drag a rectangle from corner to corner. **Recovery** gives the original back;
 **Spanish dirt removal** repairs only where you paint.
 
+Strokes stay off the picture: you see only the result and the brush. A stroke
+you pick with **Select** is outlined; **Show strokes**, under **Brush options**,
+outlines all of them. **Previous stroke** and **Next stroke** go through the
+strokes in frame order and move the playhead to each one.
+
 **Select** lets you move a stroke or resize a rectangle by its corner handles.
 The visible controls edit its size, softness and opacity; open **Strokes**
 for duration, enable state, deletion and rectangle dimensions. **Delete stroke**

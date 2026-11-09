@@ -232,6 +232,24 @@ int main(int argc,char**argv){
   verify(paint_ui::histories.at(handle).undo.size()<=64,"paint history count is bounded");
   inPaintCallback=false;paint_ui::histories.erase(handle);
   std::cout<<"viewer paint undo/redo, property restoration and bounds: passed\n";
+  // Previous/Next stroke: frame order, starting from the playhead (12 in this
+  // host), and the playhead moves to a stroke that is not on the current frame.
+  {
+   static std::vector<double> moves;moves.clear();ts.gotoTime=[](void*,double t)->OfxStatus{moves.push_back(t);return kOfxStatOK;};
+   paint::Document strokes;strokes.width=1920;strokes.height=1080;strokes.nextId=4;
+   for(int f:{30,10,20}){paint::Stroke s;s.id=int(strokes.strokes.size())+1;s.first=s.last=f;s.points.push_back({.5,.5,1});strokes.strokes.push_back(s);}
+   paint_ui::store(handle,strokes);paint_ui::setInt(handle,"paint_stroke",0);paint_ui::setInt(handle,"paint_tool",paint_ui::ToolPaint);inPaintCallback=true;
+   auto picked=[&]{return paint_ui::document(handle).strokes[size_t(paint_ui::getInt(handle,"paint_stroke")-1)].first;};
+   paint_ui::command(handle,paint_ui::Action::Next);verify(picked()==20&&moves==std::vector<double>{20}&&paint_ui::getInt(handle,"paint_tool")==paint_ui::ToolSelect,"Next from the playhead selects the next stroke in frame order and goes to it");
+   paint_ui::command(handle,paint_ui::Action::Next);verify(picked()==30&&moves.back()==30,"Next follows frame order, not paint order");
+   paint_ui::command(handle,paint_ui::Action::Next);verify(picked()==10&&moves.back()==10,"Next wraps to the first stroke");
+   paint_ui::command(handle,paint_ui::Action::Previous);verify(picked()==30&&moves.back()==30,"Previous wraps to the last stroke");
+   paint_ui::setInt(handle,"paint_stroke",0);paint_ui::command(handle,paint_ui::Action::Previous);verify(picked()==10&&moves.back()==10,"Previous from the playhead selects the stroke before it");
+   paint::Document here=strokes;here.strokes[0].first=0;here.strokes[0].last=40;paint_ui::store(handle,here);paint_ui::setInt(handle,"paint_stroke",0);const size_t before=moves.size();
+   paint_ui::command(handle,paint_ui::Action::Next);verify(moves.size()==before,"a stroke already on the current frame keeps the playhead");
+   ts.gotoTime=nullptr;inPaintCallback=false;paint_ui::histories.erase(handle);
+   std::cout<<"stroke navigation in frame order moves the playhead: passed\n";
+  }
 
   interacts=savedInteract;pas.paramSetValue=nullptr;pas.paramEditBegin=nullptr;pas.paramEditEnd=nullptr;pas.paramGetPropertySet=nullptr;
   for(auto&saved:savedParameters)e.parameters.at(saved.first)=saved.second;

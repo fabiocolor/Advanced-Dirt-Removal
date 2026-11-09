@@ -112,6 +112,26 @@ bool restorePaint(OfxImageEffectHandle e,bool redo){
  }catch(...){h.restoring=false;throw;}
 }
 void select(OfxImageEffectHandle e,int stroke){Updating guard;setInt(e,"paint_stroke",stroke);if(stroke)setInt(e,"paint_tool",ToolSelect);}
+bool playhead(OfxImageEffectHandle e,double&t){return timeline&&timeline->getTime&&timeline->getTime(e,&t)==kOfxStatOK&&std::isfinite(t);}
+// Previous/Next stroke: strokes in frame order. With nothing selected, start
+// from the playhead. The playhead moves to the stroke so it can be seen.
+void step(OfxImageEffectHandle e,const paint::Document&d,int selected,bool next){
+ const int count=int(d.strokes.size());if(!count)return;
+ std::vector<int> order(static_cast<size_t>(count));for(int k=0;k<count;++k)order[size_t(k)]=k;
+ std::stable_sort(order.begin(),order.end(),[&](int a,int b){return d.strokes[size_t(a)].first<d.strokes[size_t(b)].first;});
+ int at=-1;for(int k=0;k<count;++k)if(order[size_t(k)]==selected-1)at=k;
+ double now=0;const bool known=playhead(e,now);
+ if(at<0){
+  if(next){at=0;if(known)for(int k=0;k<count;++k)if(d.strokes[size_t(order[size_t(k)])].last>=now){at=k;break;}}
+  else{at=count-1;if(known)for(int k=count-1;k>=0;--k)if(d.strokes[size_t(order[size_t(k)])].first<=now){at=k;break;}}
+ }else at=(at+(next?1:count-1))%count;
+ const int chosen=order[size_t(at)];select(e,chosen+1);
+ const auto&s=d.strokes[size_t(chosen)];
+ if(timeline&&timeline->gotoTime&&(!known||now<s.first||now>s.last)){
+  const auto status=timeline->gotoTime(e,double(s.first));
+  if(status!=kOfxStatOK)adrlog::info("paint: host did not move the playhead to stroke frame "+std::to_string(s.first)+" (OFX status "+std::to_string(status)+")");
+ }
+}
 // Keys, buttons and Inspector edits share the same paint history.
 void command(OfxImageEffectHandle e,Action action){
  using A=Action;
@@ -119,7 +139,7 @@ void command(OfxImageEffectHandle e,Action action){
  switch(action){
   case A::UndoPaint:case A::RedoPaint:restorePaint(e,action==A::RedoPaint);return;
   case A::Paint:case A::Erase:case A::Select:{Updating guard;setInt(e,"paint_tool",action==A::Paint?ToolPaint:action==A::Erase?ToolErase:ToolSelect);if(action!=A::Select)setInt(e,"paint_stroke",0);refresh(e);return;}
-  case A::Previous:case A::Next:if(!count)return;select(e,action==A::Next?(selected>=count?1:selected+1):(selected<=1?count:selected-1));refresh(e,true);return;
+  case A::Previous:case A::Next:if(!count)return;step(e,d,has?selected:0,action==A::Next);refresh(e,true);return;
   case A::Outlines:{Updating guard;setInt(e,"paint_outlines",!getInt(e,"paint_outlines"));return;}
   case A::View1:case A::View2:case A::View3:case A::View4:{const int v=int(action)-int(A::View1);if(getInt(e,"view")==v)return;Undo undo(e,"View");Updating guard;setInt(e,"view",v);return;}
   case A::Mode:{Undo undo(e,"Recovery mode");{Updating guard;setInt(e,"mask_mode",!getInt(e,"mask_mode"));}refresh(e);return;}
@@ -218,8 +238,8 @@ void define(OfxParamSetHandle ps,bool visible,bool groupDefined=false){
  make(kOfxParamTypePushButton,"paint_redo","Redo paint","paint_group","Redo a paint edit. Cmd/Ctrl-Shift-Z while the viewer has paint focus.");
  {auto p=make(kOfxParamTypeGroup,"stroke_details_group","Strokes",detailsParent,nullptr);si(p,kOfxParamPropGroupOpen,0);}
  {auto p=make(kOfxParamTypeInteger,"paint_hold","Hold (frames)","stroke_details_group","How many frames a new stroke lasts, from the frame it is painted on. 1 paints only the current frame.");si(p,kOfxParamPropDefault,1);si(p,kOfxParamPropMin,1);si(p,kOfxParamPropMax,100000);si(p,kOfxParamPropDisplayMin,1);si(p,kOfxParamPropDisplayMax,250);}
- make(kOfxParamTypePushButton,"paint_previous","Previous stroke","stroke_details_group","Select the previous stroke (key ,).");
- make(kOfxParamTypePushButton,"paint_next","Next stroke","stroke_details_group","Select the next stroke (key .).");
+ make(kOfxParamTypePushButton,"paint_previous","Previous stroke","stroke_details_group","Select the previous stroke in frame order and go to its frame (key ,).");
+ make(kOfxParamTypePushButton,"paint_next","Next stroke","stroke_details_group","Select the next stroke in frame order and go to its frame (key .).");
  make(kOfxParamTypePushButton,"paint_delete","Delete stroke","stroke_details_group","Delete the selected stroke (Delete key). Undo brings it back.");
  boolean("paint_stroke_on","Stroke on","stroke_details_group","Turn the selected stroke off to compare without it (key X).",1);
  real("paint_rect_width","Rectangle width","stroke_details_group","Width of the selected rectangle in picture pixels.",80,1,32768,2048);
@@ -227,7 +247,7 @@ void define(OfxParamSetHandle ps,bool visible,bool groupDefined=false){
  {auto p=make(kOfxParamTypeGroup,"paint_options_group","Brush options",detailsParent,nullptr);si(p,kOfxParamPropGroupOpen,0);}
  real("paint_smoothing","Smoothing","paint_options_group","Smooths the pen path while you paint.",.2,0,.95,.95);
  boolean("paint_pressure","Tablet pressure","paint_options_group","Pen pressure changes the brush size. Leave off for a mouse.",0);
- boolean("paint_outlines","Show strokes","paint_options_group","Draw stroke outlines and the brush in the viewer (key H). Never rendered.",1);
+ boolean("paint_outlines","Show strokes","paint_options_group","Outline every stroke in the viewer (key H). Off: you see only the result and the brush; a stroke you select with Select is outlined. Never rendered.",0);
  {auto p=make(kOfxParamTypeGroup,"paint_source_group","Source setup",detailsParent,nullptr);si(p,kOfxParamPropGroupOpen,0);}
  {auto p=make(kOfxParamTypeChoice,"paint_source_kind","Paint source","paint_source_group","Clean this clip: repair this input, then recover the original. Prepared original: the input is a finished processed export; painting uses its prepared original without running cleanup again.",true);ss(p,kOfxParamPropChoiceOption,"Clean this clip",0);ss(p,kOfxParamPropChoiceOption,"Prepared original",1);si(p,kOfxParamPropDefault,0);}
  {auto p=make(kOfxParamTypeString,"paint_source_folder","Original folder","paint_source_group","Run Prepare ADR Recovery Source with the processed export on V2 and the aligned original on V1. Keep the verified source folder with the project.",true);ss(p,kOfxParamPropStringMode,kOfxParamStringIsDirectoryPath);ss(p,kOfxParamPropDefault,"");}
@@ -340,8 +360,11 @@ void draw(Overlay&o,OfxPropertySetHandle in){
  const double diameter=getDouble(e,"paint_size"),softness=getDouble(e,"paint_softness");const auto shape=paint::Shape(getInt(e,"paint_shape"));
  if(!paint_gl::ready())return;
  paint_gl::Scope gl;
- if(outlines)for(size_t j=0;j<d.strokes.size();++j){
+ // Strokes stay off the picture: only the result shows. Show strokes outlines
+ // them all; otherwise only the stroke deliberately selected with Select.
+ for(size_t j=0;j<d.strokes.size();++j){
   const auto&s=d.strokes[j];if(time<s.first||time>s.last)continue;
+  if(!outlines&&!(tool==ToolSelect&&int(j+1)==selected))continue;
   if(int(j+1)==selected)paint_gl::color(1,.85f,0,1);else if(!s.enabled)paint_gl::color(.5f,.5f,.5f,.5f);else if(s.erase)paint_gl::color(1,.35f,.25f,.7f);else paint_gl::color(.1f,1,.7f,.7f);
   if(s.shape==paint::Shape::Rectangle){
    box(o,s.points[0],s.points[1]);

@@ -197,10 +197,23 @@ std::shared_ptr<RecoveryModel> load_recovery_model(Device& device, const std::st
 
 std::vector<float> recovery_forward(Device& device, const RecoveryModel& model, const uint8_t* crops, int count) {
   std::vector<float> probs(static_cast<size_t>(count));
+  const size_t crop_bytes = size_t(kChannels) * kCrop * kCrop;
+  std::vector<uint8_t> padded;
   for (int start = 0; start < count; start += kBatch) {
-    const int B = std::min(kBatch, count - start);
-    const size_t n = size_t(B) * kChannels * kCrop * kCrop;
-    Tensor bytes = upload(device, DType::u8, {int64_t(n)}, crops + size_t(start) * kChannels * kCrop * kCrop);
+    // Run the last batch at the next power of two, padded with blank crops.
+    // Every crop is scored on its own, so the result is unchanged, and the
+    // buffer pool sees only 7 batch sizes instead of a new size every frame.
+    const int used = std::min(kBatch, count - start);
+    int B = 1;
+    while (B < used) B *= 2;
+    const size_t n = size_t(B) * crop_bytes;
+    const uint8_t* source = crops + size_t(start) * crop_bytes;
+    if (B != used) {
+      padded.assign(n, 0);
+      std::memcpy(padded.data(), source, size_t(used) * crop_bytes);
+      source = padded.data();
+    }
+    Tensor bytes = upload(device, DType::u8, {int64_t(n)}, source);
     Tensor x = empty(device, DType::f32, {B, kChannels, kCrop, kCrop});
     SizeParams sp{int(n)};
     device.launch("nn_bytes_to_float", grid1(n), kGroup1, {bytes.b(), x.b()}, sp);
@@ -214,7 +227,7 @@ std::vector<float> recovery_forward(Device& device, const RecoveryModel& model, 
         NnHeadParams hp{B, c, hgt * wid, L.fc_bias};
         device.launch("nn_head", grid1(size_t(B)), Dim3{64, 1, 1}, {x.b(), L.weight.b(), logits.b()}, hp);
         const std::vector<float> lg = download<float>(device, logits);
-        for (int b = 0; b < B; ++b) probs[size_t(start + b)] = float(1.0 / (1.0 + std::exp(-double(lg[size_t(b)]))));
+        for (int b = 0; b < used; ++b) probs[size_t(start + b)] = float(1.0 / (1.0 + std::exp(-double(lg[size_t(b)]))));
         break;
       }
       const bool downsample = L.flags & 8;
