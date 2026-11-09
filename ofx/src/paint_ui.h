@@ -174,7 +174,7 @@ void applyChanged(OfxImageEffectHandle e,const std::string&name,const char*reaso
  if(updating)return;
  if(name=="paint_data"||name=="paint_stroke"){if(name=="paint_data")histories.erase(e);refresh(e,true);return;}
  if(name=="mask_mode"){if(reason&&!std::strcmp(reason,kOfxChangeUserEdited))readyToPaint(e);refresh(e);return;}
- if(name=="paint_source_kind"){updateRecoveryEnabled(instance(e));return;}
+ if(name=="paint_source_kind"){updateRecoveryEnabled(instance(e));refreshRecoveryUI(e);return;}
  if(name=="paint_tool"){if(getInt(e,"paint_tool")!=ToolSelect&&getInt(e,"paint_stroke")){Updating guard;setInt(e,"paint_stroke",0);}refresh(e);return;}
  if(!reason||std::strcmp(reason,kOfxChangeUserEdited))return;
  if(name=="paint_previous"){command(e,Action::Previous);return;}
@@ -444,6 +444,7 @@ OfxStatus overlay(const char*action,const void*handle,OfxPropertySetHandle in,Of
 #endif
    if(o.undo)o.undo->active=false;delete &o;return kOfxStatOK;
   }
+  refreshRecoveryUI(e);
   if(!std::strcmp(action,kOfxInteractActionGainFocus)){o.modifiers=0;return kOfxStatOK;}
   if(!std::strcmp(action,kOfxInteractActionLoseFocus)){o.modifiers=0;finishGesture(o);o.hasCursor=false;return kOfxStatOK;}
   if(!getInt(e,"paint")){if(o.drawing||o.moving||o.adjusting)finishGesture(o);return kOfxStatReplyDefault;}

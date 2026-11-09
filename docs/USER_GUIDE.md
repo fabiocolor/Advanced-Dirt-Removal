@@ -186,6 +186,15 @@ it a probability. Spots at or above **Confidence** are given back.
   map per frame. The button returns immediately; the calculation runs with the
   next render (on an Apple M5 Pro, about 1.5 to 3 seconds per 2.4K frame). Without
   the button, any frame that has no map yet is calculated when it renders.
+  These files store recovery mattes. Use Resolve's render cache or the prepared
+  source workflow to retain cleaned pictures.
+- The development candidate adds a **Calculation** status showing queued work,
+  frame counts, completion time, cancellation or failure. It requests the host's
+  progress display when available. While a whole-shot calculation is queued or
+  running, the button becomes **Cancel calculation**. Valid saved mattes are
+  reused; a completely cached shot needs no new cleaning or classification.
+  The status refreshes when the host updates the viewer or controls. Native
+  Resolve progress-display behavior still needs verification for this candidate.
 - Maps are stored per shot, keyed by the shot's first frame, its frame range and
   size, the input encoding and every cleaning control. Change any of these and the
   matte is calculated again automatically; changing back reuses the earlier maps.
@@ -213,6 +222,16 @@ automatic recovery pauses in Spanish mode, preserving its saved setting for
 when Recovery is selected again. It also pauses for prepared processed exports,
 which do not run the cleaner or its model. Other OFX hosts retain the published
 external-mask behavior and require Auto recovery off for Spanish mode.
+
+The development candidate bypasses cleaning on Resolve frames with no active
+built-in strokes. On a painted frame, the cleaner still calculates a full-frame
+temporal result and applies it only inside the brush. That result is cached for
+subsequent brush edits. This is not yet computation restricted to the brush
+area: the first painted-frame request, a cold seek, changed cleaning settings or
+a host cache purge can still require motion analysis. A Spanish node after an
+active automatic-cleaning node also pays for that upstream node's processing.
+Rejected proxy/thumbnail requests no longer discard a valid full-resolution
+cleaning cache; proxy rendering itself remains unsupported.
 
 ## Views
 

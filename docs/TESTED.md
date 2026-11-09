@@ -12,6 +12,32 @@ Version 2.0.0, November 2026. Real-footage tests use a 2368×1712 film scan
 (float EXR): 56 frames on macOS, a 12-frame excerpt on Windows and Linux,
 compared frame by frame with the macOS result.
 
+## Spanish scheduling and recovery feedback — development build, 9 November 2026
+
+The macOS OFX contract host passes on CPU and Metal with the 21-frame 512×512
+synthetic fixture. Untouched built-in Spanish frames request only the current
+source and create no cleaning sequence, including Cineon input and cold caches.
+Restored output is an identity; Red difference retains its expected grey
+background. A later stroke obtains the genuine repaired picture, and an opacity
+edit reuses that picture with exact brush-limited blending. Legacy masks and
+prepared-original routes retain their existing output checks.
+
+Whole-shot calculation tests cover a nonblocking queue/cancel button while the
+render lock is held, complete declared source dependencies, optional V1/V2 host
+progress, cancellation/failure without publishing pixels, and balanced progress
+closure. Fully cached mattes need no new cleaner or classifier pass. A partially
+cached pass reproduces the missing matte byte for byte against classification
+of the direct-engine reference. Rejected preview-scale requests preserve the
+full-resolution sequence, motion history and cleaned pixels. Three CTests pass.
+
+These are contract-host checks, not a new Resolve Color/Edit UI qualification.
+The revised candidate has not been installed in the active tablet-review
+session. Native progress display, cancellation and playback still need testing;
+Windows/Linux execution and physical tablet performance are not qualified by
+these results. First-time painted frames still use full-frame temporal analysis:
+computation restricted to individual brush areas remains unimplemented. No new
+real-footage speed claim or publication approval follows from these checks.
+
 ## Integrated Resolve inspector — development build, 8 November 2026
 
 A single independent review from Astra and Fable informed a shared layout for

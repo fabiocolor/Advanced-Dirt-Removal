@@ -67,6 +67,14 @@ OfxStatus message(void*handle,const char*,const char*,const char*format,...){++m
 OfxStatus timeBounds(void*,double*a,double*b){*a=0;*b=24;return kOfxStatOK;}
 OfxStatus timeCursor(void*,double*t){*t=12;return kOfxStatOK;}
 OfxTimeLineSuiteV1 ts{};OfxMessageSuiteV1 ms{};
+int progressStarts=0,progressEnds=0;bool progressCancel=false;
+std::vector<double> progressValues;
+OfxStatus progressStart(void*,const char*){++progressStarts;return kOfxStatOK;}
+OfxStatus progressStartV2(void*,const char*,const char*){++progressStarts;return kOfxStatOK;}
+OfxStatus progressUpdate(void*,double value){progressValues.push_back(value);return progressCancel?kOfxStatReplyNo:kOfxStatOK;}
+OfxStatus progressEnd(void*){++progressEnds;return kOfxStatOK;}
+OfxProgressSuiteV1 progressSuite{progressStart,progressUpdate,progressEnd};
+OfxProgressSuiteV2 progressSuiteV2{progressStartV2,progressUpdate,progressEnd};
 OfxPropertySuiteV1 ps{};OfxParameterSuiteV1 pas{};OfxImageEffectSuiteV1 es{};
 const void* fetch(OfxPropertySetHandle,const char*s,int v){if(v!=1)return nullptr;if(std::strcmp(s,kOfxPropertySuite)==0)return &ps;if(std::strcmp(s,kOfxParameterSuite)==0)return &pas;if(std::strcmp(s,kOfxImageEffectSuite)==0)return &es;if(std::strcmp(s,kOfxTimeLineSuite)==0)return &ts;if(std::strcmp(s,kOfxMessageSuite)==0)return &ms;return nullptr;}
 void environment(const char*k,const std::string&v){
@@ -142,7 +150,7 @@ int main(int argc,char**argv){
  verify(rejectedMetalSupport>=2,"CPU-only host rejects optional GPU extensions without preventing discovery");
 #endif
  rejectMetalSupport=false;verify(plugin->mainEntry(kOfxActionDescribe,handle,nullptr,nullptr)==kOfxStatOK,"GPU-capable descriptor also accepted");
- verify(plugin->mainEntry(kOfxImageEffectActionDescribeInContext,handle,ip,nullptr)==0,"context");verify(e.parameters.size()==67,"all controls, groups and pages exposed");verify(e.parameters.count("page_paint")==0&&e.parameters["paint"].props.ints[kOfxParamPropSecret]==std::vector<int>{1}&&e.parameters["paint_tool"].props.ints[kOfxParamPropSecret]==std::vector<int>{1},"viewer painting hidden outside Resolve");verify(e.props.pointers.count(kOfxImageEffectPluginPropOverlayInteractV1)==0,"no viewer overlay outside Resolve");for(auto pg:{"page_cleaning","page_recovery","page_view"})verify(e.parameters.count(pg)==1,"inspector page defined");for(auto g:{"detection","processing","safeguards"})verify(e.parameters.count(g)==1,"control group defined");verify(e.parameters["sensitivity"].props.strings[kOfxParamPropParent]==std::vector<std::string>{"detection"},"controls are grouped");verify(plugin->mainEntry(kOfxActionCreateInstance,handle,nullptr,nullptr)==0,"create");
+ verify(plugin->mainEntry(kOfxImageEffectActionDescribeInContext,handle,ip,nullptr)==0,"context");verify(e.parameters.size()==68,"all controls, groups and pages exposed");verify(e.parameters.count("page_paint")==0&&e.parameters["paint"].props.ints[kOfxParamPropSecret]==std::vector<int>{1}&&e.parameters["paint_tool"].props.ints[kOfxParamPropSecret]==std::vector<int>{1},"viewer painting hidden outside Resolve");verify(e.props.pointers.count(kOfxImageEffectPluginPropOverlayInteractV1)==0,"no viewer overlay outside Resolve");for(auto pg:{"page_cleaning","page_recovery","page_view"})verify(e.parameters.count(pg)==1,"inspector page defined");for(auto g:{"detection","processing","safeguards"})verify(e.parameters.count(g)==1,"control group defined");verify(e.parameters["sensitivity"].props.strings[kOfxParamPropParent]==std::vector<std::string>{"detection"},"controls are grouped");verify(plugin->mainEntry(kOfxActionCreateInstance,handle,nullptr,nullptr)==0,"create");
  // Compact Resolve presentation preserves every existing value/type/range/choice.
  // The normal-host descriptor is an independent ordering of the same controls.
  {
@@ -302,6 +310,7 @@ int main(int argc,char**argv){
   verify(interest.doubles["OfxImageClipPropRoI_Source"]==std::vector<double>({-7,11,-3,14}),"concurrent source RoI query");
   callback(kOfxImageEffectActionGetClipPreferences,H(query),preferences,kOfxStatOK);
   verify(preferences.ints[kOfxImageEffectFrameVarying]==std::vector<int>({1}),"concurrent clip preferences query");
+  Properties identity;callback(kOfxImageEffectActionIsIdentity,H(query),identity,kOfxStatReplyDefault);
   Properties changed,ignored;
   setString(H(changed),kOfxPropType,0,kOfxTypeClip);setString(H(changed),kOfxPropName,0,"Source");setString(H(changed),kOfxPropChangeReason,0,kOfxChangeTime);
   callback(kOfxActionInstanceChanged,H(changed),ignored,kOfxStatReplyDefault);
@@ -349,7 +358,32 @@ int main(int argc,char**argv){
   verify(automatic==std::vector<int>{1},"Spanish preserves saved automatic-recovery preference");automatic={0};
   paintEnabled={0};paintRender(f,0,"saved strokes still own recovery with editing off");
   paintRender(f+1,0,"saved strokes own frames without a stroke");
+  const int renderedBefore=instance(handle).rendered,cachedBefore=instance(handle).cachedFrame;
+  const int nextBefore=adr_sequence_next_output(instance(handle).sequence);fetched.clear();
   paintRender(f+1,1,"Spanish untouched frames ignore legacy mask");
+  verify(std::all_of(fetched.begin(),fetched.end(),[&](int t){return t==f+101;}),"untouched Spanish fetches only current source");
+  verify(instance(handle).rendered==renderedBefore&&instance(handle).cachedFrame==cachedBefore&&adr_sequence_next_output(instance(handle).sequence)==nextBefore,"untouched Spanish never advances the engine or poisons cleaned cache");
+  Properties identity;verify(plugin->mainEntry(kOfxImageEffectActionIsIdentity,handle,ip,H(identity))==kOfxStatOK&&identity.strings[kOfxPropName]==std::vector<std::string>{"Source"},"untouched Spanish restored view is host identity");
+  // Even with no engine/cache to fall back on, an untouched Spanish frame
+  // stays exact. Red difference still needs its grey diagnostic background.
+  instance(handle).close();paintRender(f+1,1,"cold untouched Spanish is exact");
+  verify(!instance(handle).sequence&&!instance(handle).history,"cold untouched Spanish never creates an engine sequence");
+  auto&encoding=e.parameters["encoding"].props.ints[kOfxParamPropDefault];encoding={1};
+  paintRender(f+1,1,"untouched Spanish Cineon is exact without engine");encoding={0};
+  auto&view=e.parameters["view"].props.ints[kOfxParamPropDefault];view={1};
+  verify(plugin->mainEntry(kOfxImageEffectActionIsIdentity,handle,ip,H(identity))==kOfxStatReplyDefault,"diagnostic views are not bypassed as identity");
+  verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)==kOfxStatOK,"untouched Spanish red difference renders without engine");
+  {Image result(reinterpret_cast<OfxImageClipHandle>(&e.output),f+101);for(int y=0;y<h;++y)for(int x=0;x<w;++x){const size_t k=((size_t(f+1)*h+y)*w+x)*3;const float grey=.2126f*sourcePixels[k]+.7152f*sourcePixels[k+1]+.0722f*sourcePixels[k+2];for(int c=0;c<3;++c)verify(result.read(x,y,c)==grey,"untouched Spanish preserves red difference background");}}
+  verify(!instance(handle).sequence,"Spanish diagnostic view does not start cleaning");view={0};
+  // A later new stroke must now obtain real repaired pixels, rather than a
+  // source-only frame accidentally stored in the cleaned-picture cache.
+  paintRender(f,1,"stroke after untouched bypass uses genuine repair");
+  const int editsBefore=instance(handle).rendered;paintRender(f,1,"same-frame Spanish reuses repaired picture");
+  verify(instance(handle).rendered==editsBefore,"same-frame Spanish brush render does not rerun cleaning");
+  d.strokes[0].opacity=.5;data={paint::encode(d)};
+  verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)==kOfxStatOK&&instance(handle).rendered==editsBefore,"editing stroke opacity reuses the cleaned frame");
+  {Image result(reinterpret_cast<OfxImageClipHandle>(&e.output),f+100);for(int y=0;y<h;++y)for(int x=0;x<w;++x)for(int c=0;c<3;++c){const size_t k=((size_t(f)*h+y)*w+x)*3+c;const float want=inside(x,y)?sourcePixels[k]+(targetPixels[k]-sourcePixels[k])*.5f:sourcePixels[k];verify(result.read(x,y,c)==want,"Spanish opacity edit blends only brush pixels, exactly");}}
+  d.strokes[0].opacity=1;data={paint::encode(d)};
   data={""};paintEnabled={1};paintRender(f+1,0,"empty built-in brush ignores legacy mask while editing");
   verify(maskFetches==0,"built-in recovery never requests an external mask image");
   paintEnabled={0};mode={0};setDouble(ip,kOfxPropTime,0,f+100);
@@ -402,6 +436,78 @@ int main(int argc,char**argv){
   interacts=nullptr;verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)!=0,"prepared source rejected outside Resolve");
   setInt(H(e.parameters["paint_source_kind"].props),kOfxParamPropDefault,0,0);renderFrame(0);
   std::cout<<"Prepared original: exact Recovery/Spanish endpoints, current frame only, no engine sequence, host gating passed\n";
+ }
+
+ // Whole-shot analysis: the UI never takes the render lock, the declared
+ // dependency covers the shot, progress cancels cleanly, and saved mattes
+ // avoid rerunning either cleaning or classification.
+ {
+  pas.paramSetValue=paintSetValue;pas.paramGetPropertySet=paintParameterProperties;
+  Properties changed;setString(H(changed),kOfxPropType,0,kOfxTypeParameter);setString(H(changed),kOfxPropName,0,"recovery_calculate");
+  setString(H(changed),kOfxPropChangeReason,0,kOfxChangeUserEdited);
+  auto calculate=[&]{return plugin->mainEntry(kOfxActionInstanceChanged,handle,H(changed),nullptr);};
+  auto&i=instance(handle);
+  {
+   std::lock_guard<std::mutex> renderLock(i.lock);
+   auto job=std::async(std::launch::async,calculate);
+   if(job.wait_for(std::chrono::seconds(2))!=std::future_status::ready){std::cerr<<"FAIL: calculation button waits for render lock\n";std::_Exit(1);}
+   verify(job.get()==kOfxStatOK,"calculation queues without render lock");
+  }
+  verify(i.calculateRequested&&i.recoveryState==Instance::Queued,"queued recovery state");
+  verify(e.parameters.at("recovery_status").props.strings.at(kOfxParamPropDefault)[0].find("Queued")!=std::string::npos,"queued status is visible immediately");
+  setDouble(ip,kOfxPropTime,0,100);Properties needed;
+  verify(plugin->mainEntry(kOfxImageEffectActionGetFramesNeeded,handle,ip,H(needed))==kOfxStatOK&&needed.doubles["OfxImageClipPropFrameRange_Source"]==std::vector<double>({100.,double(99+count)}),"whole-shot analysis declares every needed source frame");
+  declaredFrameRange[0]=100;declaredFrameRange[1]=99+count;
+  auto renderAnalysis=[&]{
+   Properties needed;verify(plugin->mainEntry(kOfxImageEffectActionGetFramesNeeded,handle,ip,H(needed))==kOfxStatOK,"analysis dependencies");
+   const auto range=needed.doubles["OfxImageClipPropFrameRange_Source"];declaredFrameRange[0]=range[0];declaredFrameRange[1]=range[1];
+   return plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr);
+  };
+  verify(calculate()==kOfxStatOK&&!i.calculateRequested&&i.recoveryState==Instance::Cancelled,"second click cancels queued work");
+  verify(e.parameters.at("auto_recovery").props.ints.at(kOfxParamPropDefault)==std::vector<int>{0},"cancelling restores Auto recovery instead of starting a per-frame classifier");
+  auto before=e.output.images[100]->backing;
+  progressV1=&progressSuite;progressCancel=true;
+  verify(calculate()==kOfxStatOK,"queue cancellation test");
+  verify(renderAnalysis()!=kOfxStatOK,"host progress cancellation stops analysis");
+  verify(i.recoveryState==Instance::Cancelled&&progressStarts==1&&progressEnds==1,"cancelled progress closes and retains its status");
+  verify(e.output.images[100]->backing==before,"cancelled analysis publishes no output pixels");
+  progressCancel=false;
+  const auto folder=logFolder/"analysis-mattes";
+  paint_ui::setText(handle,"recovery_folder",folder.u8string());
+  std::string controlIdentity;readControls(i,100,controlIdentity);auto settings=readSettings(i,100);
+  const auto dir=recoveryShotFolder(i,handle,settings,controlIdentity,{100,99+count},w,h,{bounds[0],bounds[1],bounds[2],bounds[3]});
+  std::vector<uint8_t> zero(size_t(w)*h,0);
+  for(int f=100;f<100+count;++f)saveProbability(dir,f,w,h,zero);
+  setInt(H(e.parameters["auto_recovery"].props),kOfxParamPropDefault,0,0);renderFrame(0);
+  const int rendered=i.rendered;auto*sequence=i.sequence;
+  progressV1=nullptr;progressV2=&progressSuiteV2;progressValues.clear();
+  verify(calculate()==kOfxStatOK,"queue cached analysis");
+  verify(renderAnalysis()==kOfxStatOK,"valid whole-shot maps are reused");
+  verify(i.recoveryState==Instance::Complete&&i.recoveryDone==count&&i.sequence==sequence&&i.rendered==rendered,"cached analysis creates no cleaning or classification pass");
+  verify(progressStarts==2&&progressEnds==2&&!progressValues.empty()&&progressValues.front()==0&&progressValues.back()==1&&std::is_sorted(progressValues.begin(),progressValues.end()),"V2 progress is monotonic and closes on completion");
+  refreshRecoveryUI(handle);
+  verify(e.parameters.at("recovery_status").props.strings.at(kOfxParamPropDefault)[0].find("Complete:")!=std::string::npos,"completion and timing refresh in UI callback");
+  // A partially cached shot must skip existing mattes, then classify the
+  // missing frame from exactly the same repaired pixels as the full engine.
+  const auto partialFolder=logFolder/"analysis-partial";paint_ui::setText(handle,"recovery_folder",partialFolder.u8string());
+  settings=readSettings(i,100);const auto partialDir=recoveryShotFolder(i,handle,settings,controlIdentity,{100,99+count},w,h,{bounds[0],bounds[1],bounds[2],bounds[3]});
+  const int absent=3;for(int f=0;f<count;++f)if(f!=absent)saveProbability(partialDir,100+f,w,h,zero);
+  environment("ADR_RECOVERY_MODEL",(std::filesystem::path(__FILE__).parent_path().parent_path()/"resources"/"recovery-model.bin").u8string());
+  std::vector<uint8_t> expected(size_t(w)*h),actual;char analysisError[2048]={};const auto stride=size_t(w)*h*3;
+  verify(adr_recovery_frame(recoveryModel(),sourcePixels.data()+(absent-1)*stride,sourcePixels.data()+absent*stride,sourcePixels.data()+(absent+1)*stride,targetPixels.data()+absent*stride,w,h,size_t(w)*12,ADR_RECOVERY_INPUT_VIDEO,expected.data(),analysisError,sizeof analysisError)>=0,"independent classifier reference");
+  verify(calculate()==kOfxStatOK&&renderAnalysis()==kOfxStatOK,"partial-cache whole-shot pass completes");
+  verify(i.recoveryState==Instance::Complete&&loadProbability(partialDir,100+absent,w,h,actual)&&actual==expected,"missing matte matches direct-engine classifier bytes");
+  verify(progressStarts==3&&progressEnds==3,"partial-cache calculation closes progress");
+  paint_ui::setText(handle,"recovery_folder",(logFolder/"analysis-missing-source").u8string());
+  verify(calculate()==kOfxStatOK,"queue missing-source analysis");missing=101;
+  before=e.output.images[100]->backing;
+  verify(renderAnalysis()!=kOfxStatOK&&i.recoveryState==Instance::Failed,"analysis failure has an explicit failed status");
+  verify(progressStarts==4&&progressEnds==4&&e.output.images[100]->backing==before,"failed analysis closes progress without publishing pixels");missing=-999;
+  progressV1=nullptr;progressV2=nullptr;
+  i.recoveryState=Instance::Idle;i.cancelCalculation=false;i.calculateRequested=false;
+  paint_ui::setText(handle,"recovery_folder","");setInt(H(e.parameters["auto_recovery"].props),kOfxParamPropDefault,0,0);refreshRecoveryUI(handle);
+  pas.paramSetValue=nullptr;pas.paramGetPropertySet=nullptr;renderFrame(0);
+  std::cout<<"analysis UI: lock-free queue/cancel, full dependencies, V1/V2 progress, matte reuse, failure and timing passed\n";
  }
 
  // Progressive "Both" renders: some hosts report an inclusive full-frame window.
@@ -471,6 +577,15 @@ int main(int argc,char**argv){
   verify(instance(handle).key.find("256x256")!=std::string::npos,"sequence uses changed dimensions");
   e.source.images=std::move(sourceImages);e.output.images=std::move(outputImages);setIntN(ip,kOfxImageEffectPropRenderWindow,4,bounds);renderFrame(0);
   std::cout<<"same-instance 512 -> 256 -> 512 geometry exact\n";
+ }
+ {
+  const auto*sequence=instance(handle).sequence;const auto*history=instance(handle).history;
+  const int cached=instance(handle).cachedFrame;const auto pixels=instance(handle).cached;
+  const auto output=e.output.images[100]->backing;const double proxy[]={.5,.5};setDoubleN(ip,kOfxImageEffectPropRenderScale,2,proxy);
+  verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)!=kOfxStatOK,"unsupported preview scale remains explicit");
+  verify(instance(handle).sequence==sequence&&instance(handle).history==history&&instance(handle).cachedFrame==cached&&instance(handle).cached==pixels,"rejected preview never clears full-resolution history or cleaned cache");
+  verify(e.output.images[100]->backing==output,"rejected preview publishes no pixels");
+  setDoubleN(ip,kOfxImageEffectPropRenderScale,2,scale);renderFrame(0);
  }
  setDouble(ip,kOfxPropTime,0,100.5);verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)!=0,"fractional time rejected");
  verify(plugin->mainEntry(kOfxActionDestroyInstance,handle,nullptr,nullptr)==0,"destroy");verify(acquired==released,"all image handles released");verify(undeclaredFetches==0,"all source fetches inside actual render declaration");verify(plugin->mainEntry(kOfxActionUnload,nullptr,nullptr,nullptr)==0,"unload");

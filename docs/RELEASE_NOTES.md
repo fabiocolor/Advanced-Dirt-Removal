@@ -8,7 +8,19 @@
   swap on long clips ([#9](https://github.com/fabiocolor/Advanced-Dirt-Removal/issues/9)).
 - GPU memory is freed when a shot or its settings change, instead of being kept
   for later.
-- Cleaning results and controls are unchanged.
+- Cleaning math is unchanged.
+
+### Viewer-paint development candidate
+
+- Spanish painting skips cleaning on frames without active strokes and reuses
+  the cleaned picture across brush edits. Painted frames still use full-frame
+  temporal analysis; brush-area-only computation is not implemented.
+- Calculate recovery adds status/timing, optional host progress, cancellation,
+  and reuse of valid saved mattes. Whole-shot dependencies are declared to the
+  host, and the button no longer waits for the render lock.
+- Rejected thumbnail/proxy requests preserve full-resolution cleaning caches.
+- These changes are not in the published installers. Contract checks and native
+  Resolve interaction checks have separate qualification scopes.
 
 ## 2.0.0
 
