@@ -249,3 +249,25 @@ exactly. This used a generated 640×360, 24 fps fixture and an isolated test
 identity; it is not a real-footage quality or physical-tablet assessment.
 The production plugin, published installers, recovery weights and release
 approval remain unchanged.
+
+### macOS follow-up — 9 November 2026
+
+The same source (`222d398`) was rebuilt as an isolated test identity on the
+Apple M5 Pro and loaded in Resolve Studio 21.1.1.10. Native Color Enhanced
+Viewer and Edit Open FX controls moved the actual timeline playhead to the
+selected stroke. Independent scripting readback confirmed frames 3, 12 and 20,
+wraparound, and multiple strokes on frame 20. Comma/period navigation passed
+on both pages after giving the viewer paint focus.
+
+All 48 RGB-float EXR frames (24 Color Recovery, 24 Edit Spanish) matched their
+pre-restart RGB samples exactly after a full Resolve restart: maximum absolute
+RGB difference 0. This is the same generated 640×360, 24 fps fixture used for
+the Windows navigation checks, not a new real-footage or tablet qualification.
+
+An open Mac UI issue remains in the automated native-input path: B/E/V and I
+can change the active tool/method while the Inspector choice still displays
+its previous value. Parameter snapshots confirm the active state, and saving
+and reopening the project refreshes the menus. Callback-dispatch and parameter
+declaration experiments did not establish a fix and were removed. This prevents
+a complete Mac keyboard-workflow sign-off; painting/navigation/render passes
+must not be read as publication approval.
