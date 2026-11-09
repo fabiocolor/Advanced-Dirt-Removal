@@ -120,7 +120,9 @@ selection status and Undo/Redo. Its collapsed **Strokes**, **Brush options** and
 Detection while concentrating on painting; available panel height and display
 scaling determine how much scrolling is needed.
 
-Turn on **Paint in viewer** and the viewer's **Open FX Overlay**. On Color,
+Painting is enabled by default. Choosing **Method: Recovery** or **Spanish dirt
+removal** resumes Paint and clears the review selection. Turn on the viewer's
+**Open FX Overlay**; **Paint in viewer** can pause editing when needed. On Color,
 **Enhanced Viewer** (Shift-F) gives the picture more room. Choose **Paint**,
 **Erase** or **Select**, then a **Round**, **Square** or **Rectangle** brush.
 Resolve 21.1.1 disables Enhanced Viewer on Edit; use its standard viewer with
@@ -303,3 +305,15 @@ difference view. The optical-flow motion mask of 1.x is replaced by **Motion
 guard** and auto recovery. On macOS and Linux, installing 2.0 leaves a 1.x
 macro in place; on Windows the installer replaces the 1.x installation
 ([INSTALL.md](INSTALL.md)).
+
+### Stroke navigation in Color and Edit
+
+Previous/Next stroke, or `,` and `.`, visits strokes in frame order and moves
+the playhead to each stroke's first frame, including held strokes. Color/Edit
+navigation uses Resolve's bundled Lua interpreter and local scripting API when
+the OFX timeline suite cannot seek. There is no Python dependency or utility to
+launch. Resolve Studio must allow Local external scripting. Mapping follows the
+current clip and trims; navigation does not change stroke data or image pixels.
+**Show strokes** defaults off. Painting shows the result and brush cursor; an
+explicit Select action shows only the selected shape. Turn Show strokes on for
+review when outlines are useful.

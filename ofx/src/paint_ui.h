@@ -111,8 +111,23 @@ bool restorePaint(OfxImageEffectHandle e,bool redo){
   from.pop_back();(redo?h.undo:h.redo).push_back(std::move(current));boundHistory(h);h.restoring=false;refresh(e);return true;
  }catch(...){h.restoring=false;throw;}
 }
+// New Resolve effects are ready to paint. A connected legacy mask with no
+// built-in strokes starts on its original route until Recovery is chosen.
+void initializePainting(OfxImageEffectHandle e){
+ if(!paintHost()||!params->paramSetValue||!instance(e).mask||!document(e).strokes.empty())return;
+ OfxPropertySetHandle p=nullptr;int connected=0;
+ if(fx->clipGetPropertySet(instance(e).mask,&p)==kOfxStatOK&&prop->propGetInt(p,kOfxImageClipPropConnected,0,&connected)==kOfxStatOK&&connected){Updating guard;setInt(e,"paint",0);}
+}
 void select(OfxImageEffectHandle e,int stroke){Updating guard;setInt(e,"paint_stroke",stroke);if(stroke)setInt(e,"paint_tool",ToolSelect);}
-bool playhead(OfxImageEffectHandle e,double&t){return timeline&&timeline->getTime&&timeline->getTime(e,&t)==kOfxStatOK&&std::isfinite(t);}
+void readyToPaint(OfxImageEffectHandle e){Updating guard;setInt(e,"paint",1);setInt(e,"paint_tool",ToolPaint);setInt(e,"paint_stroke",0);}
+std::map<OfxImageEffectHandle,double> cursorTimes;
+void observeTime(OfxImageEffectHandle e,OfxPropertySetHandle in){double t=0;if(in&&prop->propGetDouble(in,kOfxPropTime,0,&t)==kOfxStatOK&&std::isfinite(t))cursorTimes[e]=t;}
+bool playhead(OfxImageEffectHandle e,double&t){
+ if(timeline&&timeline->getTime&&timeline->getTime(e,&t)==kOfxStatOK&&std::isfinite(t))return true;
+ auto found=cursorTimes.find(e);if(found==cursorTimes.end())return false;t=found->second;return true;
+}
+using SeekFallback=bool(*)(void*,double,double,int,int);
+SeekFallback fallbackSeek=paint_navigation::request;
 // Previous/Next stroke: strokes in frame order. With nothing selected, start
 // from the playhead. The playhead moves to the stroke so it can be seen.
 void step(OfxImageEffectHandle e,const paint::Document&d,int selected,bool next){
@@ -127,9 +142,12 @@ void step(OfxImageEffectHandle e,const paint::Document&d,int selected,bool next)
  }else at=(at+(next?1:count-1))%count;
  const int chosen=order[size_t(at)];select(e,chosen+1);
  const auto&s=d.strokes[size_t(chosen)];
- if(timeline&&timeline->gotoTime&&(!known||now<s.first||now>s.last)){
-  const auto status=timeline->gotoTime(e,double(s.first));
-  if(status!=kOfxStatOK)adrlog::info("paint: host did not move the playhead to stroke frame "+std::to_string(s.first)+" (OFX status "+std::to_string(status)+")");
+ {
+  const auto status=timeline&&timeline->gotoTime?timeline->gotoTime(e,double(s.first)):kOfxStatErrUnsupported;
+  if(status!=kOfxStatOK){
+   bool queued=false;if(known&&paintHost()&&fallbackSeek){const auto range=sourceRange(instance(e));queued=fallbackSeek(e,now,s.first,range[0],range[1]);}
+   if(!queued)adrlog::info("paint: host could not move to stroke frame "+std::to_string(s.first)+" (OFX status "+std::to_string(status)+")");
+  }
  }
 }
 // Keys, buttons and Inspector edits share the same paint history.
@@ -142,7 +160,7 @@ void command(OfxImageEffectHandle e,Action action){
   case A::Previous:case A::Next:if(!count)return;step(e,d,has?selected:0,action==A::Next);refresh(e,true);return;
   case A::Outlines:{Updating guard;setInt(e,"paint_outlines",!getInt(e,"paint_outlines"));return;}
   case A::View1:case A::View2:case A::View3:case A::View4:{const int v=int(action)-int(A::View1);if(getInt(e,"view")==v)return;Undo undo(e,"View");Updating guard;setInt(e,"view",v);return;}
-  case A::Mode:{Undo undo(e,"Recovery mode");{Updating guard;setInt(e,"mask_mode",!getInt(e,"mask_mode"));}refresh(e);return;}
+  case A::Mode:{Undo undo(e,"Recovery mode");{Updating guard;setInt(e,"mask_mode",!getInt(e,"mask_mode"));readyToPaint(e);}refresh(e);return;}
   case A::Delete:case A::Toggle:if(!has)return;break;
   default:break;
  }
@@ -171,7 +189,7 @@ std::map<OfxImageEffectHandle,ChangeBatch> changeBatches;
 void applyChanged(OfxImageEffectHandle e,const std::string&name,const char*reason){
  if(updating)return;
  if(name=="paint_data"||name=="paint_stroke"){if(name=="paint_data")histories.erase(e);refresh(e,true);return;}
- if(name=="mask_mode"){refresh(e);return;}
+ if(name=="mask_mode"){if(reason&&!std::strcmp(reason,kOfxChangeUserEdited))readyToPaint(e);refresh(e);return;}
  if(name=="paint_source_kind"){updateRecoveryEnabled(instance(e));return;}
  if(name=="paint_tool"){if(getInt(e,"paint_tool")!=ToolSelect&&getInt(e,"paint_stroke")){Updating guard;setInt(e,"paint_stroke",0);}refresh(e);return;}
  if(!reason||std::strcmp(reason,kOfxChangeUserEdited))return;
@@ -209,7 +227,7 @@ void endChanges(OfxImageEffectHandle e){
 }
 // InstanceChanged for paint parameters (and Mode, which changes the wording).
 void changed(OfxImageEffectHandle e,OfxPropertySetHandle in){
- if(updating)return;char*name=nullptr;check(prop->propGetString(in,kOfxPropName,0,&name),"changed parameter");
+ if(updating)return;if(!cursorTimes.count(e))observeTime(e,in);char*name=nullptr;check(prop->propGetString(in,kOfxPropName,0,&name),"changed parameter");
  char*reason=nullptr;prop->propGetString(in,kOfxPropChangeReason,0,&reason);
  auto found=changeBatches.find(e);
  if(found!=changeBatches.end()){found->second.names.emplace_back(name?name:"",reason?reason:"");return;}
@@ -227,7 +245,7 @@ void define(OfxParamSetHandle ps,bool visible,bool groupDefined=false){
  auto boolean=[&](const char*name,const char*label,const char*parent,const char*hint,int initial,bool evaluate=false){auto p=make(kOfxParamTypeBoolean,name,label,parent,hint,evaluate);si(p,kOfxParamPropDefault,initial);};
  auto label=[&](const char*name,const char*text,const char*parent,const char*initial){auto p=make(kOfxParamTypeString,name,text,parent,nullptr);ss(p,kOfxParamPropStringMode,kOfxParamStringIsLabel);ss(p,kOfxParamPropDefault,initial);si(p,kOfxParamPropPersistant,0);};
  if(!groupDefined){auto p=make(kOfxParamTypeGroup,"paint_group","Paint",nullptr,nullptr);si(p,kOfxParamPropGroupOpen,1);}
- boolean("paint","Paint in viewer","paint_group","Paint directly in this effect's viewer (turn on Open FX Overlay). Recovery gives original detail back; Spanish dirt removal repairs only where painted. No separate Mask Paint is needed. While editing is enabled or strokes exist, the built-in brush replaces the legacy external mask.",0,true);
+ boolean("paint","Paint in viewer","paint_group","Paint directly in this effect's viewer (turn on Open FX Overlay). Recovery gives original detail back; Spanish dirt removal repairs only where painted. No separate Mask Paint is needed. While editing is enabled or strokes exist, the built-in brush replaces the legacy external mask.",visible?1:0,true);
  choice("paint_tool","Tool","paint_group","Paint, Erase (take paint away) or Select (click a stroke to select, move or resize it). Keys B, E, V.",{"Paint","Erase","Select"});
  choice("paint_shape","Brush","paint_group","Round or square brush, or a rectangle dragged from corner to corner. Keys C, Q, R.",{"Round","Square","Rectangle"});
  real("paint_size","Size","paint_group","Brush diameter in picture pixels. Shift-drag in the viewer, or [ and ].",80,1,2048,400);
@@ -279,7 +297,7 @@ void geometry(Overlay&o,double time){
 }
 void readScale(Overlay&o,OfxPropertySetHandle in){for(int j=0;j<2;++j){double scale=1;if(prop->propGetDouble(in,kOfxInteractPropPixelScale,j,&scale)==kOfxStatOK&&std::isfinite(scale)&&scale>0)o.pixelScale[j]=scale;}}
 void coordinates(Overlay&o,OfxPropertySetHandle in){
- o.frame=frameTime(in);geometry(o,o.frame);paint_input::focusKeys(&o);
+ o.frame=frameTime(in);observeTime(o.effect,in);geometry(o,o.frame);paint_input::focusKeys(&o);
  const double x=number(in,kOfxInteractPropPenPosition,0),y=number(in,kOfxInteractPropPenPosition,1);double pressure=1;
  if(getInt(o.effect,"paint_pressure"))prop->propGetDouble(in,kOfxInteractPropPenPressure,0,&pressure);if(!std::isfinite(pressure))pressure=1;
  o.cursor={(x-o.rod.x1)/(o.rod.x2-o.rod.x1),(y-o.rod.y1)/(o.rod.y2-o.rod.y1),std::clamp(pressure,0.,1.)};o.hasCursor=true;
@@ -354,7 +372,7 @@ void brushOutline(const Overlay&o,const paint::Point&p,double diameter,paint::Sh
  if(shape==paint::Shape::Square)box(o,{p.x-r*o.par/(o.rod.x2-o.rod.x1),p.y-r/(o.rod.y2-o.rod.y1),1},{p.x+r*o.par/(o.rod.x2-o.rod.x1),p.y+r/(o.rod.y2-o.rod.y1),1});else circle(o,p,r);
 }
 void draw(Overlay&o,OfxPropertySetHandle in){
- auto e=o.effect;const double time=number(in,kOfxPropTime);geometry(o,time);readScale(o,in);
+ auto e=o.effect;observeTime(e,in);const double time=number(in,kOfxPropTime);geometry(o,time);readScale(o,in);
  // Read every host value before touching GL state.
  const auto d=document(e);const int selected=getInt(e,"paint_stroke"),outlines=getInt(e,"paint_outlines"),tool=getInt(e,"paint_tool");
  const double diameter=getDouble(e,"paint_size"),softness=getDouble(e,"paint_softness");const auto shape=paint::Shape(getInt(e,"paint_shape"));

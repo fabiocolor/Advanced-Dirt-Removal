@@ -155,6 +155,7 @@ int main(int argc,char**argv){
    auto a=before.props,b=after.props;
    for(auto key:{kOfxPropLabel,kOfxParamPropHint,kOfxParamPropParent}){a.strings.erase(key);b.strings.erase(key);}
    a.ints.erase(kOfxParamPropSecret);b.ints.erase(kOfxParamPropSecret);
+   if(entry.first=="paint"){verify(a.ints.at(kOfxParamPropDefault)==std::vector<int>{0}&&b.ints.at(kOfxParamPropDefault)==std::vector<int>{1},"painting defaults on in Resolve only");a.ints.erase(kOfxParamPropDefault);b.ints.erase(kOfxParamPropDefault);}
    verify(a.strings==b.strings&&a.ints==b.ints&&a.doubles==b.doubles,"compact layout retains defaults, ranges, choices and evaluation behavior");
   }
   verify(compact.parameters.at("paint").props.ints.at(kOfxParamPropEvaluateOnChange)==std::vector<int>{1},"enabling the built-in brush invalidates legacy-mask output immediately");
@@ -246,8 +247,19 @@ int main(int argc,char**argv){
    paint_ui::command(handle,paint_ui::Action::Previous);verify(picked()==30&&moves.back()==30,"Previous wraps to the last stroke");
    paint_ui::setInt(handle,"paint_stroke",0);paint_ui::command(handle,paint_ui::Action::Previous);verify(picked()==10&&moves.back()==10,"Previous from the playhead selects the stroke before it");
    paint::Document here=strokes;here.strokes[0].first=0;here.strokes[0].last=40;paint_ui::store(handle,here);paint_ui::setInt(handle,"paint_stroke",0);const size_t before=moves.size();
-   paint_ui::command(handle,paint_ui::Action::Next);verify(moves.size()==before,"a stroke already on the current frame keeps the playhead");
-   ts.gotoTime=nullptr;inPaintCallback=false;paint_ui::histories.erase(handle);
+   paint_ui::command(handle,paint_ui::Action::Next);verify(moves.size()==before+1&&moves.back()==0,"held stroke navigation goes to its first frame even when visible now");
+   auto savedFallback=paint_ui::fallbackSeek;auto savedHost=hostProperties;auto*savedInteracts=interacts;OfxInteractSuiteV1 interactive{};interacts=&interactive;setString(H(hostProperties),kOfxPropName,0,"DaVinciResolve");
+   ts.getTime=[](void*,double*)->OfxStatus{return kOfxStatErrUnsupported;};ts.gotoTime=[](void*,double)->OfxStatus{return kOfxStatErrUnsupported;};
+   static std::vector<double> fallback;fallback.clear();paint_ui::fallbackSeek=[](void*,double now,double target,int,int)->bool{fallback={now,target};return true;};
+   const double fallbackRange[]={0,40};setDoubleN(H(e.source.props),kOfxImageEffectPropFrameRange,2,fallbackRange);
+   paint_ui::cursorTimes[handle]=12;paint_ui::store(handle,strokes);paint_ui::setInt(handle,"paint_stroke",0);
+   paint_ui::command(handle,paint_ui::Action::Next);verify(fallback==std::vector<double>({12,20}),"unsupported OFX timeline uses observed viewer time and the Resolve navigation fallback");
+   paint_ui::setInt(handle,"paint",0);paint_ui::command(handle,paint_ui::Action::Mode);verify(paint_ui::getInt(handle,"paint")==1,"method shortcut enables painting");
+   paint_ui::setInt(handle,"paint",0);paint_ui::applyChanged(handle,"mask_mode",kOfxChangeUserEdited);verify(paint_ui::getInt(handle,"paint")==1&&paint_ui::getInt(handle,"paint_tool")==paint_ui::ToolPaint&&paint_ui::getInt(handle,"paint_stroke")==0,"choosing Recovery resumes painting instead of stroke review");
+   paint_ui::setInt(handle,"paint",0);paint_ui::applyChanged(handle,"mask_mode",kOfxChangePluginEdited);verify(paint_ui::getInt(handle,"paint")==0,"loading settings preserves an explicitly disabled brush");
+   paint_ui::setText(handle,"paint_data","");paint_ui::setInt(handle,"paint",1);setInt(H(e.mask.props),kOfxImageClipPropConnected,0,1);paint_ui::initializePainting(handle);
+   verify(paint_ui::getInt(handle,"paint")==0,"old connected-mask project keeps its compatibility route on initialization");setInt(H(e.mask.props),kOfxImageClipPropConnected,0,0);
+   paint_ui::fallbackSeek=savedFallback;hostProperties=savedHost;interacts=savedInteracts;ts.getTime=timeCursor;ts.gotoTime=nullptr;inPaintCallback=false;paint_ui::histories.erase(handle);
    std::cout<<"stroke navigation in frame order moves the playhead: passed\n";
   }
 

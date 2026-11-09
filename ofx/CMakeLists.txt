@@ -97,6 +97,8 @@ configure_file(Info.plist.in "${OFX_CONTENTS}/Info.plist" @ONLY)
 configure_file(vendor/openfx/LICENSE.md "${OFX_CONTENTS}/Resources/OpenFX-LICENSE.md" COPYONLY)
 configure_file(vendor/openfx/UPSTREAM.json "${OFX_CONTENTS}/Resources/OpenFX-UPSTREAM.json" COPYONLY)
 configure_file(../LICENSE "${OFX_CONTENTS}/Resources/LICENSE.txt" COPYONLY)
+configure_file(resources/paint-navigation.lua "${OFX_CONTENTS}/Resources/paint-navigation.lua" COPYONLY)
+set_property(TARGET AdvancedDirtRemoval APPEND PROPERTY LINK_DEPENDS "${OFX_CONTENTS}/Resources/paint-navigation.lua")
 # Auto-recovery classifier weights (see tools/convert_recovery_model.py).
 configure_file(resources/recovery-model.bin "${OFX_CONTENTS}/Resources/recovery-model.bin" COPYONLY)
 if(APPLE)

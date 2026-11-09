@@ -200,3 +200,28 @@ behaviour hosts depend on.
 The host feature tests drive Resolve and Nuke by script and compare every
 rendered pixel with NumPy; they need the test footage and are kept with the
 maintainer's test material.
+
+## Stroke navigation and painting defaults — 9 November 2026
+
+Resolve Color/Edit rejects the optional OFX timeline seek operation. Stroke
+navigation now falls back to Resolve's bundled Lua interpreter and documented
+local scripting API. No Python or separately launched utility is required.
+Target frames map from the native clip range and trim offsets, independently
+of stale parameter callback times. Every navigation request seeks the stroke's
+first frame, including held strokes and wraparound.
+
+New Resolve effects default to painting on and Show strokes off. Choosing
+Recovery or Spanish resumes Paint and exits selection review. Older connected
+mask-only projects preserve their mask route until the built-in brush is chosen.
+The source contract tests cover these defaults, host seek rejection/fallback,
+mode activation, loading explicitly disabled painting and mask compatibility.
+Lua checks cover NDF/DF timecodes, rapid requests, trims and unsupported ranges.
+Native Color/Edit qualification is recorded separately with exact playhead
+readback; selecting a stroke alone is not proof of a successful jump.
+
+Windows 11 on the RTX 3090 test workstation builds with MSVC 2022. The three
+paint/source/GPU-transport CTests pass, as do the CPU and OpenCL OFX contracts
+and all 77 Lua navigation mapping checks under Resolve's Windows `fuscript`.
+The build exposed a Windows header collision with a cache iterator named
+`far`; renaming it preserves the cache eviction rule. Native Windows viewer
+and playhead checks were blocked by Studio activation and remain unqualified.
