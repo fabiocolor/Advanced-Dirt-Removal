@@ -22,6 +22,8 @@
 #include <map>
 #include <tuple>
 #include <fstream>
+#include <iomanip>
+#include <locale>
 #include <sys/stat.h>
 #include "../../engine/tools/sha256.h"
 #include "diagnostic_log.h"
@@ -347,6 +349,10 @@ adr_context* context(){
  adrlog::info("GPU: "+engineBackend+" (requested "+(choice&&*choice?choice:"auto")+", ready in "+std::to_string(int(std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count()))+" ms); CPU table "+(adr_reciprocal_table()?adr_reciprocal_table():"?"));
  return engineContext;
 }
+struct CleaningProfileUI {
+ int previousMode=0,depth=0;
+ bool modeChanged=false,userMode=false,controlsRestored=false,profilesRestored=false;
+};
 struct Instance {
  OfxImageClipHandle source=nullptr,output=nullptr,mask=nullptr;
  std::map<std::string,OfxParamHandle> parameters;
@@ -376,6 +382,7 @@ struct Instance {
  std::atomic<double> recoverySeconds{0};
  std::atomic<int> recoveryPreviousAuto{0};
  std::atomic<bool> restoreAutoOnCancel{false};
+ CleaningProfileUI cleaningProfile;  // UI callbacks only; saved values live in host parameters
  // Diagnostic log: instance number and the live sequence's statistics.
  int id=0;
  std::string label()const{return "instance #"+std::to_string(id);}
@@ -406,6 +413,7 @@ void refreshRecoveryUI(OfxImageEffectHandle);
 bool paintHost();
 std::array<int,2> sourceRange(Instance&);
 #include "paint_ui.h"
+#include "cleaning_profiles.h"
 std::array<int,2> sourceRange(Instance&i){
  OfxPropertySetHandle p;check(fx->clipGetPropertySet(i.source,&p),"source properties");
  double first=std::ceil(number(p,kOfxImageEffectPropFrameRange,0)),last=std::floor(number(p,kOfxImageEffectPropFrameRange,1));
@@ -547,13 +555,14 @@ const int viewOfChoice[]={0,4,3,7};
 struct Extra{const char*name;const char*label;const char*hint;const char*group;int kind;double initial,minimum,maximum;const char*const*choices=nullptr;int count=0;};
 enum{ExtraChoice,ExtraBool,ExtraDouble,ExtraInt,ExtraString,ExtraButton};
 const Extra extras[]={
- {"mask_mode","Mode","What painting and the Mask input do. Recovery (default): painted areas keep the original; with auto recovery, white mask strokes give back the original and black ones keep the repair. Spanish dirt removal: only painted areas are repaired. Key I in the viewer.","auto_recovery_group",ExtraChoice,0,0,1,maskModeChoices,2},
+ {"mask_mode","Mode","Recovery keeps original detail inside the mask. Spanish dirt removal repairs only inside the mask. In Resolve, each method remembers its own cleaning settings.","auto_recovery_group",ExtraChoice,0,0,1,maskModeChoices,2},
  {"recovery_calculate","Calculate recovery","Calculate the auto-recovery matte for the whole shot. Progress is shown during calculation; click again to cancel. Valid saved mattes are reused.","auto_recovery_group",ExtraButton,0,0,0},
  {"recovery_status","Calculation","Status and timing of this instance's whole-shot recovery calculation.","auto_recovery_group",ExtraString,0,0,0},
  {"recovery_request","Recovery request","Internal: changed by Calculate recovery so the host renders again.","auto_recovery_group",ExtraInt,0,0,1000000},
  {"auto_recovery","Auto recovery","On: give back repaired spots the model judges to be real picture detail. The matte is calculated once per shot and cleaning settings, and recalculated automatically when Input encoding or any cleaning control changes (Calculate recovery does the whole shot at once).","auto_recovery_group",ExtraChoice,0,0,1,recoveryModeChoices,2},
  {"recovery_confidence","Confidence","Give back only spots the model is at least this sure were real picture detail. Higher gives back less.","auto_recovery_group",ExtraDouble,.8,.5,.99},
  {"recovery_folder","Matte folder","Where calculated mattes are stored. Empty: the user's application data folder.","auto_recovery_group",ExtraString,0,0,0},
+ {"cleaning_profiles","Saved cleaning configurations","Internal: independent Automatic/Recovery and Spanish cleaning settings.","auto_recovery_group",ExtraString,0,0,0},
  {"view","View","Restored: the result. Red difference: grey picture with every repair in red. True difference: the change, amplified. Auto recovery matte: where auto recovery gives back the original.",nullptr,ExtraChoice,0,0,3,viewChoices,4},
  {"difference_threshold","Difference threshold (%)","Red difference: changes smaller than this are not shown in red. The engine moves unrepaired pixels by less than one 10-bit code, so 0.1% shows only real repairs.","view_group",ExtraDouble,.1,0,100},
  {"red_intensity","Red difference intensity","Brightness of the red highlights.","view_group",ExtraDouble,8,0,100},
@@ -572,7 +581,7 @@ void defineExtraParam(OfxParamSetHandle ps,const Extra&x,const char*parent,const
  OfxPropertySetHandle p;
  const char*type=x.kind==ExtraChoice?kOfxParamTypeChoice:x.kind==ExtraBool?kOfxParamTypeBoolean:x.kind==ExtraDouble?kOfxParamTypeDouble:x.kind==ExtraInt?kOfxParamTypeInteger:x.kind==ExtraString?kOfxParamTypeString:kOfxParamTypePushButton;
   check(params->paramDefine(ps,type,x.name,&p),"define extra control");ss(p,kOfxPropLabel,label?label:x.label);ss(p,kOfxParamPropHint,x.hint);if(parent)ss(p,kOfxParamPropParent,parent);
-  if(label&&!std::strcmp(x.name,"mask_mode"))ss(p,kOfxParamPropHint,"Recovery: paint original detail back over automatic cleanup. Spanish dirt removal: apply cleanup only where painted. Paint directly in this effect's viewer; no separate Mask Paint is required.");
+  if(label&&!std::strcmp(x.name,"mask_mode"))ss(p,kOfxParamPropHint,"Recovery: paint original detail back over automatic cleanup. Spanish dirt removal: apply cleanup only where painted. Each method remembers its Detection, Processing and Safeguards settings.");
   if(x.kind==ExtraButton)return;
   si(p,kOfxParamPropAnimates,0);
   if(x.kind==ExtraChoice){for(int k=0;k<x.count;++k)ss(p,kOfxParamPropChoiceOption,x.choices[k],k);si(p,kOfxParamPropDefault,int(x.initial));}
@@ -581,9 +590,11 @@ void defineExtraParam(OfxParamSetHandle ps,const Extra&x,const char*parent,const
   else if(x.kind==ExtraDouble){for(auto v:{std::make_pair(kOfxParamPropDefault,x.initial),{kOfxParamPropMin,x.minimum},{kOfxParamPropMax,x.maximum},{kOfxParamPropDisplayMin,x.minimum},{kOfxParamPropDisplayMax,x.maximum}})check(prop->propSetDouble(p,v.first,0,v.second),"extra range");}
   else if(x.kind==ExtraString){
    const bool status=!std::strcmp(x.name,"recovery_status");
-   ss(p,kOfxParamPropStringMode,status?kOfxParamStringIsLabel:kOfxParamStringIsDirectoryPath);
+   const bool profiles=!std::strcmp(x.name,"cleaning_profiles");
+   ss(p,kOfxParamPropStringMode,status?kOfxParamStringIsLabel:profiles?kOfxParamStringIsMultiLine:kOfxParamStringIsDirectoryPath);
    ss(p,kOfxParamPropDefault,status?"Not calculated in this session":"");
    if(status){si(p,kOfxParamPropEvaluateOnChange,0);si(p,kOfxParamPropCanUndo,0);si(p,kOfxParamPropPersistant,0);}
+   if(profiles){si(p,kOfxParamPropSecret,1);si(p,kOfxParamPropEvaluateOnChange,0);si(p,kOfxParamPropCanUndo,1);si(p,kOfxParamPropPersistant,1);}
   }
 }
 void defineExtraParams(OfxParamSetHandle ps,const char*group){
@@ -629,7 +640,7 @@ void defineControlPresentation(OfxParamSetHandle ps){
   defineCleaningControl(ps,c,c.group);
  }
  group("auto_recovery_group","Auto recovery",false);
- for(auto name:{"auto_recovery","recovery_confidence","recovery_calculate","recovery_status","recovery_request","recovery_folder"})extra(name,"auto_recovery_group");
+ for(auto name:{"auto_recovery","recovery_confidence","recovery_calculate","recovery_status","recovery_request","recovery_folder","cleaning_profiles"})extra(name,"auto_recovery_group");
  group("paint_group","Manual recovery / Spanish",true);
  extra("mask_mode","paint_group");
  paint_ui::define(ps,true,true);
@@ -1120,7 +1131,7 @@ OfxStatus entry(const char*action,const void*handle,OfxPropertySetHandle in,OfxP
  // only UI changes here; never reacquire the lifecycle or render locks.
  if(!std::strcmp(action,kOfxActionBeginInstanceChanged)||!std::strcmp(action,kOfxActionEndInstanceChanged)){
   auto effect=(OfxImageEffectHandle)handle;
-  try{if(isLiveInstance(effect)){if(!std::strcmp(action,kOfxActionBeginInstanceChanged))paint_ui::beginChanges(effect);else paint_ui::endChanges(effect);}}
+  try{if(isLiveInstance(effect)){if(!std::strcmp(action,kOfxActionBeginInstanceChanged)){cleaning_ui::begin(effect);paint_ui::beginChanges(effect);}else{cleaning_ui::end(effect);paint_ui::endChanges(effect);}}}
   catch(const std::exception&ex){paint_ui::changeBatches.erase(effect);adrlog::error(std::string("paint changes: ")+ex.what());return kOfxStatFailed;}
   return kOfxStatReplyDefault;
  }
@@ -1153,6 +1164,8 @@ OfxStatus entry(const char*action,const void*handle,OfxPropertySetHandle in,OfxP
     i.restoreAutoOnCancel=false;i.cancelCalculation=true;i.calculateRequested=false;if(i.recoveryState==Instance::Queued)i.recoveryState=Instance::Cancelled;refreshRecoveryUI(e);
    }
   }
+  if(prop->propGetString(in,kOfxPropName,0,&name)==kOfxStatOK&&name&&!std::strcmp(name,"mask_mode"))updateRecoveryEnabled(instance(e));
+  cleaning_ui::changed(e,in);
   // Paint controls: UI thread work only, never the render lock.
   if(prop->propGetString(in,kOfxPropType,0,&type)==kOfxStatOK&&type&&!std::strcmp(type,kOfxTypeParameter)&&prop->propGetString(in,kOfxPropName,0,&name)==kOfxStatOK&&name&&paint_ui::isParam(name)){paint_ui::changed(e,in);return kOfxStatOK;}
   if(prop->propGetString(in,kOfxPropType,0,&type)==kOfxStatOK&&type&&!std::strcmp(type,kOfxTypeParameter)&&prop->propGetString(in,kOfxPropName,0,&name)==kOfxStatOK&&name&&!std::strcmp(name,"mask_mode")){paint_ui::changed(e,in);updateRecoveryEnabled(instance(e));refreshRecoveryUI(e);return kOfxStatOK;}
@@ -1196,7 +1209,7 @@ if(paintHost())check(prop->propSetPointer(p,kOfxImageEffectPluginPropOverlayInte
 ss(p,kOfxPropLabel,ADR_PLUGIN_LABEL);ss(p,kOfxImageEffectPluginPropGrouping,"FabioColor");{auto status=prop->propSetString(p,kOfxPropPluginDescription,0,("Open-source temporal dirt and dust removal for film scans (Metal, CUDA, OpenCL or CPU). Works on the RGB values as delivered; review moving shots before delivery."+(adrlog::path().empty()?std::string():" Diagnostic log: "+adrlog::path())).c_str());if(status!=kOfxStatErrUnknown)check(status,"optional plugin description");}ss(p,kOfxImageEffectPropSupportedContexts,kOfxImageEffectContextFilter);ss(p,kOfxImageEffectPropSupportedPixelDepths,kOfxBitDepthFloat,0);ss(p,kOfxImageEffectPropSupportedPixelDepths,kOfxBitDepthHalf,1);ss(p,kOfxImageEffectPropSupportedPixelDepths,kOfxBitDepthShort,2);ss(p,kOfxImageEffectPluginRenderThreadSafety,kOfxImageEffectRenderInstanceSafe);si(p,kOfxImageEffectPluginPropHostFrameThreading,0);si(p,kOfxImageEffectPropSupportsTiles,0);si(p,kOfxImageEffectPropSupportsMultiResolution,0);si(p,kOfxImageEffectPropTemporalClipAccess,1);si(p,kOfxImageEffectPropSupportsMultipleClipPARs,0);si(p,kOfxImageEffectPropSupportsMultipleClipDepths,0);return kOfxStatOK;}
  if(!std::strcmp(action,kOfxImageEffectActionDescribeInContext)){require(str(in,kOfxImageEffectPropContext)==kOfxImageEffectContextFilter,"Filter context required");for(auto name:{"Source","Output"}){OfxPropertySetHandle p;check(fx->clipDefine(e,name,&p),"define clip");ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGB,0);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGBA,1);si(p,kOfxImageEffectPropSupportsTiles,0);if(!std::strcmp(name,"Source"))si(p,kOfxImageEffectPropTemporalClipAccess,1);}{OfxPropertySetHandle p;check(fx->clipDefine(e,"Mask",&p),"define mask clip");ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentAlpha,0);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGBA,1);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGB,2);si(p,kOfxImageClipPropOptional,1);si(p,kOfxImageClipPropIsMask,1);si(p,kOfxImageEffectPropSupportsTiles,0);}OfxParamSetHandle ps;check(fx->getParamSet(e,&ps),"parameters");defineControlPresentation(ps);
  return kOfxStatOK;}
- if(!std::strcmp(action,kOfxActionCreateInstance)){auto i=std::make_unique<Instance>();check(fx->clipGetHandle(e,"Source",&i->source,nullptr),"source clip");check(fx->clipGetHandle(e,"Output",&i->output,nullptr),"output clip");OfxParamSetHandle ps;check(fx->getParamSet(e,&ps),"parameters");for(auto&c:controls)check(params->paramGetHandle(ps,c.name,&i->parameters[c.name],nullptr),"control handle");check(params->paramGetHandle(ps,"encoding",&i->parameters["encoding"],nullptr),"encoding handle");for(auto&x:extras)check(params->paramGetHandle(ps,x.name,&i->parameters[x.name],nullptr),"extra handle");for(auto n:{"paint","paint_data","paint_source_kind","paint_source_folder","paint_source_offset"})check(params->paramGetHandle(ps,n,&i->parameters[n],nullptr),"paint handle");if(fx->clipGetHandle(e,"Mask",&i->mask,nullptr)!=kOfxStatOK)i->mask=nullptr;check(prop->propSetPointer(properties(e),kOfxPropInstanceData,0,i.get()),"instance data");static int created=0;i->id=++created;trackInstance(e);adrlog::info(i->label()+" created");i.release();lock.unlock();/* Host parameter writes can synchronously reenter the adapter. */try{updateRecoveryEnabled(instance(e));}catch(...){}try{paint_ui::initializePainting(e);paint_ui::refresh(e);}catch(...){}return kOfxStatOK;}
+ if(!std::strcmp(action,kOfxActionCreateInstance)){auto i=std::make_unique<Instance>();check(fx->clipGetHandle(e,"Source",&i->source,nullptr),"source clip");check(fx->clipGetHandle(e,"Output",&i->output,nullptr),"output clip");OfxParamSetHandle ps;check(fx->getParamSet(e,&ps),"parameters");for(auto&c:controls)check(params->paramGetHandle(ps,c.name,&i->parameters[c.name],nullptr),"control handle");check(params->paramGetHandle(ps,"encoding",&i->parameters["encoding"],nullptr),"encoding handle");for(auto&x:extras)check(params->paramGetHandle(ps,x.name,&i->parameters[x.name],nullptr),"extra handle");for(auto n:{"paint","paint_data","paint_source_kind","paint_source_folder","paint_source_offset"})check(params->paramGetHandle(ps,n,&i->parameters[n],nullptr),"paint handle");if(fx->clipGetHandle(e,"Mask",&i->mask,nullptr)!=kOfxStatOK)i->mask=nullptr;check(prop->propSetPointer(properties(e),kOfxPropInstanceData,0,i.get()),"instance data");static int created=0;i->id=++created;trackInstance(e);adrlog::info(i->label()+" created");i.release();lock.unlock();/* Host parameter writes can synchronously reenter the adapter. */try{cleaning_ui::initialize(e);}catch(...){}try{updateRecoveryEnabled(instance(e));}catch(...){}try{paint_ui::initializePainting(e);paint_ui::refresh(e);}catch(...){}return kOfxStatOK;}
  if(!std::strcmp(action,kOfxActionDestroyInstance)){auto&i=instance(e);i.close();adrlog::info(i.label()+" destroyed");untrackInstance(e);paint_ui::changeBatches.erase(e);paint_ui::histories.erase(e);paint_ui::cursorTimes.erase(e);delete &i;check(prop->propSetPointer(properties(e),kOfxPropInstanceData,0,nullptr),"clear instance");return kOfxStatOK;}
  if(!std::strcmp(action,kOfxActionInstanceChanged)){auto&i=instance(e);if(invalidatesHistory(in)){++i.generation;if(i.sequence){char*type=nullptr;char*name=nullptr;char*why=nullptr;if(in){prop->propGetString(in,kOfxPropType,0,&type);prop->propGetString(in,kOfxPropName,0,&name);prop->propGetString(in,kOfxPropChangeReason,0,&why);}adrlog::info(i.label()+" history reset: host reported a change ("+(type?type:"?")+" "+(name?name:"?")+", "+(why?why:"?")+")");}i.close();}return kOfxStatReplyDefault;}
  if(!std::strcmp(action,kOfxActionPurgeCaches)){auto&i=instance(e);adrlog::info(i.label()+" host asked to purge caches");i.purge();return kOfxStatOK;}

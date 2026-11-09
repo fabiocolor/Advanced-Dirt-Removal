@@ -130,6 +130,25 @@ Open FX Overlay enabled there.
 Drag a rectangle from corner to corner. **Recovery** gives the original back;
 **Spanish dirt removal** repairs only where you paint.
 
+In the development candidate, Automatic/Recovery and Spanish each remember
+their own Detection, Processing and Safeguards settings. Switching **Method**
+restores that method's last settings, saved with this effect in the project.
+No extra preset selector is needed. The first-use configurations differ here:
+
+| Control | Automatic / Recovery | Spanish first use |
+| --- | --- | --- |
+| Sensitivity | 0.75 | 1.0 |
+| Extra sensitivity | Off | On |
+| Analysis detail | 0.5 | 1.0 |
+| Repair amount | 1.0 | 1.5 |
+| Motion guard | 0.25 | 0.0 |
+
+All other cleaning controls start with the existing defaults and can be edited
+independently in either method. Input encoding, View, effect bypass and brush
+settings stay shared. Auto recovery retains its saved preference and pauses in
+Spanish. Existing projects keep their current values when loaded; a previously
+unused method gets its first-use configuration when explicitly selected.
+
 Strokes stay off the picture: you see only the result and the brush. A stroke
 you pick with **Select** is outlined; **Show strokes**, under **Brush options**,
 outlines all of them. **Previous stroke** and **Next stroke** go through the

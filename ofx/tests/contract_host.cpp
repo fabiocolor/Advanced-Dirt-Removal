@@ -55,7 +55,8 @@ OfxStatus value(OfxParamHandle h,OfxTime t,...){auto&p=*reinterpret_cast<Paramet
 OfxStatus currentValue(OfxParamHandle h,...){auto&p=*reinterpret_cast<Parameter*>(h);va_list a;va_start(a,h);if(p.text){auto&v=p.props.strings[kOfxParamPropDefault];if(v.empty())v.push_back("");*va_arg(a,char**)=v[0].data();}else if(p.choice)*va_arg(a,int*)=p.props.ints[kOfxParamPropDefault][0];else *va_arg(a,double*)=p.props.doubles[kOfxParamPropDefault][0];va_end(a);return kOfxStatOK;}
 // UI writes must occur in host callbacks, even when a native key arrived first.
 bool inPaintCallback=false;int paintUndoDepth=0,paintUndoBegins=0,paintWrongContext=0,paintRedraws=0;
-OfxStatus paintSetValue(OfxParamHandle h,...){auto&p=*reinterpret_cast<Parameter*>(h);va_list a;va_start(a,h);if(p.text)p.props.strings[kOfxParamPropDefault]={va_arg(a,const char*)};else if(p.choice)p.props.ints[kOfxParamPropDefault]={va_arg(a,int)};else p.props.doubles[kOfxParamPropDefault]={va_arg(a,double)};va_end(a);return kOfxStatOK;}
+std::function<void(OfxParamHandle)> duringParameterSet;
+OfxStatus paintSetValue(OfxParamHandle h,...){auto&p=*reinterpret_cast<Parameter*>(h);va_list a;va_start(a,h);if(p.text)p.props.strings[kOfxParamPropDefault]={va_arg(a,const char*)};else if(p.choice)p.props.ints[kOfxParamPropDefault]={va_arg(a,int)};else p.props.doubles[kOfxParamPropDefault]={va_arg(a,double)};va_end(a);if(duringParameterSet)duringParameterSet(h);return kOfxStatOK;}
 OfxStatus paintEditBegin(OfxParamSetHandle,const char*){if(!inPaintCallback){++paintWrongContext;return kOfxStatErrBadHandle;}++paintUndoDepth;++paintUndoBegins;return kOfxStatOK;}
 OfxStatus paintEditEnd(OfxParamSetHandle){if(!inPaintCallback||paintUndoDepth<=0){++paintWrongContext;return kOfxStatErrBadHandle;}--paintUndoDepth;return kOfxStatOK;}
 OfxStatus paintParameterProperties(OfxParamHandle h,OfxPropertySetHandle*p){*p=H(reinterpret_cast<Parameter*>(h)->props);return kOfxStatOK;}
@@ -150,7 +151,7 @@ int main(int argc,char**argv){
  verify(rejectedMetalSupport>=2,"CPU-only host rejects optional GPU extensions without preventing discovery");
 #endif
  rejectMetalSupport=false;verify(plugin->mainEntry(kOfxActionDescribe,handle,nullptr,nullptr)==kOfxStatOK,"GPU-capable descriptor also accepted");
- verify(plugin->mainEntry(kOfxImageEffectActionDescribeInContext,handle,ip,nullptr)==0,"context");verify(e.parameters.size()==68,"all controls, groups and pages exposed");verify(e.parameters.count("page_paint")==0&&e.parameters["paint"].props.ints[kOfxParamPropSecret]==std::vector<int>{1}&&e.parameters["paint_tool"].props.ints[kOfxParamPropSecret]==std::vector<int>{1},"viewer painting hidden outside Resolve");verify(e.props.pointers.count(kOfxImageEffectPluginPropOverlayInteractV1)==0,"no viewer overlay outside Resolve");for(auto pg:{"page_cleaning","page_recovery","page_view"})verify(e.parameters.count(pg)==1,"inspector page defined");for(auto g:{"detection","processing","safeguards"})verify(e.parameters.count(g)==1,"control group defined");verify(e.parameters["sensitivity"].props.strings[kOfxParamPropParent]==std::vector<std::string>{"detection"},"controls are grouped");verify(plugin->mainEntry(kOfxActionCreateInstance,handle,nullptr,nullptr)==0,"create");
+ verify(plugin->mainEntry(kOfxImageEffectActionDescribeInContext,handle,ip,nullptr)==0,"context");verify(e.parameters.size()==69,"all controls, groups and pages exposed");verify(e.parameters.count("page_paint")==0&&e.parameters["paint"].props.ints[kOfxParamPropSecret]==std::vector<int>{1}&&e.parameters["paint_tool"].props.ints[kOfxParamPropSecret]==std::vector<int>{1},"viewer painting hidden outside Resolve");verify(e.props.pointers.count(kOfxImageEffectPluginPropOverlayInteractV1)==0,"no viewer overlay outside Resolve");for(auto pg:{"page_cleaning","page_recovery","page_view"})verify(e.parameters.count(pg)==1,"inspector page defined");for(auto g:{"detection","processing","safeguards"})verify(e.parameters.count(g)==1,"control group defined");verify(e.parameters["sensitivity"].props.strings[kOfxParamPropParent]==std::vector<std::string>{"detection"},"controls are grouped");verify(plugin->mainEntry(kOfxActionCreateInstance,handle,nullptr,nullptr)==0,"create");
  // Compact Resolve presentation preserves every existing value/type/range/choice.
  // The normal-host descriptor is an independent ordering of the same controls.
  {
@@ -278,6 +279,60 @@ int main(int argc,char**argv){
   for(auto&saved:savedParameters)e.parameters.at(saved.first)=saved.second;
   std::cout<<"native key scheduling and delayed mouse-up: passed\n";
  }
+ // Separate cleaning configurations: real callback reentry, host change
+ // batches, saved-project recreation and Undo/Redo ordering are all exercised.
+ {
+  const auto savedParameters=e.parameters;const auto savedHost=hostProperties;const auto savedState=instance(handle).cleaningProfile;
+  auto*savedInteracts=interacts;OfxInteractSuiteV1 suite{};interacts=&suite;setString(H(hostProperties),kOfxPropName,0,"DaVinciResolve");
+  pas.paramSetValue=paintSetValue;pas.paramGetPropertySet=paintParameterProperties;
+  Effect*editing=&e;
+  auto notify=[&](const std::string&name){Properties change;setString(H(change),kOfxPropType,0,kOfxTypeParameter);setString(H(change),kOfxPropName,0,name.c_str());setString(H(change),kOfxPropChangeReason,0,kOfxChangeUserEdited);setDouble(H(change),kOfxPropTime,0,0);const auto result=plugin->mainEntry(kOfxActionInstanceChanged,reinterpret_cast<OfxImageEffectHandle>(editing),H(change),nullptr);verify(result==kOfxStatOK||result==kOfxStatReplyDefault,"configuration parameter callback");};
+  duringParameterSet=[&](OfxParamHandle h){for(auto&item:editing->parameters)if(reinterpret_cast<OfxParamHandle>(&item.second)==h){notify(item.first);return;}};
+  cleaning_ui::initialize(handle);
+  auto defaults=cleaning_ui::defaults();
+  auto index=[&](const char*name){for(size_t n=0;n<cleaning_ui::count;++n)if(!std::strcmp(controls[n+1].name,name))return n;verify(false,"known profile control");return size_t(0);};
+  verify(defaults.values[0][index("sensitivity")]==.75&&defaults.values[1][index("sensitivity")]==1&&defaults.values[1][index("extra_sensitivity")]==1&&defaults.values[1][index("analysis_detail")]==1&&defaults.values[1][index("repair_amount")]==1.5&&defaults.values[1][index("motion_guard")]==0,"operator-selected stronger Spanish defaults");
+  verify(cleaning_ui::decode(cleaning_ui::encode(defaults)).values==defaults.values,"mode document roundtrip");
+  for(const auto&text:std::vector<std::string>{"ADRCP2 0 16","ADRCP1 0 16","ADRCP1 2 16",cleaning_ui::encode(defaults)+" trailing"}){bool rejected=false;try{cleaning_ui::decode(text);}catch(const Error&){rejected=true;}verify(rejected,"invalid saved configurations rejected");}
+  {auto bad=defaults;bad.values[1][index("analyse")]=.5;bool rejected=false;try{cleaning_ui::encode(bad);}catch(const Error&){rejected=true;}verify(rejected,"fractional choice rejected before any control write");}
+  verify(e.parameters.at("cleaning_profiles").props.ints.at(kOfxParamPropSecret)==std::vector<int>{1}&&e.parameters.at("cleaning_profiles").props.ints.at(kOfxParamPropEvaluateOnChange)==std::vector<int>{0},"profile storage adds no visible controls or render invalidation");
+  paint_ui::setInt(handle,"enabled",0);paint_ui::setInt(handle,"encoding",1);paint_ui::setInt(handle,"view",2);paint_ui::setInt(handle,"auto_recovery",1);paint_ui::setDouble(handle,"paint_size",137);
+  paint_ui::setDouble(handle,"sensitivity",.62);paint_ui::setDouble(handle,"repair_amount",.9);paint_ui::setDouble(handle,"motion_guard",.41);
+  const auto automatic=cleaning_ui::current(handle);
+  verify(plugin->mainEntry(kOfxActionBeginInstanceChanged,handle,nullptr,nullptr)==kOfxStatReplyDefault,"begin genuine mode switch");
+  paint_ui::setInt(handle,"mask_mode",1);
+  verify(cleaning_ui::current(handle)==automatic,"mode callback waits for the complete host batch");
+  verify(plugin->mainEntry(kOfxActionEndInstanceChanged,handle,nullptr,nullptr)==kOfxStatReplyDefault,"finish genuine mode switch");
+  verify(cleaning_ui::current(handle)==defaults.values[1],"first Spanish switch restores stronger settings");
+  verify(paint_ui::getInt(handle,"enabled")==0&&paint_ui::getInt(handle,"encoding")==1&&paint_ui::getInt(handle,"view")==2&&paint_ui::getInt(handle,"auto_recovery")==1&&paint_ui::getDouble(handle,"paint_size")==137,"encoding, bypass, view, recovery preference and brush stay shared");
+  paint_ui::setDouble(handle,"sensitivity",.93);paint_ui::setDouble(handle,"analysis_detail",.81);paint_ui::setDouble(handle,"motion_guard",.05);
+  const auto spanish=cleaning_ui::current(handle);const auto spanishSnapshot=e.parameters;
+  paint_ui::setInt(handle,"mask_mode",0);verify(cleaning_ui::current(handle)==automatic,"automatic custom settings restored exactly");const auto automaticSnapshot=e.parameters;
+  paint_ui::setInt(handle,"mask_mode",1);verify(cleaning_ui::current(handle)==spanish,"Spanish custom settings restored exactly");
+  auto restore=[&](const auto&snapshot,bool bankFirst){
+   plugin->mainEntry(kOfxActionBeginInstanceChanged,handle,nullptr,nullptr);
+   auto one=[&](const char*name){e.parameters.at(name).props=snapshot.at(name).props;notify(name);};
+   if(bankFirst)one("cleaning_profiles");one("mask_mode");for(const auto&c:controls)one(c.name);if(!bankFirst)one("cleaning_profiles");
+   plugin->mainEntry(kOfxActionEndInstanceChanged,handle,nullptr,nullptr);
+  };
+  restore(automaticSnapshot,false);verify(cleaning_ui::current(handle)==automatic&&paint_ui::getText(handle,"cleaning_profiles")==automaticSnapshot.at("cleaning_profiles").props.strings.at(kOfxParamPropDefault)[0],"Undo restores controls and bank with method first");
+  restore(spanishSnapshot,true);verify(cleaning_ui::current(handle)==spanish&&paint_ui::getText(handle,"cleaning_profiles")==spanishSnapshot.at("cleaning_profiles").props.strings.at(kOfxParamPropDefault)[0],"Redo restores controls and bank with bank first");
+  Effect reopened;reopened.parameters=e.parameters;editing=&reopened;auto rh=reinterpret_cast<OfxImageEffectHandle>(&reopened);
+  verify(plugin->mainEntry(kOfxActionCreateInstance,rh,nullptr,nullptr)==kOfxStatOK,"reopen profile instance");
+  verify(cleaning_ui::current(rh)==spanish,"reopen preserves the active edited Spanish values");
+  paint_ui::setInt(rh,"mask_mode",0);verify(cleaning_ui::current(rh)==automatic,"reopen retains inactive automatic settings");
+  paint_ui::setInt(rh,"mask_mode",1);verify(cleaning_ui::current(rh)==spanish,"reopen retains edited Spanish settings");
+  verify(plugin->mainEntry(kOfxActionDestroyInstance,rh,nullptr,nullptr)==kOfxStatOK,"destroy reopened profile instance");
+  Effect legacy;legacy.parameters=spanishSnapshot;legacy.parameters.at("cleaning_profiles").props.strings[kOfxParamPropDefault]={""};editing=&legacy;auto lh=reinterpret_cast<OfxImageEffectHandle>(&legacy);
+  verify(plugin->mainEntry(kOfxActionCreateInstance,lh,nullptr,nullptr)==kOfxStatOK,"load pre-profile Spanish project");
+  verify(cleaning_ui::current(lh)==spanish,"old Spanish project is not reset on load");
+  paint_ui::setInt(lh,"mask_mode",0);verify(cleaning_ui::current(lh)==defaults.values[0],"old Spanish project gets standard inactive automatic settings");
+  paint_ui::setInt(lh,"mask_mode",1);verify(cleaning_ui::current(lh)==spanish,"old Spanish custom values survive first switch");
+  verify(plugin->mainEntry(kOfxActionDestroyInstance,lh,nullptr,nullptr)==kOfxStatOK,"destroy legacy profile instance");
+  duringParameterSet=nullptr;pas.paramSetValue=nullptr;pas.paramGetPropertySet=nullptr;interacts=savedInteracts;hostProperties=savedHost;
+  for(const auto&saved:savedParameters)e.parameters.at(saved.first)=saved.second;instance(handle).cleaningProfile=savedState;
+  std::cout<<"cleaning configurations: stronger defaults, independent edits, reentry, batches, Undo/Redo, reopen and legacy load passed\n";
+ }
  // ADR_TEST_CONTROLS="name=value;...": render with these control values (by OFX parameter name) instead of the defaults.
  if(const char*overrides=std::getenv("ADR_TEST_CONTROLS")){std::string list=overrides;size_t start=0;while(start<list.size()){size_t end=list.find(';',start);if(end==std::string::npos)end=list.size();std::string item=list.substr(start,end-start);start=end+1;if(item.empty())continue;auto eq=item.find('=');verify(eq!=std::string::npos,"ADR_TEST_CONTROLS item needs name=value");auto it=e.parameters.find(item.substr(0,eq));verify(it!=e.parameters.end(),"ADR_TEST_CONTROLS names an existing control");const double v=std::stod(item.substr(eq+1));if(it->second.choice)setInt(H(it->second.props),kOfxParamPropDefault,0,int(v));else setDouble(H(it->second.props),kOfxParamPropDefault,0,v);std::cout<<"control "<<item<<"\n";}}
  double range[]={100,100.+count-1};setDoubleN(H(e.source.props),kOfxImageEffectPropFrameRange,2,range);setDouble(H(e.source.props),kOfxImageEffectPropFrameRate,0,24);setDouble(H(e.props),kOfxImageEffectPropFrameRate,0,24);
@@ -393,6 +448,38 @@ int main(int argc,char**argv){
   setInt(H(e.mask.props),kOfxImageClipPropConnected,0,0);e.mask.images.clear();hostProperties=savedHost;interacts=savedInteracts;
   std::cout<<"integrated recovery: exclusive built-in brush, Spanish auto bypass and legacy mask compatibility passed\n";
   data={""};mode={0};renderFrame(f);
+ }
+
+ // A real first-use Spanish profile must reach the cleaner, and its
+ // stronger result must still be confined exactly to the painted rectangle.
+ {
+  const auto savedHost=hostProperties;auto*savedInteracts=interacts;OfxInteractSuiteV1 suite{};interacts=&suite;setString(H(hostProperties),kOfxPropName,0,"DaVinciResolve");
+  pas.paramSetValue=paintSetValue;pas.paramGetPropertySet=paintParameterProperties;
+  Effect stronger;stronger.parameters=e.parameters;stronger.source.props=e.source.props;stronger.output.props=e.output.props;stronger.output.output=true;
+  stronger.parameters.at("mask_mode").props.ints[kOfxParamPropDefault]={0};stronger.parameters.at("auto_recovery").props.ints[kOfxParamPropDefault]={0};
+  stronger.parameters.at("cleaning_profiles").props.strings[kOfxParamPropDefault]={""};
+  for(const auto&c:controls)if(c.boolean||c.integral)stronger.parameters.at(c.name).props.ints[kOfxParamPropDefault]={int(c.initial)};else stronger.parameters.at(c.name).props.doubles[kOfxParamPropDefault]={c.initial};
+  const int frame=3;
+  for(int f=0;f<=frame+4;++f)stronger.source.images[f+100]=frameImage(sourcePixels,f,w,h,f%2,false);
+  stronger.output.images[frame+100]=frameImage(sourcePixels,frame,w,h,false,true);
+  const auto sh=reinterpret_cast<OfxImageEffectHandle>(&stronger);
+  verify(plugin->mainEntry(kOfxActionCreateInstance,sh,nullptr,nullptr)==kOfxStatOK,"create stronger Spanish render instance");
+  paint_ui::setInt(sh,"mask_mode",1);Properties change;setString(H(change),kOfxPropType,0,kOfxTypeParameter);setString(H(change),kOfxPropName,0,"mask_mode");setString(H(change),kOfxPropChangeReason,0,kOfxChangeUserEdited);setDouble(H(change),kOfxPropTime,0,frame+100);
+  verify(plugin->mainEntry(kOfxActionInstanceChanged,sh,H(change),nullptr)==kOfxStatOK,"choose stronger Spanish configuration");
+  paint::Document doc;doc.width=w;doc.height=h;doc.nextId=2;paint::Stroke stroke;stroke.id=1;stroke.first=stroke.last=frame+100;stroke.shape=paint::Shape::Rectangle;stroke.softness=0;stroke.points={{.25,.25,1},{.5,.75,1}};doc.strokes.push_back(stroke);paint_ui::store(sh,doc);
+  adr_controls c;adr_controls_default(&c);c.sensitivity=1;c.extra_sensitivity=1;c.analysis_detail=1;c.repair_amount=1.5;c.motion_guard=0;
+  char error[2048]={};auto*reference=adr_sequence_create(context(),&c,w,h,count,error,sizeof error);verify(reference,"create independent stronger-cleaning reference");std::vector<float> expected(size_t(w)*h*3);
+  for(;;){const int f=adr_sequence_pull(reference,expected.data(),size_t(w)*12,error,sizeof error);if(f==frame)break;if(f>=0)continue;verify(f==-1,"stronger reference pending input");const int next=adr_sequence_next_source(reference);verify(next>=0&&next<count,"stronger reference source");verify(adr_sequence_push(reference,sourcePixels.data()+size_t(next)*w*h*3,size_t(w)*12,error,sizeof error)==0,"stronger reference upload");}
+  adr_sequence_destroy(reference);
+  setDouble(ip,kOfxPropTime,0,frame+100);Properties needed;verify(plugin->mainEntry(kOfxImageEffectActionGetFramesNeeded,sh,ip,H(needed))==kOfxStatOK,"stronger Spanish dependencies");
+  const auto dependency=needed.doubles["OfxImageClipPropFrameRange_Source"];declaredFrameRange[0]=dependency[0];declaredFrameRange[1]=dependency[1];
+  verify(plugin->mainEntry(kOfxImageEffectActionRender,sh,ip,nullptr)==kOfxStatOK,"stronger Spanish frame render");
+  size_t different=0;
+  {Image result(reinterpret_cast<OfxImageClipHandle>(&stronger.output),frame+100);for(int y=0;y<h;++y)for(int x=0;x<w;++x){const bool inside=x+.5>.25*w&&x+.5<.5*w&&h-1-y+.5>.25*h&&h-1-y+.5<.75*h;for(int channel=0;channel<3;++channel){const size_t k=(size_t(y)*w+x)*3+channel;if(inside&&expected[k]!=targetPixels[size_t(frame)*w*h*3+k])++different;verify(result.read(x,y,channel)==(inside?expected[k]:sourcePixels[size_t(frame)*w*h*3+k]),"stronger defaults use exact repair inside brush and original outside");}verify(result.read(x,y,3)==float(x)/w,"stronger profile preserves alpha");}}
+  verify(different>0,"stronger defaults genuinely differ from automatic cleaning on the fixture");
+  verify(plugin->mainEntry(kOfxActionDestroyInstance,sh,nullptr,nullptr)==kOfxStatOK,"destroy stronger Spanish render instance");
+  pas.paramSetValue=nullptr;pas.paramGetPropertySet=nullptr;interacts=savedInteracts;hostProperties=savedHost;
+  std::cout<<"stronger Spanish defaults: direct-engine repair inside brush, exact original outside, alpha preserved\n";
  }
 
  // Built-in paint/erase deliberately override the automatic-recovery matte;

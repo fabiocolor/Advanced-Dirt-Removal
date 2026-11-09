@@ -12,6 +12,30 @@ Version 2.0.0, November 2026. Real-footage tests use a 2368×1712 film scan
 (float EXR): 56 frames on macOS, a 12-frame excerpt on Windows and Linux,
 compared frame by frame with the macOS result.
 
+## Separate cleaning configurations — development build, 9 November 2026
+
+Resolve's Automatic/Recovery and Spanish methods retain independent Detection,
+Processing and Safeguards values in one hidden, project-persistent parameter.
+Spanish first-use settings are sensitivity 1.0, Extra sensitivity on, analysis
+detail 1.0, repair amount 1.5 and Motion guard 0.0; Automatic/Recovery retains the
+published defaults. Encoding, bypass, View, brush settings and the saved
+Auto recovery preference stay shared.
+
+The macOS CPU and Metal contract hosts check callback reentry, genuine mode
+switch batches, independent custom values, exact serialization, simulated
+Undo/Redo in different parameter orders, instance recreation and older Spanish
+projects without stored configurations. A stronger-default Spanish frame matches
+an independent direct-engine reference inside the brush and preserves original
+RGB and alpha outside it; its repair genuinely differs from the automatic
+reference. Existing default-render, recovery, cancellation and cache checks
+continue to pass, along with three CTests.
+
+This candidate is not installed in the active Resolve tablet session. Actual
+Resolve Color/Edit switching, host Undo/Redo and save/reopen behavior remain
+separate native checks. These results do not qualify Windows/Linux execution,
+tablet ergonomics or brush-region-only computation, and do not authorize a
+release.
+
 ## Spanish scheduling and recovery feedback — development build, 9 November 2026
 
 The macOS OFX contract host passes on CPU and Metal with the 21-frame 512×512

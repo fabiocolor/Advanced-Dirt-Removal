@@ -12,6 +12,10 @@
 
 ### Viewer-paint development candidate
 
+- Automatic/Recovery and Spanish remember separate cleaning configurations in
+  the project. Spanish starts with the operator-selected stronger settings;
+  selecting either method restores its own edits. Existing projects retain
+  their loaded settings, with no additional visible controls.
 - Spanish painting skips cleaning on frames without active strokes and reuses
   the cleaned picture across brush edits. Painted frames still use full-frame
   temporal analysis; brush-area-only computation is not implemented.
