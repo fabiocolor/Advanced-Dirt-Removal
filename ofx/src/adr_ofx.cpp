@@ -23,6 +23,7 @@
 #include <tuple>
 #include <fstream>
 #include <iomanip>
+#include <iterator>
 #include <locale>
 #include <sys/stat.h>
 #include "../../engine/tools/sha256.h"
@@ -414,6 +415,7 @@ bool paintHost();
 std::array<int,2> sourceRange(Instance&);
 #include "paint_ui.h"
 #include "cleaning_profiles.h"
+#include "user_defaults.h"
 std::array<int,2> sourceRange(Instance&i){
  OfxPropertySetHandle p;check(fx->clipGetPropertySet(i.source,&p),"source properties");
  double first=std::ceil(number(p,kOfxImageEffectPropFrameRange,0)),last=std::floor(number(p,kOfxImageEffectPropFrameRange,1));
@@ -563,6 +565,10 @@ const Extra extras[]={
  {"recovery_confidence","Confidence","Give back only spots the model is at least this sure were real picture detail. Higher gives back less.","auto_recovery_group",ExtraDouble,.8,.5,.99},
  {"recovery_folder","Matte folder","Where calculated mattes are stored. Empty: the user's application data folder.","auto_recovery_group",ExtraString,0,0,0},
  {"cleaning_profiles","Saved cleaning configurations","Internal: independent Automatic/Recovery and Spanish cleaning settings.","auto_recovery_group",ExtraString,0,0,0},
+ {"cleaning_default_save","Save as my default","Save the selected method's cleaning settings for this user, for explicit reuse across nodes and projects.","cleaning_defaults_group",ExtraButton,0,0,0},
+ {"cleaning_default_load","Load my default","Load this user's saved cleaning settings for the selected method into this node. Other mode settings and shared controls are kept.","cleaning_defaults_group",ExtraButton,0,0,0},
+ {"cleaning_default_factory","Use factory settings","Restore the selected method's factory cleaning settings in this node. Saved user defaults are kept; use Save as my default to replace them.","cleaning_defaults_group",ExtraButton,0,0,0},
+ {"cleaning_default_status","Defaults","Feedback for the selected method's user defaults.","cleaning_defaults_group",ExtraString,0,0,0},
  {"view","View","Restored: the result. Red difference: grey picture with every repair in red. True difference: the change, amplified. Auto recovery matte: where auto recovery gives back the original.",nullptr,ExtraChoice,0,0,3,viewChoices,4},
  {"difference_threshold","Difference threshold (%)","Red difference: changes smaller than this are not shown in red. The engine moves unrepaired pixels by less than one 10-bit code, so 0.1% shows only real repairs.","view_group",ExtraDouble,.1,0,100},
  {"red_intensity","Red difference intensity","Brightness of the red highlights.","view_group",ExtraDouble,8,0,100},
@@ -589,10 +595,11 @@ void defineExtraParam(OfxParamSetHandle ps,const Extra&x,const char*parent,const
   else if(x.kind==ExtraInt){if(!std::strcmp(x.name,"recovery_request")){si(p,kOfxParamPropSecret,1);si(p,kOfxParamPropEvaluateOnChange,1);}si(p,kOfxParamPropDefault,int(x.initial));for(auto k:{kOfxParamPropMin,kOfxParamPropDisplayMin})si(p,k,int(x.minimum));for(auto k:{kOfxParamPropMax,kOfxParamPropDisplayMax})si(p,k,int(x.maximum));}
   else if(x.kind==ExtraDouble){for(auto v:{std::make_pair(kOfxParamPropDefault,x.initial),{kOfxParamPropMin,x.minimum},{kOfxParamPropMax,x.maximum},{kOfxParamPropDisplayMin,x.minimum},{kOfxParamPropDisplayMax,x.maximum}})check(prop->propSetDouble(p,v.first,0,v.second),"extra range");}
   else if(x.kind==ExtraString){
-   const bool status=!std::strcmp(x.name,"recovery_status");
+   const bool defaultStatus=!std::strcmp(x.name,"cleaning_default_status");
+   const bool status=!std::strcmp(x.name,"recovery_status")||defaultStatus;
    const bool profiles=!std::strcmp(x.name,"cleaning_profiles");
    ss(p,kOfxParamPropStringMode,status?kOfxParamStringIsLabel:profiles?kOfxParamStringIsMultiLine:kOfxParamStringIsDirectoryPath);
-   ss(p,kOfxParamPropDefault,status?"Not calculated in this session":"");
+   ss(p,kOfxParamPropDefault,defaultStatus?"Save or load defaults for the selected method":status?"Not calculated in this session":"");
    if(status){si(p,kOfxParamPropEvaluateOnChange,0);si(p,kOfxParamPropCanUndo,0);si(p,kOfxParamPropPersistant,0);}
    if(profiles){si(p,kOfxParamPropSecret,1);si(p,kOfxParamPropEvaluateOnChange,0);si(p,kOfxParamPropCanUndo,1);si(p,kOfxParamPropPersistant,1);}
   }
@@ -601,6 +608,15 @@ void defineExtraParams(OfxParamSetHandle ps,const char*group){
  if(group){OfxPropertySetHandle p;check(params->paramDefine(ps,kOfxParamTypeGroup,group,&p),"define group");ss(p,kOfxPropLabel,!std::strcmp(group,"auto_recovery_group")?"Recovery":"View options");si(p,kOfxParamPropGroupOpen,!std::strcmp(group,"auto_recovery_group"));}
  for(auto&x:extras){const bool top=!x.group;if(group?(top||std::strcmp(x.group,group)):!top)continue;defineExtraParam(ps,x,x.group);}
 }
+void defineUserDefaults(OfxParamSetHandle ps,bool visible){
+ OfxPropertySetHandle p;check(params->paramDefine(ps,kOfxParamTypeGroup,"cleaning_defaults_group",&p),"define cleaning defaults");
+ ss(p,kOfxPropLabel,"Cleaning defaults");si(p,kOfxParamPropGroupOpen,0);
+ if(visible)ss(p,kOfxParamPropParent,"paint_group");else si(p,kOfxParamPropSecret,1);
+ for(const auto&x:extras)if(x.group&&!std::strcmp(x.group,"cleaning_defaults_group")){
+  defineExtraParam(ps,x,x.group);
+  if(!visible){OfxParamHandle h=nullptr;check(params->paramGetHandle(ps,x.name,&h,&p),"default control");si(p,kOfxParamPropSecret,1);}
+ }
+}
 // Inspector tabs (OFX pages). Children are listed in display order.
 void definePages(OfxParamSetHandle ps,bool paintHost){
  std::vector<std::string> cleaning={"encoding","view"};
@@ -608,7 +624,7 @@ void definePages(OfxParamSetHandle ps,bool paintHost){
  const std::vector<std::string> recovery={"mask_mode","recovery_calculate","recovery_status","auto_recovery","recovery_confidence","recovery_folder"};
  const std::vector<std::string> view={"difference_threshold","red_intensity","red_opacity","gray_background","difference_gain"};
  struct Page{const char*name;const char*label;const std::vector<std::string>*kids;};
- const std::vector<std::string> paintPage={"paint","paint_tool","paint_shape","paint_size","paint_softness","paint_opacity","paint_hold","paint_stroke_info","paint_previous","paint_next","paint_undo","paint_redo","paint_delete","paint_stroke_on","paint_rect_width","paint_rect_height","paint_smoothing","paint_pressure","paint_outlines","paint_keys","paint_source_kind","paint_source_folder","paint_source_offset"};
+ const std::vector<std::string> paintPage={"paint","paint_tool","paint_shape","paint_size","paint_softness","paint_opacity","paint_hold","paint_stroke_info","paint_previous","paint_next","paint_undo","paint_redo","paint_delete","paint_stroke_on","paint_rect_width","paint_rect_height","paint_smoothing","paint_pressure","paint_outlines","paint_keys","paint_source_kind","paint_source_folder","paint_source_offset","cleaning_default_save","cleaning_default_load","cleaning_default_factory","cleaning_default_status"};
  const Page pages[]={{"page_cleaning","Cleaning",&cleaning},{"page_recovery","Recovery",&recovery},{"page_paint","Paint",&paintPage},{"page_view","View",&view}};
  for(auto&pg:pages){
   if(pg.kids==&paintPage&&!paintHost)continue;
@@ -628,7 +644,7 @@ void defineControlPresentation(OfxParamSetHandle ps){
    if(c.group&&definedGroups.insert(c.group).second)for(auto&g:groups)if(!std::strcmp(g.name,c.group)){OfxPropertySetHandle p;check(params->paramDefine(ps,kOfxParamTypeGroup,g.name,&p),"define group");ss(p,kOfxPropLabel,g.label);si(p,kOfxParamPropGroupOpen,!std::strcmp(g.name,"detection"));}
    defineCleaningControl(ps,c,c.group);
   }
-  defineExtraParams(ps,"view_group");definePages(ps,false);return;
+  defineUserDefaults(ps,false);defineExtraParams(ps,"view_group");definePages(ps,false);return;
  }
  auto group=[&](const char*name,const char*label,bool open,bool hidden=false){OfxPropertySetHandle p;check(params->paramDefine(ps,kOfxParamTypeGroup,name,&p),"define group");ss(p,kOfxPropLabel,label);si(p,kOfxParamPropGroupOpen,open);if(hidden)si(p,kOfxParamPropSecret,1);};
  auto extra=[&](const char*name,const char*parent){for(auto&x:extras)if(!std::strcmp(name,x.name)){defineExtraParam(ps,x,parent,!std::strcmp(name,"mask_mode")?"Method":nullptr);return;}require(false,"missing display extra");};
@@ -644,6 +660,7 @@ void defineControlPresentation(OfxParamSetHandle ps){
  group("paint_group","Manual recovery / Spanish",true);
  extra("mask_mode","paint_group");
  paint_ui::define(ps,true,true);
+ defineUserDefaults(ps,true);
  defineExtraParams(ps,"view_group");definePages(ps,true);
 }
 // Spanish dirt removal makes auto recovery irrelevant: grey its controls out while it is on.
@@ -1158,6 +1175,7 @@ OfxStatus entry(const char*action,const void*handle,OfxPropertySetHandle in,OfxP
  if((!std::strcmp(action,kOfxActionInstanceChanged)||!std::strcmp(action,kOfxImageEffectActionGetRegionOfDefinition)||!std::strcmp(action,kOfxImageEffectActionGetFramesNeeded))&&persistentMessages&&isLiveInstance(e))persistentMessages->clearPersistentMessage(e);
  if(!std::strcmp(action,kOfxActionInstanceChanged)&&in){char*type=nullptr;char*name=nullptr;
   if(isLiveInstance(e))refreshRecoveryUI(e);
+  if(user_defaults::changed(e,in))return kOfxStatOK;
   if(prop->propGetString(in,kOfxPropName,0,&name)==kOfxStatOK&&name&&!std::strcmp(name,"auto_recovery")){
    auto&i=instance(e);int on=0;params->paramGetValue(i.parameters.at("auto_recovery"),&on);
    if(!on&&(i.recoveryState==Instance::Queued||i.recoveryState==Instance::Running)){

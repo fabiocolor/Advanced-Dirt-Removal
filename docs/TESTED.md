@@ -12,6 +12,28 @@ Version 2.0.0, November 2026. Real-footage tests use a 2368×1712 film scan
 (float EXR): 56 frames on macOS, a 12-frame excerpt on Windows and Linux,
 compared frame by frame with the macOS result.
 
+## Explicit user defaults — development build, 10 November 2026
+
+A collapsed Cleaning defaults section provides Save as my default, Load my
+default and Use factory settings for the selected Resolve method. Automatic/
+Recovery and Spanish use separate local preference files. New nodes, mode
+selection and project loading never automatically apply those files. Loaded
+values remain stored in the project, independently of the preference files.
+
+The macOS CPU/Metal contract checks cover both mode files, replacement without
+altering the other mode, invalid values, write failure, missing/wrong-mode files,
+Unicode paths, explicit loading into a new node, independent factory settings,
+shared-control preservation and balanced host Undo brackets. Project instance
+recreation retains both mode configurations with the preference files absent.
+A stronger Spanish render still matches the direct-engine reference while its
+user-defaults location is deliberately unusable. The existing regression suite
+and three CTests pass; normal and isolated candidate signatures verify strictly.
+
+These are automated contract checks. The candidate has not been installed in
+the active Resolve session; native Color/Edit layout, button interactions and
+actual host Undo/save/reopen remain pending. Windows/Linux execution, physical
+tablet ergonomics and brush-region-only computation are not qualified here.
+
 ## Separate cleaning configurations — development build, 9 November 2026
 
 Resolve's Automatic/Recovery and Spanish methods retain independent Detection,

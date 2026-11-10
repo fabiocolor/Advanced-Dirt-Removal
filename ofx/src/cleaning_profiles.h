@@ -48,6 +48,21 @@ Values current(OfxImageEffectHandle e){
 void initialize(OfxImageEffectHandle e){
  instance(e).cleaningProfile={};instance(e).cleaningProfile.previousMode=paint_ui::getInt(e,"mask_mode");
 }
+void install(OfxImageEffectHandle e,const Profiles&p){
+ const auto saved=encode(p);Updating guard;
+ for(size_t n=0;n<count;++n){const auto&c=controls[n+1];const double value=p.values[p.active][n];
+  if(c.boolean||c.integral)paint_ui::setInt(e,c.name,int(value));else paint_ui::setDouble(e,c.name,value);
+ }
+ paint_ui::setText(e,"cleaning_profiles",saved);instance(e).cleaningProfile.previousMode=p.active;
+}
+void applyCurrent(OfxImageEffectHandle e,const Values&values){
+ validate(values);const int mode=paint_ui::getInt(e,"mask_mode");
+ const auto text=paint_ui::getText(e,"cleaning_profiles");Profiles p=text.empty()?defaults():decode(text);
+ if(text.empty())p.active=instance(e).cleaningProfile.previousMode;
+ require((mode==0||mode==1)&&(p.active==0||p.active==1),"Invalid cleaning configuration mode");
+ if(p.active!=mode)p.values[p.active]=current(e);
+ p.active=mode;p.values[mode]=values;install(e,p);
+}
 void activate(OfxImageEffectHandle e){
  if(!paintHost()||updating)return;
  auto&state=instance(e).cleaningProfile;const int mode=paint_ui::getInt(e,"mask_mode");
@@ -58,12 +73,7 @@ void activate(OfxImageEffectHandle e){
  if(mode==previous){state.previousMode=mode;return;}
  // Capture the actual visible values, including edits made since the last
  // switch. Old projects start here without any change to their loaded look.
- p.values[previous]=current(e);p.active=mode;const auto saved=encode(p);
- Updating guard;
- for(size_t n=0;n<count;++n){const auto&c=controls[n+1];const double value=p.values[mode][n];
-  if(c.boolean||c.integral)paint_ui::setInt(e,c.name,int(value));else paint_ui::setDouble(e,c.name,value);
- }
- paint_ui::setText(e,"cleaning_profiles",saved);state.previousMode=mode;
+ p.values[previous]=current(e);p.active=mode;install(e,p);
  adrlog::info(instance(e).label()+" restored "+(mode?"Spanish":"Automatic/Recovery")+" cleaning configuration");
 }
 bool control(const char*name){for(size_t n=1;n<=count;++n)if(!std::strcmp(name,controls[n].name))return true;return false;}

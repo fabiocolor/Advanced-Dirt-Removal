@@ -149,6 +149,27 @@ settings stay shared. Auto recovery retains its saved preference and pauses in
 Spanish. Existing projects keep their current values when loaded; a previously
 unused method gets its first-use configuration when explicitly selected.
 
+**Your own defaults.** Open the collapsed **Cleaning defaults** section under
+Manual recovery / Spanish. Choose the **Method**, adjust its cleaning controls,
+then click **Save as my default**. In another node or project, select that method
+and click **Load my default**. Automatic/Recovery and Spanish have separate
+saved user defaults; saving one does not replace the other.
+
+Loading is explicit. Creating a node, changing methods or opening a project
+does not automatically apply user-default files. **Use factory settings** resets
+only the selected method in the current node and leaves the saved user default
+available. To replace that saved default with factory values, use factory
+settings and then save it. Loading/factory changes use Resolve's Undo; saving
+updates the user's preference file. Encoding, View, effect bypass, brush settings
+and the saved Auto recovery preference are not included in these defaults.
+
+Default files are local to the user: macOS uses
+`~/Library/Application Support/FabioColor/AdvancedDirtRemoval/Defaults`, Windows
+uses `%LOCALAPPDATA%\FabioColor\AdvancedDirtRemoval\Defaults`, and Linux uses
+`$XDG_CONFIG_HOME/fabiocolor/advanced-dirt-removal/defaults` (or `~/.config/...`).
+Once loaded, settings are stored in the project; the project does not require
+those preference files on another machine.
+
 Strokes stay off the picture: you see only the result and the brush. A stroke
 you pick with **Select** is outlined; **Show strokes**, under **Brush options**,
 outlines all of them. **Previous stroke** and **Next stroke** go through the

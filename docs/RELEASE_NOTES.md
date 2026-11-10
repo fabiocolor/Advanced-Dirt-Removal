@@ -12,6 +12,10 @@
 
 ### Viewer-paint development candidate
 
+- A collapsed **Cleaning defaults** section lets Resolve users save, explicitly
+  load, or use factory cleaning settings for the selected method. User defaults
+  are separate for Automatic/Recovery and Spanish; existing nodes and projects
+  are never automatically replaced by these files.
 - Automatic/Recovery and Spanish remember separate cleaning configurations in
   the project. Spanish starts with the operator-selected stronger settings;
   selecting either method restores its own edits. Existing projects retain

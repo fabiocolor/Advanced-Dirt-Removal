@@ -151,7 +151,7 @@ int main(int argc,char**argv){
  verify(rejectedMetalSupport>=2,"CPU-only host rejects optional GPU extensions without preventing discovery");
 #endif
  rejectMetalSupport=false;verify(plugin->mainEntry(kOfxActionDescribe,handle,nullptr,nullptr)==kOfxStatOK,"GPU-capable descriptor also accepted");
- verify(plugin->mainEntry(kOfxImageEffectActionDescribeInContext,handle,ip,nullptr)==0,"context");verify(e.parameters.size()==69,"all controls, groups and pages exposed");verify(e.parameters.count("page_paint")==0&&e.parameters["paint"].props.ints[kOfxParamPropSecret]==std::vector<int>{1}&&e.parameters["paint_tool"].props.ints[kOfxParamPropSecret]==std::vector<int>{1},"viewer painting hidden outside Resolve");verify(e.props.pointers.count(kOfxImageEffectPluginPropOverlayInteractV1)==0,"no viewer overlay outside Resolve");for(auto pg:{"page_cleaning","page_recovery","page_view"})verify(e.parameters.count(pg)==1,"inspector page defined");for(auto g:{"detection","processing","safeguards"})verify(e.parameters.count(g)==1,"control group defined");verify(e.parameters["sensitivity"].props.strings[kOfxParamPropParent]==std::vector<std::string>{"detection"},"controls are grouped");verify(plugin->mainEntry(kOfxActionCreateInstance,handle,nullptr,nullptr)==0,"create");
+ verify(plugin->mainEntry(kOfxImageEffectActionDescribeInContext,handle,ip,nullptr)==0,"context");verify(e.parameters.size()==74,"all controls, groups and pages exposed");verify(e.parameters.count("page_paint")==0&&e.parameters["paint"].props.ints[kOfxParamPropSecret]==std::vector<int>{1}&&e.parameters["paint_tool"].props.ints[kOfxParamPropSecret]==std::vector<int>{1},"viewer painting hidden outside Resolve");verify(e.props.pointers.count(kOfxImageEffectPluginPropOverlayInteractV1)==0,"no viewer overlay outside Resolve");for(auto pg:{"page_cleaning","page_recovery","page_view"})verify(e.parameters.count(pg)==1,"inspector page defined");for(auto g:{"detection","processing","safeguards"})verify(e.parameters.count(g)==1,"control group defined");verify(e.parameters["sensitivity"].props.strings[kOfxParamPropParent]==std::vector<std::string>{"detection"},"controls are grouped");verify(plugin->mainEntry(kOfxActionCreateInstance,handle,nullptr,nullptr)==0,"create");
  // Compact Resolve presentation preserves every existing value/type/range/choice.
  // The normal-host descriptor is an independent ordering of the same controls.
  {
@@ -177,7 +177,7 @@ int main(int argc,char**argv){
   verify(!compact.parameters.at("encoding").props.strings.count(kOfxParamPropParent),"published input encoding remains top level");
   for(auto&c:controls)if(c.group)verify(compact.parameters.at(c.name).props.strings.at(kOfxParamPropParent)==std::vector<std::string>{c.group},"published automatic control grouping retained");
   for(auto&g:groups)verify(compact.parameters.at(g.name).props.strings.at(kOfxPropLabel)==std::vector<std::string>{g.label},"published automatic group labels retained");
-  for(auto name:{"auto_recovery_group","processing","stroke_details_group","paint_options_group","paint_source_group","view_group"})verify(compact.parameters.at(name).props.ints.at(kOfxParamPropGroupOpen)==std::vector<int>{0},"secondary groups start collapsed");
+  for(auto name:{"auto_recovery_group","processing","stroke_details_group","paint_options_group","paint_source_group","view_group","cleaning_defaults_group"})verify(compact.parameters.at(name).props.ints.at(kOfxParamPropGroupOpen)==std::vector<int>{0},"secondary groups start collapsed");
   verify(compact.parameters.at("paint_hold").props.strings.at(kOfxParamPropParent)==std::vector<std::string>{"stroke_details_group"},"duration is a stroke detail");
   const auto&children=compact.parameters.at("page_paint").props.strings.at(kOfxParamPropPageChild);for(auto name:{"paint_undo","paint_redo"})verify(std::find(children.begin(),children.end(),name)!=children.end(),"page-respecting hosts retain paint history buttons");
   hostProperties=savedHost;interacts=savedInteracts;std::cout<<"compact UI parameter contract and group defaults: passed\n";
@@ -329,6 +329,58 @@ int main(int argc,char**argv){
   paint_ui::setInt(lh,"mask_mode",0);verify(cleaning_ui::current(lh)==defaults.values[0],"old Spanish project gets standard inactive automatic settings");
   paint_ui::setInt(lh,"mask_mode",1);verify(cleaning_ui::current(lh)==spanish,"old Spanish custom values survive first switch");
   verify(plugin->mainEntry(kOfxActionDestroyInstance,lh,nullptr,nullptr)==kOfxStatOK,"destroy legacy profile instance");
+  // User defaults are explicit, separate per mode and local to the user.
+  // All file operations use this owned fixture directory, never AppData/HOME.
+  const auto previousDefaults=std::getenv("ADR_USER_DEFAULTS_DIR");const std::string savedDefaults=previousDefaults?previousDefaults:"";
+  const auto storage=logFolder/"defaults-storage"/std::filesystem::u8path(u8"pr\u00e9sets-\u7528\u6237");
+  auto bytes=[](const auto&path){std::ifstream in(path,std::ios::binary);return std::string(std::istreambuf_iterator<char>(in),std::istreambuf_iterator<char>());};
+  user_defaults::save(storage,0,automatic);user_defaults::save(storage,1,spanish);
+  cleaning_ui::Values loaded{};verify(user_defaults::load(storage,0,loaded)&&loaded==automatic,"automatic user default roundtrip");
+  verify(user_defaults::load(storage,1,loaded)&&loaded==spanish,"Spanish user default roundtrip");
+  const auto spanishBytes=bytes(user_defaults::file(storage,1));auto automatic2=automatic;automatic2[index("sensitivity")]=.64;
+  user_defaults::save(storage,0,automatic2);verify(user_defaults::load(storage,0,loaded)&&loaded==automatic2&&bytes(user_defaults::file(storage,1))==spanishBytes,"replacement is complete and leaves other mode untouched");
+  const auto original=bytes(user_defaults::file(storage,0));auto invalid=automatic2;invalid[index("sensitivity")]=2;
+  bool rejected=false;try{user_defaults::save(storage,0,invalid);}catch(const Error&){rejected=true;}verify(rejected&&bytes(user_defaults::file(storage,0))==original,"invalid defaults cannot replace a valid file");
+  const auto blocked=storage.parent_path()/"blocked-root";{std::ofstream out(blocked);out<<"owned blocker";}
+  rejected=false;try{user_defaults::save(blocked,0,automatic);}catch(const Error&){rejected=true;}verify(rejected&&bytes(user_defaults::file(storage,0))==original,"write failure keeps saved defaults");
+  const auto rejectedRoot=storage/"reject-replacement";std::filesystem::create_directories(user_defaults::file(rejectedRoot,0));
+  rejected=false;try{user_defaults::save(rejectedRoot,0,automatic);}catch(const Error&){rejected=true;}verify(rejected&&std::filesystem::is_directory(user_defaults::file(rejectedRoot,0)),"replacement failure keeps its target and cleans the temporary file");
+  for(const auto&entry:std::filesystem::recursive_directory_iterator(storage))verify(entry.path().filename().u8string().find(".tmp-")==std::string::npos,"successful/failed saves leave no temporary files");
+  const auto uiRoot=logFolder/"defaults-ui";environment("ADR_USER_DEFAULTS_DIR",uiRoot.u8string());editing=&e;
+  pas.paramEditBegin=paintEditBegin;pas.paramEditEnd=paintEditEnd;inPaintCallback=true;
+  auto action=[&](const char*name){notify(name);};
+  const auto beforeMissing=cleaning_ui::current(handle);action("cleaning_default_load");
+  verify(cleaning_ui::current(handle)==beforeMissing&&!std::filesystem::exists(uiRoot),"loading absent defaults changes no settings and creates no folder");
+  action("cleaning_default_save");verify(user_defaults::load(uiRoot,1,loaded)&&loaded==spanish,"Save button stores selected Spanish mode");
+  const auto savedSpanish=bytes(user_defaults::file(uiRoot,1));action("cleaning_default_factory");
+  verify(cleaning_ui::current(handle)==defaults.values[1]&&bytes(user_defaults::file(uiRoot,1))==savedSpanish,"factory button resets current mode without overwriting user defaults");
+  action("cleaning_default_load");verify(cleaning_ui::current(handle)==spanish,"Load button restores saved Spanish default");
+  paint_ui::setInt(handle,"mask_mode",0);verify(cleaning_ui::current(handle)==automatic,"loading Spanish does not replace inactive automatic edits");
+  paint_ui::setDouble(handle,"sensitivity",.64);action("cleaning_default_save");
+  verify(user_defaults::load(uiRoot,0,loaded)&&loaded==automatic2&&bytes(user_defaults::file(uiRoot,1))==savedSpanish,"Save button keeps separate automatic and Spanish files");
+  action("cleaning_default_factory");verify(cleaning_ui::current(handle)==defaults.values[0],"factory button selects automatic factory values");
+  action("cleaning_default_load");verify(cleaning_ui::current(handle)==automatic2,"automatic user default loads explicitly");
+  verify(paint_ui::getInt(handle,"encoding")==1&&paint_ui::getInt(handle,"enabled")==0&&paint_ui::getInt(handle,"view")==2&&paint_ui::getDouble(handle,"paint_size")==137&&paint_ui::getInt(handle,"auto_recovery")==1,"user defaults exclude shared/source/brush controls");
+  Effect fresh;fresh.parameters=savedParameters;editing=&fresh;const auto fh=reinterpret_cast<OfxImageEffectHandle>(&fresh);
+  verify(plugin->mainEntry(kOfxActionCreateInstance,fh,nullptr,nullptr)==kOfxStatOK&&cleaning_ui::current(fh)==defaults.values[0],"new node does not automatically apply user defaults");
+  action("cleaning_default_load");verify(cleaning_ui::current(fh)==automatic2,"new node can explicitly load automatic default");
+  paint_ui::setInt(fh,"mask_mode",1);verify(cleaning_ui::current(fh)==defaults.values[1],"first Spanish switch retains factory preset until explicit load");
+  action("cleaning_default_load");verify(cleaning_ui::current(fh)==spanish,"new node explicitly loads Spanish user default");
+  const auto portableValues=fresh.parameters;verify(plugin->mainEntry(kOfxActionDestroyInstance,fh,nullptr,nullptr)==kOfxStatOK,"destroy defaults target");
+  environment("ADR_USER_DEFAULTS_DIR",(logFolder/"unavailable-defaults").u8string());
+  Effect portable;portable.parameters=portableValues;editing=&portable;const auto ph=reinterpret_cast<OfxImageEffectHandle>(&portable);
+  verify(plugin->mainEntry(kOfxActionCreateInstance,ph,nullptr,nullptr)==kOfxStatOK&&cleaning_ui::current(ph)==spanish,"saved project retains values without the user-default files");
+  paint_ui::setInt(ph,"mask_mode",0);verify(cleaning_ui::current(ph)==automatic2&&!std::filesystem::exists(logFolder/"unavailable-defaults"),"project retains inactive settings without reading/creating user defaults");
+  verify(plugin->mainEntry(kOfxActionDestroyInstance,ph,nullptr,nullptr)==kOfxStatOK,"destroy portable project instance");
+  environment("ADR_USER_DEFAULTS_DIR",uiRoot.u8string());editing=&e;const auto beforeError=cleaning_ui::current(handle);
+  {std::ofstream out(user_defaults::file(uiRoot,0));auto wrong=defaults;wrong.active=1;out<<cleaning_ui::encode(wrong);}
+  const int errorsBefore=messageCalls;action("cleaning_default_load");
+  verify(messageCalls==errorsBefore+1&&cleaning_ui::current(handle)==beforeError&&paint_ui::getText(handle,"cleaning_default_status").find("failed")!=std::string::npos,"wrong-mode file reports an error without replacing current settings");
+  user_defaults::save(uiRoot,0,automatic2);const auto beforeWriteError=bytes(user_defaults::file(uiRoot,0));environment("ADR_USER_DEFAULTS_DIR",blocked.u8string());action("cleaning_default_save");
+  verify(cleaning_ui::current(handle)==beforeError&&bytes(user_defaults::file(uiRoot,0))==beforeWriteError,"UI save failure preserves current and previous saved settings");
+  verify(paintUndoDepth==0&&paintWrongContext==0,"defaults loads bracket host Undo in the UI callback");
+  inPaintCallback=false;pas.paramEditBegin=nullptr;pas.paramEditEnd=nullptr;environment("ADR_USER_DEFAULTS_DIR",savedDefaults);
+  std::cout<<"user defaults: explicit per-mode save/load/factory, replacement, failure isolation, Unicode path and portable projects passed\n";
   duringParameterSet=nullptr;pas.paramSetValue=nullptr;pas.paramGetPropertySet=nullptr;interacts=savedInteracts;hostProperties=savedHost;
   for(const auto&saved:savedParameters)e.parameters.at(saved.first)=saved.second;instance(handle).cleaningProfile=savedState;
   std::cout<<"cleaning configurations: stronger defaults, independent edits, reentry, batches, Undo/Redo, reopen and legacy load passed\n";
@@ -375,10 +427,11 @@ int main(int argc,char**argv){
   std::cout<<"concurrent host metadata/save/bracket/ignored-change callbacks passed\n";
  };
  verify(e.props.strings[kOfxImageEffectPluginRenderThreadSafety][0]==kOfxImageEffectRenderInstanceSafe,"instances are protected by the plugin lock");
+ const int messagesBeforeRendering=messageCalls;
  // A genuinely cold late-frame request must replay exactly and stay within its declaration.
  renderFrame(count-1);
  for(int f=0;f<count;++f){renderFrame(f);auto before=instance(handle).sequence;verify(plugin->mainEntry(kOfxImageEffectActionEndSequenceRender,handle,ip,nullptr)==0,"end bracket");verify(instance(handle).sequence==before,"end bracket preserves bounded history");}
- verify(messageCalls==0,"normal rendering does not call host logging or UI callbacks");
+ verify(messageCalls==messagesBeforeRendering,"normal rendering does not call host logging or UI callbacks");
  verify(plugin->mainEntry(kOfxActionPurgeCaches,handle,nullptr,nullptr)==kOfxStatOK,"purge caches");verify(!instance(handle).sequence,"purge releases live sequence");renderFrame(count/2);
  // Paint: a hard rectangle on one frame. Recovery: the source inside, the exact repair outside.
  // Spanish dirt removal: the repair inside only; with nothing painted, the source everywhere.
@@ -455,6 +508,9 @@ int main(int argc,char**argv){
  {
   const auto savedHost=hostProperties;auto*savedInteracts=interacts;OfxInteractSuiteV1 suite{};interacts=&suite;setString(H(hostProperties),kOfxPropName,0,"DaVinciResolve");
   pas.paramSetValue=paintSetValue;pas.paramGetPropertySet=paintParameterProperties;
+  const char*priorDefaults=std::getenv("ADR_USER_DEFAULTS_DIR");const std::string savedDefaults=priorDefaults?priorDefaults:"";
+  const auto blockedDefaults=logFolder/"render-defaults"/"blocked";std::filesystem::create_directories(blockedDefaults.parent_path());{std::ofstream out(blockedDefaults);out<<"owned render blocker";}
+  environment("ADR_USER_DEFAULTS_DIR",blockedDefaults.u8string());
   Effect stronger;stronger.parameters=e.parameters;stronger.source.props=e.source.props;stronger.output.props=e.output.props;stronger.output.output=true;
   stronger.parameters.at("mask_mode").props.ints[kOfxParamPropDefault]={0};stronger.parameters.at("auto_recovery").props.ints[kOfxParamPropDefault]={0};
   stronger.parameters.at("cleaning_profiles").props.strings[kOfxParamPropDefault]={""};
@@ -478,6 +534,7 @@ int main(int argc,char**argv){
   {Image result(reinterpret_cast<OfxImageClipHandle>(&stronger.output),frame+100);for(int y=0;y<h;++y)for(int x=0;x<w;++x){const bool inside=x+.5>.25*w&&x+.5<.5*w&&h-1-y+.5>.25*h&&h-1-y+.5<.75*h;for(int channel=0;channel<3;++channel){const size_t k=(size_t(y)*w+x)*3+channel;if(inside&&expected[k]!=targetPixels[size_t(frame)*w*h*3+k])++different;verify(result.read(x,y,channel)==(inside?expected[k]:sourcePixels[size_t(frame)*w*h*3+k]),"stronger defaults use exact repair inside brush and original outside");}verify(result.read(x,y,3)==float(x)/w,"stronger profile preserves alpha");}}
   verify(different>0,"stronger defaults genuinely differ from automatic cleaning on the fixture");
   verify(plugin->mainEntry(kOfxActionDestroyInstance,sh,nullptr,nullptr)==kOfxStatOK,"destroy stronger Spanish render instance");
+  environment("ADR_USER_DEFAULTS_DIR",savedDefaults);
   pas.paramSetValue=nullptr;pas.paramGetPropertySet=nullptr;interacts=savedInteracts;hostProperties=savedHost;
   std::cout<<"stronger Spanish defaults: direct-engine repair inside brush, exact original outside, alpha preserved\n";
  }
