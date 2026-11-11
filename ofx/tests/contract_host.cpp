@@ -140,6 +140,7 @@ int main(int argc,char**argv){
   verify(job.get(),"reentrant parameter-write brackets");
  }
  environment("ADR_BACKEND",argv[1]);
+ environment("ADR_RECOVERY_MODEL",(std::filesystem::path(__FILE__).parent_path().parent_path()/"resources"/"recovery-model.bin").u8string());
  // The diagnostic log is on by default; keep the test's log in a private folder and check it at the end.
  const auto logFolder=std::filesystem::temp_directory_path()/("adr-contract-log-"+std::to_string(adrlog::pid()));std::filesystem::remove_all(logFolder);environment("ADR_LOG",logFolder.u8string());int w=std::stoi(argv[4]),h=std::stoi(argv[5]),count=std::stoi(argv[6]);
  auto sourcePixels=readPixels(argv[2],size_t(count)*h*w*3),targetPixels=readPixels(argv[3],size_t(count)*h*w*3);
@@ -622,6 +623,18 @@ int main(int argc,char**argv){
   const auto dir=recoveryShotFolder(i,handle,settings,controlIdentity,{100,99+count},w,h,{bounds[0],bounds[1],bounds[2],bounds[3]});
   std::vector<uint8_t> zero(size_t(w)*h,0);
   for(int f=100;f<100+count;++f)saveProbability(dir,f,w,h,zero);
+  const auto modelPath=recoveryModelPath();const auto modelHash=recoveryModelIdentity();
+  const auto changedModel=logFolder/"model-fixtures"/"different-model.bin";std::filesystem::create_directories(changedModel.parent_path());
+  {std::ofstream weights(changedModel,std::ios::binary);weights<<"different checkpoint identity";}
+  environment("ADR_RECOVERY_MODEL",changedModel.u8string());
+  verify(recoveryModelIdentity()!=modelHash,"different weight contents have a different identity");
+  const auto changedDir=recoveryShotFolder(i,handle,settings,controlIdentity,{100,99+count},w,h,{bounds[0],bounds[1],bounds[2],bounds[3]});
+  std::vector<uint8_t> cacheProbe;
+  verify(changedDir!=dir&&!loadProbability(changedDir,100,w,h,cacheProbe),"new checkpoint cannot reuse old saved probability maps");
+  environment("ADR_RECOVERY_MODEL",modelPath);
+  verify(recoveryShotFolder(i,handle,settings,controlIdentity,{100,99+count},w,h,{bounds[0],bounds[1],bounds[2],bounds[3]})==dir&&loadProbability(dir,100,w,h,cacheProbe)&&cacheProbe==zero,"previous checkpoint maps remain intact and addressable");
+  std::cout<<"model identity: new checkpoints isolate saved mattes; previous maps preserved\n";
+
   setInt(H(e.parameters["auto_recovery"].props),kOfxParamPropDefault,0,0);renderFrame(0);
   const int rendered=i.rendered;auto*sequence=i.sequence;
   progressV1=nullptr;progressV2=&progressSuiteV2;progressValues.clear();

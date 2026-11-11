@@ -12,6 +12,25 @@ Version 2.0.0, November 2026. Real-footage tests use a 2368×1712 film scan
 (float EXR): 56 frames on macOS, a 12-frame excerpt on Windows and Linux,
 compared frame by frame with the macOS result.
 
+## Round 22 auto-recovery checkpoint — development build, 11 November 2026
+
+The development bundle now contains run-22 epoch-1, checkpoint SHA-256
+`63f18ae72507d0d8305a48fb0b0f06fd87371c6fcc2d3af5cbc99202d8183206`.
+The existing ResNet-18/13-channel converter produces the ADRRM001 weights;
+`recovery-model.json` records both hashes. Eight seeded synthetic crops give
+bitwise-equal native CPU/Metal probabilities on Apple M5 Pro. Relative to the
+original float32 PyTorch checkpoint, the folded/float16 export's largest
+probability difference on those crops is 0.000898719; this is conversion
+qualification, not a new operator-quality finding.
+
+Saved probability maps are now keyed by the weights SHA-256 in addition to the
+existing shot identity. A contract regression confirms a different checkpoint
+cannot read the earlier maps and that the earlier maps remain intact. CPU and
+Metal OFX contracts (21-frame fixture, including existing preservation, boundary,
+manual/automatic recovery, user-defaults and progress checks) and all three
+CTests pass. Existing released installers remain unchanged. Windows/Linux and
+new model picture-quality claims require separate evidence.
+
 ## Explicit user defaults — development build, 10 November 2026
 
 A collapsed Cleaning defaults section provides Save as my default, Load my

@@ -759,11 +759,23 @@ std::string recoveryModelPath(){
  for(int up=0;up<2;++up){auto k=bin.find_last_of("/\\");if(k==std::string::npos)return "";bin.resize(k);}
  return bin+"/Resources/recovery-model.bin";
 }
+// Weight files are immutable during a host session; install updates with the
+// host closed. Hash once per path, before looking up any saved probability map.
+std::string recoveryModelIdentity(){
+ static std::mutex lock;static std::map<std::string,std::string> identities;
+ const auto path=recoveryModelPath();std::lock_guard<std::mutex> guard(lock);
+ auto known=identities.find(path);if(known!=identities.end())return known->second;
+ std::ifstream file(path,std::ios::binary);require(bool(file),"auto recovery model unavailable: "+path,kOfxStatFailed);
+ adr_tools::Sha256 hash;std::array<char,65536> buffer{};
+ while(file){file.read(buffer.data(),buffer.size());hash.update(buffer.data(),size_t(file.gcount()));}
+ require(file.eof(),"auto recovery model read failed: "+path,kOfxStatFailed);
+ const auto digest=hash.hex();identities.emplace(path,digest);return digest;
+}
 std::mutex recoveryMutex;adr_recovery* recoveryEngine=nullptr;
 adr_recovery* recoveryModel(){
  std::lock_guard<std::mutex> g(recoveryMutex);
  if(!recoveryEngine){char error[1024]={};const auto path=recoveryModelPath();recoveryEngine=adr_recovery_create(context(),path.c_str(),error,sizeof error);
-  require(recoveryEngine,std::string("auto recovery model unavailable (")+path+"): "+error,kOfxStatFailed);adrlog::info("auto recovery model loaded: "+path);}
+  require(recoveryEngine,std::string("auto recovery model unavailable (")+path+"): "+error,kOfxStatFailed);adrlog::info("auto recovery model loaded: "+path+", sha256 "+recoveryModelIdentity());}
  return recoveryEngine;
 }
 bool makeDirs(const std::string&path){
@@ -776,9 +788,10 @@ bool makeDirs(const std::string&path){
  }
  struct stat st{};return stat(path.c_str(),&st)==0;
 }
-// One folder per shot: the cleaning controls, encoding, frame range, geometry and the first source frame's pixels.
+// One folder per model and shot: weight hash, cleaning controls, encoding,
+// frame range, geometry and first source frame pixels. Old folders stay intact.
 std::string recoveryShotFolder(Instance&i,OfxImageEffectHandle e,const Settings&s,const std::string&identity,const std::array<int,2>&range,int w,int h,const std::array<int,4>&bounds){
- std::ostringstream id;id<<identity<<'|'<<range[0]<<'|'<<range[1]<<'|'<<w<<'x'<<h<<"|enc"<<s.encoding;
+ std::ostringstream id;id<<identity<<'|'<<range[0]<<'|'<<range[1]<<'|'<<w<<'x'<<h<<"|enc"<<s.encoding<<"|model-sha256:"<<recoveryModelIdentity();
  if(i.recoveryIdFor!=id.str()){
   std::vector<float> first;readSource(i,e,range[0],w,h,bounds,first);
   adr_tools::Sha256 sh;sh.update(id.str().data(),id.str().size());sh.update(first.data(),first.size()*sizeof(float));

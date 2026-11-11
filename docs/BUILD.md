@@ -69,6 +69,12 @@ learning framework is needed at build or run time.
 `tools/convert_recovery_model.py` (needs PyTorch) writes this file from a
 training checkpoint and documents the format.
 
+Bundled model provenance is recorded in `recovery-model.json` beside the weights.
+The current development model is **Round 22, run-22 epoch-1**. Auto-recovery
+matte folders include the weights SHA-256, so changing checkpoints cannot reuse
+an earlier model's saved mattes. Prior folders are preserved. Update model files
+with the host closed and restart it before testing the new checkpoint.
+
 ## Determinism
 
 Every backend gives byte-identical output for the same input and controls.

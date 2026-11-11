@@ -1,0 +1,14 @@
+{
+  "schema": "ADR_RECOVERY_MODEL_1",
+  "name": "Round 22",
+  "training_run": "run-22",
+  "epoch": 1,
+  "checkpoint_sha256": "63f18ae72507d0d8305a48fb0b0f06fd87371c6fcc2d3af5cbc99202d8183206",
+  "weights_sha256": "1ba9c7080cc7dd37ac5fb5406a282f0ee0838df801b9d9e35ecfada4432f7163",
+  "format": "ADRRM001",
+  "architecture": "ResNet-18",
+  "input_channels": 13,
+  "crop_size": 160,
+  "conversion": "Batch normalization folded; float16 weights, float32 biases",
+  "validation_scope": "macOS Apple M5 Pro; CPU and Metal; synthetic conversion and OFX contract checks. No new quality approval or other-platform qualification."
+}
