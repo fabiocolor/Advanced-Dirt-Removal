@@ -12,9 +12,11 @@ Version 2.0.0, November 2026. Real-footage tests use a 2368×1712 film scan
 (float EXR): 56 frames on macOS, a 12-frame excerpt on Windows and Linux,
 compared frame by frame with the macOS result.
 
-## Round 22 auto-recovery checkpoint — development build, 11 November 2026
+## Ringo · 9 Nov 2026 · run 22 epoch 1 — development build, 11 November 2026
 
-The development bundle now contains run-22 epoch-1, checkpoint SHA-256
+The development bundle contains `ringo-recovery-20261109-r22e1-63f18ae7`
+(**Ghost Story only**, subject-only; not promoted for other films). Ringo
+run 15 epoch 4 remains the promoted general model. Checkpoint SHA-256
 `63f18ae72507d0d8305a48fb0b0f06fd87371c6fcc2d3af5cbc99202d8183206`.
 The existing ResNet-18/13-channel converter produces the ADRRM001 weights;
 `recovery-model.json` records both hashes. Eight seeded synthetic crops give
