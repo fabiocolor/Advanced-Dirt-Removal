@@ -95,6 +95,7 @@ std::unique_ptr<TestImage> frameImage(const std::vector<float>&rgb,int frame,int
 }
 std::vector<float> readPixels(const char*path,size_t count){std::ifstream in(path,std::ios::binary);std::vector<float> out(count);in.read(reinterpret_cast<char*>(out.data()),std::streamsize(count*4));verify(bool(in),"source fixture read");return out;}
 int main(int argc,char**argv){
+ environment("ADR_EXPERIMENTAL_PREPARE_SHOT","1");
  // Unbuffered output and a terminate handler, so a crash still shows how far the test got and why.
  std::setvbuf(stdout,nullptr,_IONBF,0);
  std::set_terminate([]{try{if(auto x=std::current_exception())std::rethrow_exception(x);std::cerr<<"FAIL: terminate without exception\n";}catch(const std::exception&x){std::cerr<<"FAIL: uncaught exception: "<<x.what()<<"\n";}catch(...){std::cerr<<"FAIL: uncaught non-standard exception\n";}std::_Exit(3);});
@@ -152,11 +153,16 @@ int main(int argc,char**argv){
  verify(rejectedMetalSupport>=2,"CPU-only host rejects optional GPU extensions without preventing discovery");
 #endif
  rejectMetalSupport=false;verify(plugin->mainEntry(kOfxActionDescribe,handle,nullptr,nullptr)==kOfxStatOK,"GPU-capable descriptor also accepted");
- verify(plugin->mainEntry(kOfxImageEffectActionDescribeInContext,handle,ip,nullptr)==0,"context");verify(e.parameters.size()==74,"all controls, groups and pages exposed");verify(e.parameters.count("page_paint")==0&&e.parameters["paint"].props.ints[kOfxParamPropSecret]==std::vector<int>{1}&&e.parameters["paint_tool"].props.ints[kOfxParamPropSecret]==std::vector<int>{1},"viewer painting hidden outside Resolve");verify(e.props.pointers.count(kOfxImageEffectPluginPropOverlayInteractV1)==0,"no viewer overlay outside Resolve");for(auto pg:{"page_cleaning","page_recovery","page_view"})verify(e.parameters.count(pg)==1,"inspector page defined");for(auto g:{"detection","processing","safeguards"})verify(e.parameters.count(g)==1,"control group defined");verify(e.parameters["sensitivity"].props.strings[kOfxParamPropParent]==std::vector<std::string>{"detection"},"controls are grouped");verify(plugin->mainEntry(kOfxActionCreateInstance,handle,nullptr,nullptr)==0,"create");
+ verify(plugin->mainEntry(kOfxImageEffectActionDescribeInContext,handle,ip,nullptr)==0,"context");verify(e.parameters.size()==77,"all controls, groups and pages exposed");verify(e.parameters.count("page_paint")==0&&e.parameters["paint"].props.ints[kOfxParamPropSecret]==std::vector<int>{1}&&e.parameters["paint_tool"].props.ints[kOfxParamPropSecret]==std::vector<int>{1},"viewer painting hidden outside Resolve");verify(e.props.pointers.count(kOfxImageEffectPluginPropOverlayInteractV1)==0,"no viewer overlay outside Resolve");for(auto pg:{"page_cleaning","page_recovery","page_view"})verify(e.parameters.count(pg)==1,"inspector page defined");for(auto g:{"detection","processing","safeguards"})verify(e.parameters.count(g)==1,"control group defined");verify(e.parameters["sensitivity"].props.strings[kOfxParamPropParent]==std::vector<std::string>{"detection"},"controls are grouped");verify(plugin->mainEntry(kOfxActionCreateInstance,handle,nullptr,nullptr)==0,"create");
  // Compact Resolve presentation preserves every existing value/type/range/choice.
  // The normal-host descriptor is an independent ordering of the same controls.
  {
   const auto savedHost=hostProperties;auto*savedInteracts=interacts;OfxInteractSuiteV1 suite{};interacts=&suite;setString(H(hostProperties),kOfxPropName,0,"DaVinciResolve");
+  environment("ADR_EXPERIMENTAL_PREPARE_SHOT","0");
+  Effect hidden;auto hiddenHandle=reinterpret_cast<OfxImageEffectHandle>(&hidden);
+  verify(plugin->mainEntry(kOfxImageEffectActionDescribeInContext,hiddenHandle,ip,nullptr)==kOfxStatOK,"default preparation descriptor");
+  verify(hidden.parameters["paint_source_kind"].props.strings[kOfxParamPropChoiceOption].size()==2&&hidden.parameters["prepare_shot"].props.ints[kOfxParamPropSecret]==std::vector<int>{1}&&hidden.parameters["prepare_folder"].props.ints[kOfxParamPropSecret]==std::vector<int>{1},"unqualified preparation is unavailable in the normal UI");
+  environment("ADR_EXPERIMENTAL_PREPARE_SHOT","1");
   Effect compact;auto compactHandle=reinterpret_cast<OfxImageEffectHandle>(&compact);
   verify(plugin->mainEntry(kOfxImageEffectActionDescribeInContext,compactHandle,ip,nullptr)==kOfxStatOK,"compact Resolve descriptor");
   for(const auto&entry:e.parameters){const auto&before=entry.second;if(before.type==kOfxParamTypeGroup||before.type==kOfxParamTypePage)continue;
@@ -453,6 +459,28 @@ int main(int argc,char**argv){
   data={paint::encode(d)};
   paintRender(f,0,"paint recovery rectangle");paintRender(f-1,0,"paint on another frame changes nothing");
   paintRender(f,1,"paint Spanish dirt removal rectangle");paintRender(f+1,1,"Spanish dirt removal with nothing painted");
+  {// Shared cleaned-frame cache: a stroke edit (here on another frame) in a fresh
+   // sequence reuses the exact cleaned frame; a changed source frame never does.
+   auto&inst=instance(handle);
+   paint::Document d2=d;paint::Stroke s2=s;s2.id=2;s2.first=s2.last=100+f+6;d2.nextId=3;d2.strokes.push_back(s2);data={paint::encode(d2)};
+   inst.close();
+   paintRender(f,1,"Spanish stroke edit reuses the shared cleaned frame exactly");
+   verify(inst.rendered==0&&inst.servedCached==1&&!inst.sequence,"stroke edit serves the cleaned frame without restarting the engine");
+   auto changed=sourcePixels;changed[size_t(f)*w*h*3]+=.25f;e.source.images[f+100]=frameImage(changed,f,w,h,f%2,false);
+   inst.close();setDouble(ip,kOfxPropTime,0,f+100);verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)==0,"render after an upstream change");
+   verify(inst.rendered==1&&inst.servedCached==0,"a changed source frame is never served from the shared cache");
+   e.source.images[f+100]=frameImage(sourcePixels,f,w,h,f%2,false);inst.close();
+   paintRender(f,1,"restored source renders exactly again");verify(inst.rendered==1,"restored source is recomputed, not served stale");
+   const auto beforeGeneration=inst.generation;
+   e.source.images[f+100]=frameImage(changed,f,w,h,f%2,false);
+   verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)==0,"local cache checks source without a host notification");
+   verify(inst.generation==beforeGeneration+1&&inst.rendered==1&&inst.servedCached==0,"source mutation discards local cleaning and motion history");
+   e.source.images[f+100]=frameImage(sourcePixels,f,w,h,f%2,false);
+   paintRender(f,1,"restored source invalidates local cache and remains exact");
+   verify(inst.generation==beforeGeneration+2,"restoring upstream source also invalidates cached cleaning");
+   data={paint::encode(d)};
+   std::cout<<"shared cleaned-frame cache: exact stroke-edit hit, upstream change refused\n";
+  }
   // A connected legacy mask must not also affect built-in painting. This is
   // deliberately a full-white mask: any accidental fetch changes every pixel.
   const auto savedHost=hostProperties;auto*savedInteracts=interacts;OfxInteractSuiteV1 suite{};interacts=&suite;setString(H(hostProperties),kOfxPropName,0,"DaVinciResolve");
@@ -583,6 +611,54 @@ int main(int argc,char**argv){
   std::cout<<"Prepared original: exact Recovery/Spanish endpoints, current frame only, no engine sequence, host gating passed\n";
  }
 
+ // Explicit preparation freezes exact native-encoding pairs. Rendering from
+ // the snapshot must never request temporal inputs, even after a host purge.
+ {
+  auto savedHost=hostProperties;auto* savedInteracts=interacts;OfxInteractSuiteV1 suite{};interacts=&suite;setString(H(hostProperties),kOfxPropName,0,"DaVinciResolve");
+  auto& inst=instance(handle);const auto folder=logFolder/"prepared-shot";
+  setString(H(e.parameters["prepare_folder"].props),kOfxParamPropDefault,0,folder.string().c_str());
+  setInt(H(e.parameters["paint_source_kind"].props),kOfxParamPropDefault,0,2);
+  setInt(H(e.parameters["mask_mode"].props),kOfxParamPropDefault,0,0);
+  setInt(H(e.parameters["paint"].props),kOfxParamPropDefault,0,1);
+  e.parameters["paint_data"].props.strings[kOfxParamPropDefault]={""};
+  auto feedback=std::make_shared<recovery_feedback::State>();std::atomic_store(&inst.prepareFeedback,feedback);inst.prepareRequested=true;
+  bool checkedRunningRange=false;std::function<void()> inspectPreparation;
+  inspectPreparation=[&]{if(feedback->phase!=recovery_feedback::State::Running){duringImage=inspectPreparation;return;}
+   Properties needed;verify(plugin->mainEntry(kOfxImageEffectActionGetFramesNeeded,handle,ip,H(needed))==0,"running preparation dependencies");
+   verify(needed.doubles["OfxImageClipPropFrameRange_Source"]==std::vector<double>{100.,double(99+count)},"preparation keeps the whole shot declared until finished");checkedRunningRange=true;
+  };duringImage=inspectPreparation;
+  renderFrame(3);verify(feedback->phase==recovery_feedback::State::Complete&&feedback->done==count,"preparation completes every source frame");
+  verify(checkedRunningRange&&!inst.prepareRequested,"running declaration checked and request cleared after preparation");
+  for(int f:{count-1,0,3}){
+   inst.purge();fetched.clear();renderFrame(f);
+   verify(!inst.sequence&&!inst.history,"prepared render never runs the cleaning engine");
+   for(int got:fetched)verify(got==100+f,"prepared render requests current frame only");
+   auto pair=paint_source::readPair(folder.string(),100+f,w,h);
+   verify(std::memcmp(pair.original.data(),sourcePixels.data()+size_t(f)*w*h*3,pair.original.size()*4)==0,"prepared source exact on disk");
+  }
+  auto held=inst.preparedFrames.get(folder.string(),103,w,h);auto reads=inst.preparedFrames.reads;
+  verify(inst.preparedFrames.get(folder.string(),103,w,h).cleaned==held.cleaned&&inst.preparedFrames.reads==reads,"prepared frame retains immutable pair without rereading");
+  inst.preparedFrames.get(folder.string(),100,w,h);
+  verify(inst.preparedFrames.get(folder.string(),103,w,h).cleaned==held.cleaned,"prepared stepping keeps a bounded RAM window");
+  // Spanish and Recovery must use the same exact pair with opposite gates.
+  paint::Document d;d.width=w;d.height=h;d.nextId=2;paint::Stroke stroke;stroke.id=1;stroke.first=stroke.last=103;stroke.shape=paint::Shape::Rectangle;stroke.softness=0;stroke.points={{-1,-1,1},{2,2,1}};d.strokes={stroke};
+  for(int spanish:{0,1})for(int painted:{0,1}){
+   setInt(H(e.parameters["mask_mode"].props),kOfxParamPropDefault,0,spanish);e.parameters["paint_data"].props.strings[kOfxParamPropDefault]={painted?paint::encode(d):""};
+   setDouble(ip,kOfxPropTime,0,103);declaredFrameRange[0]=declaredFrameRange[1]=103;
+   verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)==0,"prepared brush render");
+   Image result(reinterpret_cast<OfxImageClipHandle>(&e.output),103);const auto& want=(spanish==painted)?targetPixels:sourcePixels;
+   for(int y=0;y<h;++y)for(int x=0;x<w;++x)for(int c=0;c<3;++c)verify(result.read(x,y,c)==want[((size_t(3)*h+y)*w+x)*3+c],"prepared brush endpoints exact");
+  }
+  auto changed=sourcePixels;changed[size_t(3)*w*h*3]+=.25f;e.source.images[103]=frameImage(changed,3,w,h,true,false);
+  verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)!=0,"prepared shot rejects changed current source without fetching undeclared frames");e.source.images[103]=frameImage(sourcePixels,3,w,h,true,false);
+  setString(H(e.parameters["prepare_folder"].props),kOfxParamPropDefault,0,(folder.string()+"-cancel").c_str());
+  feedback=std::make_shared<recovery_feedback::State>();feedback->cancel=true;std::atomic_store(&inst.prepareFeedback,feedback);inst.prepareRequested=true;declaredFrameRange[0]=100;declaredFrameRange[1]=99+count;
+  verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)!=0&&feedback->phase==recovery_feedback::State::Cancelled,"preparation cancellation is observed");
+  verify(!std::filesystem::exists(folder.string()+"-cancel/source-ready.txt")&&std::filesystem::exists(folder/"source-ready.txt"),"cancel never publishes an incomplete shot or removes prior preparation");
+  setInt(H(e.parameters["paint_source_kind"].props),kOfxParamPropDefault,0,0);setInt(H(e.parameters["mask_mode"].props),kOfxParamPropDefault,0,0);e.parameters["paint_data"].props.strings[kOfxParamPropDefault]={""};hostProperties=savedHost;interacts=savedInteracts;renderFrame(0);
+  std::cout<<"Prepared shot: native pairs, random seeks after purge, exact brush gates, current source check and cancellation passed\n";
+ }
+
  // Whole-shot analysis: the UI never takes the render lock, the declared
  // dependency covers the shot, progress cancels cleanly, and saved mattes
  // avoid rerunning either cleaning or classification.
@@ -616,7 +692,11 @@ int main(int argc,char**argv){
   verify(renderAnalysis()!=kOfxStatOK,"host progress cancellation stops analysis");
   verify(i.recoveryState==Instance::Cancelled&&progressStarts==1&&progressEnds==1,"cancelled progress closes and retains its status");
   verify(e.output.images[100]->backing==before,"cancelled analysis publishes no output pixels");
-  progressCancel=false;
+  progressCancel=false;progressV1=nullptr;
+  verify(calculate()==kOfxStatOK,"queue native presentation cancellation test");
+  auto feedback=std::atomic_load(&i.recoveryFeedback);verify(bool(feedback),"each calculation owns a presentation snapshot");feedback->cancel=true;
+  verify(renderAnalysis()!=kOfxStatOK&&i.recoveryState==Instance::Cancelled,"presentation cancels work without host progress support");
+  verify(feedback->phase==recovery_feedback::State::Cancelled&&e.output.images[100]->backing==before,"presentation receives terminal cancellation; no partial output published");
   const auto folder=logFolder/"analysis-mattes";
   paint_ui::setText(handle,"recovery_folder",folder.u8string());
   std::string controlIdentity;readControls(i,100,controlIdentity);auto settings=readSettings(i,100);
@@ -639,8 +719,10 @@ int main(int argc,char**argv){
   const int rendered=i.rendered;auto*sequence=i.sequence;
   progressV1=nullptr;progressV2=&progressSuiteV2;progressValues.clear();
   verify(calculate()==kOfxStatOK,"queue cached analysis");
+  feedback=std::atomic_load(&i.recoveryFeedback);verify(feedback&&!feedback->cancel,"new calculation does not inherit a previous Cancel request");
   verify(renderAnalysis()==kOfxStatOK,"valid whole-shot maps are reused");
   verify(i.recoveryState==Instance::Complete&&i.recoveryDone==count&&i.sequence==sequence&&i.rendered==rendered,"cached analysis creates no cleaning or classification pass");
+  verify(feedback->phase==recovery_feedback::State::Complete&&feedback->done==count&&feedback->total==count,"presentation receives completed frame counts without a UI refresh callback");
   verify(progressStarts==2&&progressEnds==2&&!progressValues.empty()&&progressValues.front()==0&&progressValues.back()==1&&std::is_sorted(progressValues.begin(),progressValues.end()),"V2 progress is monotonic and closes on completion");
   refreshRecoveryUI(handle);
   verify(e.parameters.at("recovery_status").props.strings.at(kOfxParamPropDefault)[0].find("Complete:")!=std::string::npos,"completion and timing refresh in UI callback");

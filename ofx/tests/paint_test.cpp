@@ -1,4 +1,5 @@
 #include "../src/paint.h"
+#include "../src/paint_cache.h"
 #include <cstring>
 #include <functional>
 #include <iostream>
@@ -206,5 +207,17 @@ int main() {
     for(auto dimensions:{std::make_pair(192,128),std::make_pair(96,32)})check(matte(mixed,0,dimensions.first,dimensions.second,192,128)==referenceMatte(mixed,0,dimensions.first,dimensions.second),"Mixed restore/erase/disabled shapes match full-frame reference");
     rejects([&]{auto bad=rect;bad.strokes[0].points.resize(1);encode(bad);});
     rejects([&]{decode("R2 100 100 2 1 1 0 0 1 0 80 .5 1 3 1 .5 .5 1");});
+    {
+      LayerCache cache;auto first=cache.get(mixed,0,192,128);
+      check(first->value==layers(mixed,0,192,128).value,"Cached mask matches uncached mixed paint exactly");
+      check(cache.get(mixed,0,192,128)==first&&cache.hits==1,"Repeated frame reuses the same immutable mask");
+      auto edited=mixed;Stroke other=edited.strokes[1];other.id=edited.nextId++;other.first=other.last=10;edited.strokes.push_back(other);
+      check(cache.get(edited,0,192,128)==first,"Painting another frame preserves cached mask");
+      edited.strokes[1].opacity=.123;
+      auto changed=cache.get(edited,0,192,128);check(changed!=first&&changed->value==layers(edited,0,192,128).value,"Opacity edits invalidate exactly");
+      check(cache.get(mixed,0,192,128)==first,"Undo reuses the previous mask");
+      LayerCache tiny(1);auto a=tiny.get(mixed,0,192,128);check(tiny.get(mixed,0,192,128)!=a&&tiny.hits==0,"Oversized masks stay outside cache budget");
+      cache.clear();check(cache.get(mixed,0,192,128)!=first,"Host purge releases masks without invalidating held readers");
+    }
     std::cout << "Paint matte: bitwise preservation, serialization, frame boundaries, continuous soft sweep, ordered restore/erase, duration, opacity, pressure, preview geometry, edges and invalid-data checks passed\n";
 }

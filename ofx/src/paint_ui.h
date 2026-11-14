@@ -6,6 +6,8 @@
 // Never take the instance render lock here: hosts call these on their UI
 // thread, which a render may be waiting for inside clipGetImage.
 namespace paint_ui {
+// Kept opt-in until native temporal OFX chains reproduce preparation exactly.
+bool preparationAvailable(){const char*v=std::getenv("ADR_EXPERIMENTAL_PREPARE_SHOT");return v&&std::strcmp(v,"1")==0;}
 void gestureTrace(const char* message){if(std::getenv("ADR_PAINT_INPUT_TRACE"))std::fprintf(stderr,"ADR paint gesture: %s\n",message);}
 enum class Action {None,Paint,Erase,Select,Round,Square,Rectangle,SizeDown,SizeUp,SoftDown,SoftUp,OpacityDown,OpacityUp,Previous,Next,Delete,Toggle,Outlines,Mode,UndoPaint,RedoPaint,View1,View2,View3,View4};
 enum Tool {ToolPaint=0,ToolErase=1,ToolSelect=2};
@@ -251,9 +253,12 @@ void define(OfxParamSetHandle ps,bool visible,bool groupDefined=false){
  boolean("paint_pressure","Tablet pressure","paint_options_group","Pen pressure changes the brush size. Leave off for a mouse.",0);
  boolean("paint_outlines","Show strokes","paint_options_group","Outline every stroke in the viewer. Off: you see only the result and the brush; a stroke you select with Select is outlined. Never rendered.",0);
  {auto p=make(kOfxParamTypeGroup,"paint_source_group","Source setup",detailsParent,nullptr);si(p,kOfxParamPropGroupOpen,0);}
- {auto p=make(kOfxParamTypeChoice,"paint_source_kind","Paint source","paint_source_group","Clean this clip: repair this input, then recover the original. Prepared original: the input is a finished processed export; painting uses its prepared original without running cleanup again.",true);ss(p,kOfxParamPropChoiceOption,"Clean this clip",0);ss(p,kOfxParamPropChoiceOption,"Prepared original",1);si(p,kOfxParamPropDefault,0);}
+ {auto p=make(kOfxParamTypeChoice,"paint_source_kind","Paint source","paint_source_group","Clean this clip: repair this input. Prepared original: paint a processed export using its separately prepared original.",true);ss(p,kOfxParamPropChoiceOption,"Clean this clip",0);ss(p,kOfxParamPropChoiceOption,"Prepared original",1);if(preparationAvailable())ss(p,kOfxParamPropChoiceOption,"Prepared shot (experimental)",2);si(p,kOfxParamPropDefault,0);}
  {auto p=make(kOfxParamTypeString,"paint_source_folder","Original folder","paint_source_group","Run Prepare ADR Recovery Source with the processed export on V2 and the aligned original on V1. Keep the verified source folder with the project.",true);ss(p,kOfxParamPropStringMode,kOfxParamStringIsDirectoryPath);ss(p,kOfxParamPropDefault,"");}
  {auto p=make(kOfxParamTypeInteger,"paint_source_offset","Original frame offset","paint_source_group","Prepared frame = working frame + offset. Leave at 0 for the prepared V2/V1 workflow.",true);si(p,kOfxParamPropDefault,0);si(p,kOfxParamPropMin,-1000000000);si(p,kOfxParamPropMax,1000000000);}
+ {auto p=make(kOfxParamTypePushButton,"prepare_shot","Prepare shot for painting","paint_source_group","Save a new exact original/cleaned snapshot of this shot for manual painting. Cleaning is calculated once; later frames need only the current input. Auto recovery is not included. Cancel preserves earlier preparations.");if(!preparationAvailable())si(p,kOfxParamPropSecret,1);}
+ {auto p=make(kOfxParamTypeString,"prepare_folder","Prepared shot folder","paint_source_group","Keep this folder with the project. Prepared shot freezes the cleaning settings and temporal source at preparation time. Prepare again after upstream changes.",true);ss(p,kOfxParamPropStringMode,kOfxParamStringIsDirectoryPath);ss(p,kOfxParamPropDefault,"");if(!preparationAvailable())si(p,kOfxParamPropSecret,1);}
+ {auto p=make(kOfxParamTypeInteger,"prepare_request","Preparation revision","paint_source_group",nullptr,true);si(p,kOfxParamPropDefault,0);si(p,kOfxParamPropSecret,1);}
  label("paint_keys","Gestures","paint_options_group","Shift-drag: size; Option/Alt-drag: softness. Keyboard commands stay with Resolve.");
  {auto p=make(kOfxParamTypeInteger,"paint_stroke","Selected stroke","paint_group",nullptr);si(p,kOfxParamPropDefault,0);si(p,kOfxParamPropMin,0);si(p,kOfxParamPropMax,4096);si(p,kOfxParamPropSecret,1);}
  {auto p=make(kOfxParamTypeString,"paint_data","Strokes","paint_group",nullptr,true);ss(p,kOfxParamPropDefault,"");ss(p,kOfxParamPropStringMode,kOfxParamStringIsMultiLine);si(p,kOfxParamPropSecret,1);si(p,kOfxParamPropPersistant,1);}

@@ -4,6 +4,7 @@
 #include "../../engine/tools/sha256.h"
 #include <filesystem>
 #include <fstream>
+#include <list>
 #include <mutex>
 #include <cmath>
 #include <atomic>
@@ -138,4 +139,32 @@ public:
  }
 
 };
+// Small, bounded window of verified immutable pairs for prepared-shot stepping.
+// Only the render thread uses this cache; purge releases it. File timestamps
+// keep another preparation folder or changed file from reusing an old pair.
+class PairCache {
+ struct Entry {std::string key;fs::file_time_type stamp;FrameCache::PreviewPair pair;size_t bytes;};
+ std::list<Entry> entries;size_t used=0,budget;
+public:
+ explicit PairCache(size_t bytes=256u<<20):budget(bytes){}
+ size_t reads=0,hits=0;
+ void clear(){entries.clear();used=0;}
+ FrameCache::PreviewPair get(const std::string&folder,int frame,int w,int h){
+  auto file=path(folder,frame);std::error_code ec;auto stamp=fs::last_write_time(file,ec);require(!ec,"Prepared shot frame missing");
+  const std::string key=file.u8string()+"|"+std::to_string(w)+"x"+std::to_string(h);
+  for(auto it=entries.begin();it!=entries.end();++it)if(it->key==key){
+   if(it->stamp==stamp){++hits;auto pair=it->pair;entries.splice(entries.begin(),entries,it);return pair;}
+   used-=it->bytes;entries.erase(it);break;
+  }
+  auto data=readPair(folder,frame,w,h);require(!data.original.empty(),"Prepared shot requires a complete original/cleaned pair");++reads;
+  bool same=data.original.size()==data.cleaned.size()&&std::memcmp(data.original.data(),data.cleaned.data(),data.cleaned.size()*4)==0;
+  auto clean=std::make_shared<const std::vector<float>>(std::move(data.cleaned));
+  auto original=same?clean:std::make_shared<const std::vector<float>>(std::move(data.original));FrameCache::PreviewPair result{clean,original};
+  const size_t bytes=(clean->size()+(same?0:original->size()))*sizeof(float);
+  if(bytes<=budget){while(used+bytes>budget&&!entries.empty()){used-=entries.back().bytes;entries.pop_back();}
+   entries.push_front({key,stamp,result,bytes});used+=bytes;}
+  return result;
+ }
+};
+
 }

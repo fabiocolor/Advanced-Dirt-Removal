@@ -34,6 +34,9 @@
 #include "paint_input.h"
 #include "paint_gl.h"
 #include "paint_navigation.h"
+#include "recovery_feedback.h"
+#include "frame_cache.h"
+#include "paint_cache.h"
 #ifdef _WIN32
 #include <process.h>
 #include <direct.h>
@@ -362,12 +365,15 @@ struct Instance {
  std::string key;            // controls, range and geometry of the live sequence
  int first=0;
  uint64_t generation=0;
+ std::map<int,uint64_t> sourcePrints; // validate local hits too, including after an upstream edit
  int cachedFrame=std::numeric_limits<int>::min();
- std::vector<float> cached;  // last delivered output, top-down packed RGB
+ frame_cache::Cache::Frame cached;  // immutable shared output, top-down packed RGB
  // While Paint in viewer is on: the last few cleaned frames, so stepping back
  // and forth to paint does not clean them again. Same key as the sequence.
- std::map<int,std::vector<float>> recent;
+ std::map<int,frame_cache::Cache::Frame> recent;
+ paint::LayerCache paintLayers;
  paint_source::FrameCache originalSource;
+ paint_source::PairCache preparedFrames;
  std::vector<float> scratch;
  std::vector<float> prefetch;  // next source frame, fetched while the GPU renders
  int prefetchTime=std::numeric_limits<int>::min();
@@ -383,6 +389,9 @@ struct Instance {
  std::atomic<double> recoverySeconds{0};
  std::atomic<int> recoveryPreviousAuto{0};
  std::atomic<bool> restoreAutoOnCancel{false};
+ std::shared_ptr<recovery_feedback::State> recoveryFeedback;
+ std::shared_ptr<recovery_feedback::State> prepareFeedback;
+ std::atomic<bool> prepareRequested{false};
  CleaningProfileUI cleaningProfile;  // UI callbacks only; saved values live in host parameters
  // Diagnostic log: instance number and the live sequence's statistics.
  int id=0;
@@ -398,15 +407,15 @@ struct Instance {
   }
   rendered=servedCached=0;renderMs=0;sourceSeen=flatWarned=rangeWarned=false;
  }
- void close(){originalSource.clear();summary("closed");prefetchTime=std::numeric_limits<int>::min();const bool live=sequence!=nullptr;if(sequence)adr_sequence_destroy(sequence);sequence=nullptr;if(history)adr_history_destroy(history);history=nullptr;key.clear();cachedFrame=std::numeric_limits<int>::min();cached.clear();recent.clear();
+ void close(){sourcePrints.clear();originalSource.clear();preparedFrames.clear();summary("closed");prefetchTime=std::numeric_limits<int>::min();const bool live=sequence!=nullptr;if(sequence)adr_sequence_destroy(sequence);sequence=nullptr;if(history)adr_history_destroy(history);history=nullptr;key.clear();cachedFrame=std::numeric_limits<int>::min();cached.reset();recent.clear();
   // A closed sequence (new settings or clip, error, instance gone) leaves its
   // buffers in the engine's reuse pool. Release them: the next sequence may use
   // other sizes, and on unified-memory Macs pooled buffers are system RAM.
   if(live&&engineContext)adr_context_trim(engineContext);}
  // Host memory purges drop frames and GPU buffers but keep the few-KB
  // motion-history checkpoints, which stay valid for the same key.
- void purge(){originalSource.clear();summary("host purged caches");prefetchTime=std::numeric_limits<int>::min();prefetch.clear();prefetch.shrink_to_fit();if(sequence)adr_sequence_destroy(sequence);sequence=nullptr;if(engineContext)adr_context_trim(engineContext);cachedFrame=std::numeric_limits<int>::min();cached.clear();cached.shrink_to_fit();recent.clear();scratch.clear();scratch.shrink_to_fit();}
- ~Instance(){close();}
+ void purge(){originalSource.clear();preparedFrames.clear();summary("host purged caches");prefetchTime=std::numeric_limits<int>::min();prefetch.clear();prefetch.shrink_to_fit();if(sequence)adr_sequence_destroy(sequence);sequence=nullptr;if(engineContext)adr_context_trim(engineContext);cachedFrame=std::numeric_limits<int>::min();cached.reset();paintLayers.clear();recent.clear();scratch.clear();scratch.shrink_to_fit();}
+ ~Instance(){auto preparation=std::atomic_load(&prepareFeedback);if(preparation){preparation->cancel=true;if(preparation->phase<recovery_feedback::State::Complete)preparation->phase=recovery_feedback::State::Cancelled;}auto feedback=std::atomic_load(&recoveryFeedback);if(feedback){int busy=recovery_feedback::State::Queued;if(!feedback->phase.compare_exchange_strong(busy,recovery_feedback::State::Cancelled)){busy=recovery_feedback::State::Running;feedback->phase.compare_exchange_strong(busy,recovery_feedback::State::Cancelled);}feedback->cancel=true;}close();}
 };
 Instance& instance(OfxImageEffectHandle e){void*p=nullptr;check(prop->propGetPointer(properties(e),kOfxPropInstanceData,0,&p),"instance data");require(p,"missing instance",kOfxStatErrBadHandle);return *static_cast<Instance*>(p);}
 void updateRecoveryEnabled(Instance&);
@@ -490,6 +499,7 @@ void logStartup(){
  std::array<int,3> version{};if(host&&host->host)prop->propGetIntN(host->host,kOfxPropVersion,3,version.data());
  adrlog::info(std::string("Advanced Dirt Removal ")+ADR_PLUGIN_VERSION+" (source "+ADR_SOURCE_REVISION+", built "+__DATE__+" "+__TIME__+"), engine "+adr_version()+", kernels "+std::string(adr_kernel_source_sha256()).substr(0,12));
  adrlog::info("plugin binary: "+adrlog::pluginPath());
+ adrlog::info("shared cleaned-frame cache budget: "+std::to_string(frame_cache::shared().capacity()>>20)+" MiB (ADR_FRAME_CACHE_MB overrides; 0 disables)");
  adrlog::info("host: "+hostText(kOfxPropName)+" / "+hostText(kOfxPropLabel)+" "+hostText(kOfxPropVersionLabel)+" ("+std::to_string(version[0])+"."+std::to_string(version[1])+"."+std::to_string(version[2])+"), process "+adrlog::executablePath());
  char memory[32];std::snprintf(memory,sizeof memory,"%.1f GB RAM",adrlog::memoryGiB());
  adrlog::info("system: "+adrlog::osName()+"; "+adrlog::cpuName()+", "+std::to_string(std::thread::hardware_concurrency())+" threads, "+memory);
@@ -624,7 +634,7 @@ void definePages(OfxParamSetHandle ps,bool paintHost){
  const std::vector<std::string> recovery={"mask_mode","recovery_calculate","recovery_status","auto_recovery","recovery_confidence","recovery_folder"};
  const std::vector<std::string> view={"difference_threshold","red_intensity","red_opacity","gray_background","difference_gain"};
  struct Page{const char*name;const char*label;const std::vector<std::string>*kids;};
- const std::vector<std::string> paintPage={"paint","paint_tool","paint_shape","paint_size","paint_softness","paint_opacity","paint_hold","paint_stroke_info","paint_previous","paint_next","paint_undo","paint_redo","paint_delete","paint_stroke_on","paint_rect_width","paint_rect_height","paint_smoothing","paint_pressure","paint_outlines","paint_keys","paint_source_kind","paint_source_folder","paint_source_offset","cleaning_default_save","cleaning_default_load","cleaning_default_factory","cleaning_default_status"};
+ const std::vector<std::string> paintPage={"paint","paint_tool","paint_shape","paint_size","paint_softness","paint_opacity","paint_hold","paint_stroke_info","paint_previous","paint_next","paint_undo","paint_redo","paint_delete","paint_stroke_on","paint_rect_width","paint_rect_height","paint_smoothing","paint_pressure","paint_outlines","paint_keys","paint_source_kind","paint_source_folder","paint_source_offset","prepare_shot","prepare_folder","cleaning_default_save","cleaning_default_load","cleaning_default_factory","cleaning_default_status"};
  const Page pages[]={{"page_cleaning","Cleaning",&cleaning},{"page_recovery","Recovery",&recovery},{"page_paint","Paint",&paintPage},{"page_view","View",&view}};
  for(auto&pg:pages){
   if(pg.kids==&paintPage&&!paintHost)continue;
@@ -694,11 +704,18 @@ Settings readSettings(Instance&i,double time){
  s.encoding=s.encoding==1;s.mode=s.mode>0?1:0;s.view=std::max(0,std::min(7,s.view));s.confidence=std::max(.5,std::min(.99,s.confidence));
  return s;
 }
+void syncRecoveryFeedback(Instance&i){
+ auto feedback=std::atomic_load(&i.recoveryFeedback);if(!feedback)return;
+ if(feedback->cancel)i.cancelCalculation=true;
+ feedback->done=i.recoveryDone.load();feedback->total=i.recoveryTotal.load();feedback->seconds=i.recoverySeconds.load();
+ const int state=i.recoveryState.load();
+ feedback->phase=state==Instance::Queued?recovery_feedback::State::Queued:state==Instance::Running?recovery_feedback::State::Running:state==Instance::Complete?recovery_feedback::State::Complete:state==Instance::Cancelled?recovery_feedback::State::Cancelled:recovery_feedback::State::Failed;
+}
 // Called only from InstanceChanged/interact actions, where OFX permits writes.
 // A render only updates atomics and the optional host progress suite.
 void refreshRecoveryUI(OfxImageEffectHandle e){
  if(!params->paramSetValue||!isLiveInstance(e))return;
- auto&i=instance(e);const int state=i.recoveryState.load();
+ auto&i=instance(e);syncRecoveryFeedback(i);const int state=i.recoveryState.load();
  if((state==Instance::Cancelled||state==Instance::Failed)&&i.restoreAutoOnCancel.exchange(false)){
   int current=0;auto h=i.parameters.at("auto_recovery");params->paramGetValue(h,&current);
   if(current!=i.recoveryPreviousAuto)params->paramSetValue(h,i.recoveryPreviousAuto.load());
@@ -729,7 +746,7 @@ paint::Document frameStrokes(Instance&i,int time){
 }
 bool untouchedSpanish(OfxImageEffectHandle e,int time){
  auto&i=instance(e);
- if(!paintHost()||paint_ui::getInt(e,"paint_source_kind")==1||readSettings(i,time).maskMode!=2)return false;
+ if(!paintHost()||(paint_ui::getInt(e,"paint_source_kind")!=0||i.prepareRequested)||readSettings(i,time).maskMode!=2)return false;
  int on=0;params->paramGetValueAtTime(i.parameters.at("paint"),time,&on);
  const auto doc=frameStrokes(i,time);
  return (on||!doc.strokes.empty())&&!paint::anyOn(doc,time);
@@ -837,20 +854,21 @@ struct RecoveryProgress {
  OfxImageEffectHandle effect;Instance&item;bool active=false,v2=false;
  std::chrono::steady_clock::time_point start=std::chrono::steady_clock::now();
  RecoveryProgress(OfxImageEffectHandle e,Instance&i,int total):effect(e),item(i){
-  item.recoveryDone=0;item.recoveryTotal=total;item.recoverySeconds=0;item.recoveryState=Instance::Running;
+  item.recoveryDone=0;item.recoveryTotal=total;item.recoverySeconds=0;item.recoveryState=Instance::Running;syncRecoveryFeedback(item);
   if(progressV2&&progressV2->progressStart&&progressV2->progressUpdate&&progressV2->progressEnd){v2=true;active=progressV2->progressStart(e,"Calculating recovery","adr-recovery")==kOfxStatOK;}
   if(!active&&progressV1&&progressV1->progressStart&&progressV1->progressUpdate&&progressV1->progressEnd){v2=false;active=progressV1->progressStart(e,"Calculating recovery")==kOfxStatOK;}
   adrlog::info(i.label()+(active?" auto recovery: host progress started":" auto recovery: host progress unavailable; status refreshes in the inspector"));
  }
  void update(int done){
   item.recoveryDone=done;item.recoverySeconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();
+  syncRecoveryFeedback(item);
   if(active){const double value=double(done)/std::max(1,item.recoveryTotal.load());
    const auto result=v2?progressV2->progressUpdate(effect,value):progressV1->progressUpdate(effect,value);
    if(result==kOfxStatReplyNo)item.cancelCalculation=true;
   }
   if(item.cancelCalculation||fx->abort(effect)){item.recoveryState=Instance::Cancelled;throw Error(kOfxStatFailed,"render aborted: recovery calculation cancelled");}
  }
- ~RecoveryProgress(){if(active){if(v2)progressV2->progressEnd(effect);else progressV1->progressEnd(effect);}}
+ ~RecoveryProgress(){syncRecoveryFeedback(item);if(active){if(v2)progressV2->progressEnd(effect);else progressV1->progressEnd(effect);}}
 };
 // Whole-shot analysis is driven from a render, never from the UI's image-fetch
 // callback. Existing valid mattes avoid both classification and repair work.
@@ -974,8 +992,14 @@ void finish(const Settings&s,int time,int w,int h,const std::vector<float>&src,c
   }
  }});
 }
+#include "prepare_shot.h"
 OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
  auto&i=instance(e);
+ struct CompleteTiming {
+  Instance& i;int frame;bool success=false;
+  std::chrono::steady_clock::time_point start=std::chrono::steady_clock::now();
+  ~CompleteTiming(){if(success){char line[180];std::snprintf(line,sizeof line," frame %d complete render %.3f ms (includes fetch, masks, blend, validation and output)",frame,std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count());adrlog::info(i.label()+line);}}
+ } completeTiming{i,frameTime(in)};
  // Reject unsupported thumbnail/proxy requests before the error cleanup:
  // they have not touched the full-resolution sequence or its useful cache.
  scaleOne(in);
@@ -994,11 +1018,13 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
   auto window=renderWindow(e,in,source.b);
   std::string identity;adr_controls c=readControls(i,time,identity);const Settings st=readSettings(i,time);if(st.encoding)c.extended_range=1;
   std::ostringstream key;key<<identity<<'|'<<range[0]<<'|'<<range[1]<<'|'<<w<<'x'<<h<<'|'<<i.generation<<"|enc"<<st.encoding;
-  const bool prepared=paint_ui::getInt(e,"paint_source_kind")==1;
+  if(i.prepareRequested)prepareShot(e,i);
+  const int sourceKind=paint_ui::getInt(e,"paint_source_kind");
+  const bool prepared=sourceKind!=0;
   if(!prepared&&st.mode&&st.maskMode!=2&&i.calculateRequested.exchange(false)){
-   try{calculateShot(e,i);}catch(const Error&ex){i.recoveryState=std::strstr(ex.what(),"render aborted")?Instance::Cancelled:Instance::Failed;throw;}catch(...){i.recoveryState=Instance::Failed;throw;}
+   try{calculateShot(e,i);}catch(const Error&ex){i.recoveryState=std::strstr(ex.what(),"render aborted")?Instance::Cancelled:Instance::Failed;syncRecoveryFeedback(i);throw;}catch(...){i.recoveryState=Instance::Failed;syncRecoveryFeedback(i);throw;}
   }
-  if(key.str()!=i.key){if(std::getenv("ADR_DEBUG")&&!i.key.empty())std::fprintf(stderr,"adr key change instance=%p\n",(void*)&i);i.close();}
+  if(!prepared&&key.str()!=i.key){if(std::getenv("ADR_DEBUG")&&!i.key.empty())std::fprintf(stderr,"adr key change instance=%p\n",(void*)&i);i.close();}
   const int index=time-range[0],count=range[1]-range[0]+1;
   const auto traceStart=std::chrono::steady_clock::now();double tFetch=0,tEngine=0;
   const int traceLive=i.sequence?adr_sequence_next_output(i.sequence):-1;
@@ -1011,9 +1037,50 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
   const bool skipCleaning=!prepared&&st.maskMode==2&&builtInBrush&&!painted;
   if(painted)require(strokes.width==w&&strokes.height==h,"The picture size changed since these strokes were painted ("+std::to_string(strokes.width)+"x"+std::to_string(strokes.height)+", now "+std::to_string(w)+"x"+std::to_string(h)+")");
   if(!paintOn)i.recent.clear();
-  if(i.cachedFrame!=time&&paintOn&&i.key==key.str()){auto it=i.recent.find(time);if(it!=i.recent.end()){i.cached=it->second;i.cachedFrame=time;traceWhat="cached";}}
-  std::vector<float> working;std::shared_ptr<const std::vector<float>> original;
-  if(prepared){
+  // Shared cleaned-frame cache. The engine's picture never depends on strokes,
+  // so a stroke edit (which makes Resolve re-render every frame)
+  // or a backward seek reuses the exact cleaned frame instead of
+  // restarting the temporal engine. A hit requires this frame's source to be
+  // bit-identical to the one that was cleaned.
+  std::vector<float> currentSource;bool haveCurrentSource=false;uint64_t currentPrint=0;double tShared=0;bool sharedHit=false;
+  auto sourcePrint=[&]{
+   if(!haveCurrentSource){auto t0=std::chrono::steady_clock::now();readSource(i,e,time,w,h,source.b,currentSource);currentPrint=frame_cache::fingerprint(currentSource,h,[](int n,auto f){parallelRows(n,f);});haveCurrentSource=true;tShared+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count();}
+   return currentPrint;};
+  if(!prepared&&!skipCleaning){
+   const auto print=sourcePrint();auto prior=i.sourcePrints.find(time);
+   if(prior!=i.sourcePrints.end()&&prior->second!=print){
+    // Hosts may omit a Source-change notification. A changed current source
+    // invalidates motion history and every local/shared frame for this instance.
+    i.close();++i.generation;key.str("");key.clear();
+    key<<identity<<'|'<<range[0]<<'|'<<range[1]<<'|'<<w<<'x'<<h<<'|'<<i.generation<<"|enc"<<st.encoding;
+    traceWhat="render";adrlog::info(i.label()+" source changed; discarded cached cleaning and motion history");
+   }
+   i.sourcePrints[time]=print;
+   if(i.cachedFrame!=time&&paintOn&&i.key==key.str()){auto it=i.recent.find(time);if(it!=i.recent.end()){i.cached=it->second;i.cachedFrame=time;traceWhat="cached";}}
+  }
+  std::string cleanKey;{std::ostringstream ck;ck<<i.id<<'|'<<i.generation<<'|'<<identity<<'|'<<range[0]<<'|'<<range[1]<<'|'<<w<<'x'<<h<<"|enc"<<st.encoding<<"|frame"<<time;cleanKey=ck.str();}
+  const bool useShared=!prepared&&!skipCleaning&&frame_cache::shared().capacity()>0;
+  if(useShared&&i.cachedFrame!=time&&frame_cache::shared().contains(cleanKey)){
+   const uint64_t print=sourcePrint();auto t0=std::chrono::steady_clock::now();
+   if(auto hit=frame_cache::shared().find(cleanKey,print)){i.cached=hit;i.cachedFrame=time;if(i.key.empty())i.key=key.str();traceWhat="cached";sharedHit=true;}
+   tShared+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count();
+  }
+  std::vector<float> working;std::shared_ptr<const std::vector<float>> original,preparedClean;
+  if(sourceKind==2){
+   require(paint_ui::preparationAvailable(),"Experimental prepared shot is disabled; select Clean this clip");
+   require(paintHost(),"Prepared shot is supported inside DaVinci Resolve only");
+   const auto folder=paint_ui::getText(e,"prepare_folder");
+   const auto info=paint_source::sourceInfo(folder);
+   require(info.width==w&&info.height==h&&std::abs(info.fps-number(properties(e),kOfxImageEffectPropFrameRate))<1e-8,"Prepared shot geometry/rate mismatch");
+   paint_source::requireSourceFrame(folder,time);
+   std::ifstream manifest(paint_source::fs::u8path(folder)/"shot.txt");int encoding=-1;manifest>>encoding;
+   require(bool(manifest)&&encoding==st.encoding,"Prepared shot input encoding changed; prepare again");
+   if(i.sequence||i.history||!i.key.empty())i.close();
+   auto pair=i.preparedFrames.get(folder,time,w,h);original=pair.original;
+   readSource(i,e,time,w,h,source.b,currentSource);haveCurrentSource=true;
+   require(currentSource.size()==original->size()&&std::memcmp(currentSource.data(),original->data(),currentSource.size()*sizeof(float))==0,"Prepared shot source changed; switch to Clean this clip and prepare again");
+   preparedClean=pair.cleaned;
+  }else if(prepared){
    require(paintHost(),"Prepared original is supported inside DaVinci Resolve only");
    require(st.encoding==0,"Prepared original: use Video input encoding with matching original/processed values");
    require(st.mode==0,"Prepared original: set Auto recovery to Off");
@@ -1090,10 +1157,11 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
     std::vector<float> raw,lin;if(st.encoding){raw.assign(pixels,pixels+size_t(w)*h*3);toLinear(raw,lin);pixels=lin.data();}
     require(adr_sequence_push(i.sequence,pixels,size_t(w)*12,error,sizeof(error))==0,std::string("Advanced Dirt Removal upload: ")+error,kOfxStatFailed);
    }
-   i.cached.swap(i.scratch);i.cachedFrame=time;
+   i.cached=std::make_shared<const std::vector<float>>(std::move(i.scratch));i.cachedFrame=time;i.sourcePrints[time]=sourcePrint();
+   if(useShared){const uint64_t print=sourcePrint();auto t0=std::chrono::steady_clock::now();frame_cache::shared().put(cleanKey,print,i.cached);tShared+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count();}
    if(paintOn){
     // Keep nearby frames within 512 MiB; very large frames use only cached above.
-    const size_t bytes=i.cached.size()*sizeof(float),keep=paint::cacheFrames(bytes);
+    const size_t bytes=i.cached->size()*sizeof(float),keep=paint::cacheFrames(bytes);
     if(keep)i.recent[time]=i.cached;
     while(i.recent.size()>keep){auto farthest=i.recent.begin();for(auto it=i.recent.begin();it!=i.recent.end();++it)if(std::abs(it->first-time)>std::abs(farthest->first-time))farthest=it;i.recent.erase(farthest);}
    }
@@ -1101,9 +1169,9 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
   trace(&i,time-range[0],traceLive,traceWhat,std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-traceStart).count(),tFetch,tEngine);
   {const double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-traceStart).count();
    if(traceWhat[0]=='c')++i.servedCached;else if(!skipCleaning){++i.rendered;i.renderMs+=ms;}
-   char line[200];std::snprintf(line,sizeof line," frame %d (%d/%d) %s in %.1f ms (host fetch %.1f, GPU %.1f)",time,index+1,count,skipCleaning?"unchanged (no cleaning)":traceWhat[0]=='c'?"from cache":"rendered",ms,tFetch,tEngine);
+   char line[240];std::snprintf(line,sizeof line," frame %d (%d/%d) %s in %.1f ms (host fetch %.1f, GPU %.1f, shared cache %.1f)",time,index+1,count,prepared?"prepared (no cleaning)":skipCleaning?"unchanged (no cleaning)":sharedHit?"from shared cache":traceWhat[0]=='c'?"from cache":"rendered",ms,tFetch,tEngine,tShared);
    adrlog::info(i.label()+line);}
-  const float* pixels=prepared||skipCleaning?working.data():i.cached.data();
+  const float* pixels=preparedClean?preparedClean->data():prepared||skipCleaning?working.data():i.cached->data();
   // Finishing: Cineon delta, auto recovery, the Mask input, limits and views. Skipped (output = the
   // engine's picture) when none of them is active.
   std::vector<float> finished;
@@ -1115,8 +1183,9 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
    // Spanish dirt removal with nothing painted leaves the picture unrepaired.
    const bool active=prepared||st.encoding||st.mode||haveMask||painted||st.maskMode==2||st.rect||st.frames||st.amount<1||st.view!=0;
    if(active){
-    std::vector<float> src;if(prepared)src=*original;else if(skipCleaning)src=working;else readSource(i,e,time,w,h,source.b,src);
-    std::vector<float> enc;const float*rep=pixels;if(st.encoding&&!skipCleaning){cineonDelta(src,i.cached,enc);rep=enc.data();}
+    std::vector<float> fetchedSource;const std::vector<float>* sourcePixels=prepared?original.get():skipCleaning?&working:haveCurrentSource?&currentSource:nullptr;
+    if(!sourcePixels){readSource(i,e,time,w,h,source.b,fetchedSource);sourcePixels=&fetchedSource;}const auto&src=*sourcePixels;
+    std::vector<float> enc;const float*rep=pixels;if(st.encoding&&!skipCleaning&&!prepared){cineonDelta(src,*i.cached,enc);rep=enc.data();}
     std::vector<uint8_t> matte;
     if(st.mode&&st.maskMode==2)throw Error(kOfxStatFailed,spanishRecoveryError);  // shown by the host as a render error
     if(st.mode&&st.maskMode!=2){  // Spanish dirt removal repairs only inside the mask: nothing to give back
@@ -1125,8 +1194,8 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
      if(!have){computeProbability(i,e,time,range,w,h,source.b,src,rep,prob);saveProbability(dir,time,w,h,prob);have=true;}
      if(have){const uint8_t cut=uint8_t(1+std::nearbyint(st.confidence*254));matte.resize(prob.size());for(size_t k=0;k<prob.size();++k)matte[k]=prob[k]>=cut;}
     }
-    paint::Layers layers;if(painted)layers=paint::layers(strokes,time,w,h);
-    finish(st,time,w,h,src,rep,matte,haveMask,mm,ms,painted?&layers:nullptr,finished);pixels=finished.data();
+    auto layers=painted?i.paintLayers.get(strokes,time,w,h):nullptr;
+    finish(st,time,w,h,src,rep,matte,haveMask,mm,ms,layers.get(),finished);pixels=finished.data();
    }}
   // Validate every sample before publishing any output pixel.
   std::atomic<bool> valid{true};
@@ -1147,6 +1216,7 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
    }
   });
   output.publish(window);
+  completeTiming.success=true;
   trace(&i,time-range[0],-1,"write",std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-tw).count());
   return kOfxStatOK;
  }catch(...){i.close();throw;}
@@ -1197,6 +1267,21 @@ OfxStatus entry(const char*action,const void*handle,OfxPropertySetHandle in,OfxP
   }
   if(prop->propGetString(in,kOfxPropName,0,&name)==kOfxStatOK&&name&&!std::strcmp(name,"mask_mode"))updateRecoveryEnabled(instance(e));
   cleaning_ui::changed(e,in);
+  if(name&&!std::strcmp(name,"prepare_shot")){
+   require(paint_ui::preparationAvailable(),"Shot preparation is experimental and disabled in this build configuration");
+   auto&i=instance(e);auto old=std::atomic_load(&i.prepareFeedback);
+   if(old&&old->phase<recovery_feedback::State::Complete){old->cancel=true;return kOfxStatOK;}
+   require(paintHost(),"Prepare shot is supported in DaVinci Resolve only");
+   require(paint_ui::getInt(e,"paint_source_kind")!=1,"Prepared original uses an external processed export; select Clean this clip before preparing");
+   require(paint_ui::getInt(e,"mask_mode")==1||paint_ui::getInt(e,"auto_recovery")==0,"Turn Auto recovery off before preparing a shot for manual painting");
+   const auto folder=defaultRecoveryFolder()+"/painting/shot-"+std::to_string(adrlog::pid())+"-"+std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
+   auto feedback=std::make_shared<recovery_feedback::State>();feedback->title="Advanced Dirt Removal — Prepare shot";std::atomic_store(&i.prepareFeedback,feedback);
+   i.prepareRequested=true;
+   paint_ui::setText(e,"prepare_folder",folder);
+   paint_ui::setInt(e,"paint_source_kind",2);
+   paint_ui::setInt(e,"prepare_request",(paint_ui::getInt(e,"prepare_request")+1)%1000000);
+   recovery_feedback::show(feedback);updateRecoveryEnabled(i);return kOfxStatOK;
+  }
   // Paint controls: UI thread work only, never the render lock.
   if(prop->propGetString(in,kOfxPropType,0,&type)==kOfxStatOK&&type&&!std::strcmp(type,kOfxTypeParameter)&&prop->propGetString(in,kOfxPropName,0,&name)==kOfxStatOK&&name&&paint_ui::isParam(name)){paint_ui::changed(e,in);return kOfxStatOK;}
   if(prop->propGetString(in,kOfxPropType,0,&type)==kOfxStatOK&&type&&!std::strcmp(type,kOfxTypeParameter)&&prop->propGetString(in,kOfxPropName,0,&name)==kOfxStatOK&&name&&!std::strcmp(name,"mask_mode")){paint_ui::changed(e,in);updateRecoveryEnabled(instance(e));refreshRecoveryUI(e);return kOfxStatOK;}
@@ -1211,6 +1296,10 @@ OfxStatus entry(const char*action,const void*handle,OfxPropertySetHandle in,OfxP
    }
    int previousAuto=0;params->paramGetValue(i.parameters.at("auto_recovery"),&previousAuto);i.recoveryPreviousAuto=previousAuto;i.restoreAutoOnCancel=true;
    i.cancelCalculation=false;i.recoveryDone=0;i.recoveryTotal=0;i.recoveryState=Instance::Queued;i.calculateRequested=true;
+   auto feedback=std::make_shared<recovery_feedback::State>();std::atomic_store(&i.recoveryFeedback,feedback);
+   if(paintHost()){
+    recovery_feedback::show(feedback);adrlog::info(i.label()+(feedback->presented?" auto recovery: native progress panel shown":" auto recovery: native progress panel unavailable in this callback"));
+   }
    refreshRecoveryUI(e);
    int n=0;params->paramGetValue(i.parameters.at("recovery_request"),&n);
    if(params->paramSetValue){params->paramSetValue(i.parameters.at("auto_recovery"),1);params->paramSetValue(i.parameters.at("recovery_request"),(n+1)%1000000);}
@@ -1224,7 +1313,7 @@ OfxStatus entry(const char*action,const void*handle,OfxPropertySetHandle in,OfxP
  adr_host::GpuScope lifecycleTransport(adr_host::GpuBackend::Cpu,nullptr,!std::strcmp(action,kOfxActionUnload)||!std::strcmp(action,kOfxActionPurgeCaches),!std::strcmp(action,kOfxActionUnload));
 #endif
  if(!std::strcmp(action,kOfxActionLoad)){require(host,"missing host");fx=(OfxImageEffectSuiteV1*)host->fetchSuite(host->host,kOfxImageEffectSuite,1);prop=(OfxPropertySuiteV1*)host->fetchSuite(host->host,kOfxPropertySuite,1);params=(OfxParameterSuiteV1*)host->fetchSuite(host->host,kOfxParameterSuite,1);messages=(OfxMessageSuiteV1*)host->fetchSuite(host->host,kOfxMessageSuite,1);persistentMessages=(OfxMessageSuiteV2*)host->fetchSuite(host->host,kOfxMessageSuite,2);interacts=(OfxInteractSuiteV1*)host->fetchSuite(host->host,kOfxInteractSuite,1);timeline=(OfxTimeLineSuiteV1*)host->fetchSuite(host->host,kOfxTimeLineSuite,1);progressV2=(OfxProgressSuiteV2*)host->fetchSuite(host->host,kOfxProgressSuite,2);progressV1=progressV2?nullptr:(OfxProgressSuiteV1*)host->fetchSuite(host->host,kOfxProgressSuite,1);require(fx&&prop&&params,"required OFX suites unavailable",kOfxStatErrMissingHostFeature);logStartup();return kOfxStatOK;}
- if(!std::strcmp(action,kOfxActionUnload)){paint_navigation::shutdown();if(recoveryEngine){adr_recovery_destroy(recoveryEngine);recoveryEngine=nullptr;}if(engineContext){uint64_t a=0,p=0;adr_context_memory(engineContext,&a,&p);adrlog::info("unload: GPU memory peak "+std::to_string(p>>20)+" MiB");adr_context_destroy(engineContext);}else adrlog::info("unload");engineContext=nullptr;adrlog::close();return kOfxStatOK;}
+ if(!std::strcmp(action,kOfxActionUnload)){paint_navigation::shutdown();{auto c=frame_cache::shared().stats();adrlog::info("shared cleaned-frame cache: "+std::to_string(c.hits)+" hits, "+std::to_string(c.misses)+" misses, "+std::to_string(c.stale)+" stale (source changed), "+std::to_string(c.evicted)+" evicted");}frame_cache::shared().clear();recovery_feedback::shutdown();if(recoveryEngine){adr_recovery_destroy(recoveryEngine);recoveryEngine=nullptr;}if(engineContext){uint64_t a=0,p=0;adr_context_memory(engineContext,&a,&p);adrlog::info("unload: GPU memory peak "+std::to_string(p>>20)+" MiB");adr_context_destroy(engineContext);}else adrlog::info("unload");engineContext=nullptr;adrlog::close();return kOfxStatOK;}
  if(!std::strcmp(action,kOfxActionDescribe)){auto p=properties(e);
 #if ADR_HOST_METAL_TRANSPORT
  // GPU extensions are optional. CPU-only hosts may reject this property;
@@ -1240,10 +1329,11 @@ if(paintHost())check(prop->propSetPointer(p,kOfxImageEffectPluginPropOverlayInte
 ss(p,kOfxPropLabel,ADR_PLUGIN_LABEL);ss(p,kOfxImageEffectPluginPropGrouping,"FabioColor");{auto status=prop->propSetString(p,kOfxPropPluginDescription,0,("Open-source temporal dirt and dust removal for film scans (Metal, CUDA, OpenCL or CPU). Works on the RGB values as delivered; review moving shots before delivery."+(adrlog::path().empty()?std::string():" Diagnostic log: "+adrlog::path())).c_str());if(status!=kOfxStatErrUnknown)check(status,"optional plugin description");}ss(p,kOfxImageEffectPropSupportedContexts,kOfxImageEffectContextFilter);ss(p,kOfxImageEffectPropSupportedPixelDepths,kOfxBitDepthFloat,0);ss(p,kOfxImageEffectPropSupportedPixelDepths,kOfxBitDepthHalf,1);ss(p,kOfxImageEffectPropSupportedPixelDepths,kOfxBitDepthShort,2);ss(p,kOfxImageEffectPluginRenderThreadSafety,kOfxImageEffectRenderInstanceSafe);si(p,kOfxImageEffectPluginPropHostFrameThreading,0);si(p,kOfxImageEffectPropSupportsTiles,0);si(p,kOfxImageEffectPropSupportsMultiResolution,0);si(p,kOfxImageEffectPropTemporalClipAccess,1);si(p,kOfxImageEffectPropSupportsMultipleClipPARs,0);si(p,kOfxImageEffectPropSupportsMultipleClipDepths,0);return kOfxStatOK;}
  if(!std::strcmp(action,kOfxImageEffectActionDescribeInContext)){require(str(in,kOfxImageEffectPropContext)==kOfxImageEffectContextFilter,"Filter context required");for(auto name:{"Source","Output"}){OfxPropertySetHandle p;check(fx->clipDefine(e,name,&p),"define clip");ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGB,0);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGBA,1);si(p,kOfxImageEffectPropSupportsTiles,0);if(!std::strcmp(name,"Source"))si(p,kOfxImageEffectPropTemporalClipAccess,1);}{OfxPropertySetHandle p;check(fx->clipDefine(e,"Mask",&p),"define mask clip");ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentAlpha,0);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGBA,1);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGB,2);si(p,kOfxImageClipPropOptional,1);si(p,kOfxImageClipPropIsMask,1);si(p,kOfxImageEffectPropSupportsTiles,0);}OfxParamSetHandle ps;check(fx->getParamSet(e,&ps),"parameters");defineControlPresentation(ps);
  return kOfxStatOK;}
- if(!std::strcmp(action,kOfxActionCreateInstance)){auto i=std::make_unique<Instance>();check(fx->clipGetHandle(e,"Source",&i->source,nullptr),"source clip");check(fx->clipGetHandle(e,"Output",&i->output,nullptr),"output clip");OfxParamSetHandle ps;check(fx->getParamSet(e,&ps),"parameters");for(auto&c:controls)check(params->paramGetHandle(ps,c.name,&i->parameters[c.name],nullptr),"control handle");check(params->paramGetHandle(ps,"encoding",&i->parameters["encoding"],nullptr),"encoding handle");for(auto&x:extras)check(params->paramGetHandle(ps,x.name,&i->parameters[x.name],nullptr),"extra handle");for(auto n:{"paint","paint_data","paint_source_kind","paint_source_folder","paint_source_offset"})check(params->paramGetHandle(ps,n,&i->parameters[n],nullptr),"paint handle");if(fx->clipGetHandle(e,"Mask",&i->mask,nullptr)!=kOfxStatOK)i->mask=nullptr;check(prop->propSetPointer(properties(e),kOfxPropInstanceData,0,i.get()),"instance data");static int created=0;i->id=++created;trackInstance(e);adrlog::info(i->label()+" created");i.release();lock.unlock();/* Host parameter writes can synchronously reenter the adapter. */try{cleaning_ui::initialize(e);}catch(...){}try{updateRecoveryEnabled(instance(e));}catch(...){}try{paint_ui::initializePainting(e);paint_ui::refresh(e);}catch(...){}return kOfxStatOK;}
+ if(!std::strcmp(action,kOfxActionCreateInstance)){auto i=std::make_unique<Instance>();check(fx->clipGetHandle(e,"Source",&i->source,nullptr),"source clip");check(fx->clipGetHandle(e,"Output",&i->output,nullptr),"output clip");OfxParamSetHandle ps;check(fx->getParamSet(e,&ps),"parameters");for(auto&c:controls)check(params->paramGetHandle(ps,c.name,&i->parameters[c.name],nullptr),"control handle");check(params->paramGetHandle(ps,"encoding",&i->parameters["encoding"],nullptr),"encoding handle");for(auto&x:extras)check(params->paramGetHandle(ps,x.name,&i->parameters[x.name],nullptr),"extra handle");for(auto n:{"paint","paint_data","paint_source_kind","paint_source_folder","paint_source_offset","prepare_folder","prepare_request"})check(params->paramGetHandle(ps,n,&i->parameters[n],nullptr),"paint handle");if(fx->clipGetHandle(e,"Mask",&i->mask,nullptr)!=kOfxStatOK)i->mask=nullptr;check(prop->propSetPointer(properties(e),kOfxPropInstanceData,0,i.get()),"instance data");static int created=0;i->id=++created;trackInstance(e);adrlog::info(i->label()+" created");i.release();lock.unlock();/* Host parameter writes can synchronously reenter the adapter. */try{cleaning_ui::initialize(e);}catch(...){}try{updateRecoveryEnabled(instance(e));}catch(...){}try{paint_ui::initializePainting(e);paint_ui::refresh(e);}catch(...){}return kOfxStatOK;}
  if(!std::strcmp(action,kOfxActionDestroyInstance)){auto&i=instance(e);i.close();adrlog::info(i.label()+" destroyed");untrackInstance(e);paint_ui::changeBatches.erase(e);paint_ui::histories.erase(e);paint_ui::cursorTimes.erase(e);delete &i;check(prop->propSetPointer(properties(e),kOfxPropInstanceData,0,nullptr),"clear instance");return kOfxStatOK;}
- if(!std::strcmp(action,kOfxActionInstanceChanged)){auto&i=instance(e);if(invalidatesHistory(in)){++i.generation;if(i.sequence){char*type=nullptr;char*name=nullptr;char*why=nullptr;if(in){prop->propGetString(in,kOfxPropType,0,&type);prop->propGetString(in,kOfxPropName,0,&name);prop->propGetString(in,kOfxPropChangeReason,0,&why);}adrlog::info(i.label()+" history reset: host reported a change ("+(type?type:"?")+" "+(name?name:"?")+", "+(why?why:"?")+")");}i.close();}return kOfxStatReplyDefault;}
- if(!std::strcmp(action,kOfxActionPurgeCaches)){auto&i=instance(e);adrlog::info(i.label()+" host asked to purge caches");i.purge();return kOfxStatOK;}
+ if(!std::strcmp(action,kOfxActionInstanceChanged)){auto&i=instance(e);if(invalidatesHistory(in)){++i.generation;frame_cache::shared().clear();  // temporal neighbours may have changed
+ if(i.sequence){char*type=nullptr;char*name=nullptr;char*why=nullptr;if(in){prop->propGetString(in,kOfxPropType,0,&type);prop->propGetString(in,kOfxPropName,0,&name);prop->propGetString(in,kOfxPropChangeReason,0,&why);}adrlog::info(i.label()+" history reset: host reported a change ("+(type?type:"?")+" "+(name?name:"?")+", "+(why?why:"?")+")");}i.close();}return kOfxStatReplyDefault;}
+ if(!std::strcmp(action,kOfxActionPurgeCaches)){auto&i=instance(e);adrlog::info(i.label()+" host asked to purge caches");i.purge();frame_cache::shared().clear();return kOfxStatOK;}
  if(!std::strcmp(action,kOfxImageEffectActionIsIdentity)){
   const int t=frameTime(in);const auto range=sourceRange(instance(e));
   if(t>=range[0]&&t<=range[1]&&untouchedSpanish(e,t)&&readSettings(instance(e),t).view==0){
@@ -1254,8 +1344,8 @@ ss(p,kOfxPropLabel,ADR_PLUGIN_LABEL);ss(p,kOfxImageEffectPluginPropGrouping,"Fab
  if(!std::strcmp(action,kOfxImageEffectActionGetFramesNeeded)){
   const int t=frameTime(in);auto&i=instance(e);const auto r=sourceRange(i);
   double v[2]={double(t),double(t)};
-  if(t>=r[0]&&t<=r[1]&&paint_ui::getInt(e,"paint_source_kind")!=1&&!untouchedSpanish(e,t)){
-   v[0]=r[0];v[1]=i.calculateRequested||i.recoveryState==Instance::Queued||i.recoveryState==Instance::Running?r[1]:std::min(r[1],t+4);
+  if(t>=r[0]&&t<=r[1]&&(i.prepareRequested||(paint_ui::getInt(e,"paint_source_kind")==0&&!untouchedSpanish(e,t)))){
+   v[0]=r[0];v[1]=i.prepareRequested||i.calculateRequested||i.recoveryState==Instance::Queued||i.recoveryState==Instance::Running?r[1]:std::min(r[1],t+4);
   }
   return prop->propSetDoubleN(out,"OfxImageClipPropFrameRange_Source",2,v);
  }

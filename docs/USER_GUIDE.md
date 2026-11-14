@@ -372,3 +372,24 @@ current clip and trims; navigation does not change stroke data or image pixels.
 **Show strokes** defaults off. Painting shows the result and brush cursor; an
 explicit Select action shows only the selected shape. Turn Show strokes on for
 review when outlines are useful.
+
+
+## Painting performance (development build)
+
+Completed stroke masks are cached per frame. Editing a different frame keeps
+unchanged masks available, and cleaned frames share immutable storage instead
+of duplicating the same pixels in each cache. All cached samples retain their
+original precision. The diagnostic `complete render` line includes source
+fetching, masks, blending, validation and output; older engine/cache timing
+lines cover only part of a render.
+
+For painting an externally processed export, **Prepared original** retains the
+existing aligned-original workflow. It requests only the current frame and
+bypasses the cleaning engine.
+
+A new one-click **Prepare shot** implementation is under development and is
+hidden by default. Its exact-pixel checks pass for the synthetic Fusion and
+single-effect Color cases tested, but an upstream temporal OFX chain in Color
+supplies inconsistent source images during preparation and subsequent renders.
+It is not qualified for that workflow. Use the existing prepared-original
+workflow until that source mismatch is resolved.

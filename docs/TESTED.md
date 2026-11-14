@@ -394,3 +394,41 @@ Fresh Windows/Linux execution of this removal build and physical tablet feel
 have not been tested. Public installers, production ADR installation and
 recovery weights remain unchanged; publication still requires owner approval
 and the accepted recovery-training candidate.
+
+### Painting performance — 14 November 2026 (local Mac test build)
+
+Completed per-frame stroke masks now have a bounded cache, and cleaned-frame
+caches share immutable pixel storage. Local cache hits validate the current
+source, including when an upstream edit has no host change notification; a
+mismatch discards cleaning and motion history. Cache keys are isolated by
+instance and source generation. Complete render timing now includes source
+fetching, masks, blending, validation and output.
+
+On Apple M5 Pro (24 GB), a synthetic 2048×1556 float fixture with six long soft,
+pressure-varying strokes per frame and a three-frame working set measured
+24.60 ms before and 5.72 ms after (median of 30 warmed OFX Render calls per
+build, approximately 4.3× faster). All 33 compared output buffers matched
+exactly. Resolve was closed during this benchmark. These measurements exclude
+host scheduling and physical pen latency; they do not predict low-end hardware
+performance or the cost of a newly changed stroke mask.
+
+The three CTests and CPU/Metal OFX contracts passed. Regression checks include
+active/inactive stroke edits, undo mask reuse, cache budgets, source changes
+without notifications, prepared-pair integrity and cancellation. An initial three-frame native 2K RGB-float comparison of a two-node Color
+project matched, but a later restart comparison did not. A run with the prior
+installed binary also differed from the candidate captures. The cause of the
+native chain inconsistency remains unresolved; it is not an accepted parity
+result. Offline real-footage checks of sequential, skipped and checkpointed
+engine output matched exactly. The optimized candidate was retained separately
+and the previous installed test binary was restored for the working project.
+
+An explicit whole-shot preparation implementation is retained behind a
+development opt-in and hidden in the normal UI. Synthetic Fusion and isolated
+single-effect Color comparisons matched; the two-node temporal Color chain
+showed inconsistent source images between preparation and later renders.
+Source validation detected the mismatch; the host/cache interaction has not
+been fully isolated. This route is not qualified
+for normal use. The existing prepared-original export workflow remains
+available. Live processing retains conservative temporal frame declarations.
+Windows/Linux execution, other Macs and physical tablet latency have not been
+qualified for these changes. Public installers and release approval are unchanged.
