@@ -26,6 +26,11 @@
 - Spanish cleans each painted frame from the frames around it (8 before, 3
   after) instead of from the start of the shot, so nodes before it are no
   longer rendered from the shot start for every stroke.
+- Once a painted Spanish frame is cleaned, stroke edits and playback need only
+  that frame, so they no longer re-render the nodes before it.
+- **Original input** replaces the prepared-folder route for a processed export:
+  connect the aligned original to the effect's second RGB input and paint. No
+  folder or preparation script is needed.
 - Calculate recovery adds status/timing, optional host progress, cancellation,
   and reuse of valid saved mattes. Whole-shot dependencies are declared to the
   host, and the button no longer waits for the render lock.

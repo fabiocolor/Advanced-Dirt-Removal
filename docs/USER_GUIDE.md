@@ -201,20 +201,11 @@ an operator check.
 ### A processed export on V2, original on V1
 
 Align the clips at the same native size and frame rate, without retiming,
-transforms or colour matching. Copy `tools/prepare_recovery_source.py` into
-Resolve's `Fusion/Scripts/Utility` folder, then run it from **Workspace →
-Scripts → Utility**. Choose V2 as the working export and V1 as the recovery scan.
-Preparation uses a separate timeline, verifies every source frame and restores
-the working timeline and Deliver settings. It disables V1's ordinary output
-only after verification; the clip and its media are preserved.
-
-On V2 add Advanced Dirt Removal. Under **Source setup**, choose
-**Prepared original**, select the verified **Original folder**, and leave
-**Original frame offset** at 0. Use **Video** input encoding. Automatic recovery
-pauses for this route. Painting blends the export and original without running
-cleanup.
-Keep that source folder with the project. Missing, corrupt or mismatched source
-frames stop rendering with an error.
+transforms or colour matching. On V2 add Advanced Dirt Removal and connect the
+original to its second RGB input, **Original**. Under **Source setup**, choose
+**Original input** and use **Video** input encoding. Automatic recovery pauses
+for this route. Painting blends the export and the original without running
+cleanup, and reads only the current frame.
 
 ### Auto recovery
 
@@ -383,9 +374,9 @@ original precision. The diagnostic `complete render` line includes source
 fetching, masks, blending, validation and output; older engine/cache timing
 lines cover only part of a render.
 
-For painting an externally processed export, **Prepared original** retains the
-existing aligned-original workflow. It requests only the current frame and
-bypasses the cleaning engine.
+For painting an externally processed export, **Original input** reads the
+aligned original from the effect's second RGB input. It requests only the
+current frame and bypasses the cleaning engine.
 
 A new one-click **Prepare shot** implementation is under development and is
 hidden by default. Its exact-pixel checks pass for the synthetic Fusion and

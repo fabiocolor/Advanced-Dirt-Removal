@@ -36,14 +36,14 @@ ARRAY(Int,int) ARRAY(Double,double)
 struct Parameter {Properties props;bool choice=false;bool text=false;std::string type;size_t ordinal=0;};
 struct TestImage {Properties props;std::vector<float> backing;};
 struct Clip {Properties props;std::map<int,std::unique_ptr<TestImage>> images;bool output=false,mask=false;};
-struct Effect {Properties props;std::map<std::string,Parameter> parameters;Clip source,output,mask;};
+struct Effect {Properties props;std::map<std::string,Parameter> parameters;Clip source,output,mask,original;};
 Effect& E(OfxImageEffectHandle e){return *reinterpret_cast<Effect*>(e);}
 bool enforceFrameRange=false;double declaredFrameRange[2]{};int undeclaredFetches=0;
 std::vector<int> fetched;int maskFetches=0;int acquired=0,released=0,abortCount=0;bool abortEnabled=false,slowImageOnce=false;int missing=-999;
 OfxStatus effectProps(OfxImageEffectHandle e,OfxPropertySetHandle*p){*p=H(E(e).props);return 0;}
 OfxStatus paramSet(OfxImageEffectHandle e,OfxParamSetHandle*p){*p=reinterpret_cast<OfxParamSetHandle>(&E(e).parameters);return 0;}
-OfxStatus defineClip(OfxImageEffectHandle e,const char*n,OfxPropertySetHandle*p){*p=H(std::string(n)=="Source"?E(e).source.props:std::string(n)=="Mask"?E(e).mask.props:E(e).output.props);return 0;}
-OfxStatus clipHandle(OfxImageEffectHandle e,const char*n,OfxImageClipHandle*c,OfxPropertySetHandle*p){auto&clip=std::string(n)=="Source"?E(e).source:std::string(n)=="Mask"?E(e).mask:E(e).output;*c=reinterpret_cast<OfxImageClipHandle>(&clip);if(p)*p=H(clip.props);return 0;}
+OfxStatus defineClip(OfxImageEffectHandle e,const char*n,OfxPropertySetHandle*p){*p=H(std::string(n)=="Source"?E(e).source.props:std::string(n)=="Mask"?E(e).mask.props:std::string(n)=="Original"?E(e).original.props:E(e).output.props);return 0;}
+OfxStatus clipHandle(OfxImageEffectHandle e,const char*n,OfxImageClipHandle*c,OfxPropertySetHandle*p){auto&clip=std::string(n)=="Source"?E(e).source:std::string(n)=="Mask"?E(e).mask:std::string(n)=="Original"?E(e).original:E(e).output;*c=reinterpret_cast<OfxImageClipHandle>(&clip);if(p)*p=H(clip.props);return 0;}
 OfxStatus clipProps(OfxImageClipHandle c,OfxPropertySetHandle*p){*p=H(reinterpret_cast<Clip*>(c)->props);return 0;}
 OfxStatus getImage(OfxImageClipHandle c,double t,const OfxRectD*,OfxPropertySetHandle*p){auto&clip=*reinterpret_cast<Clip*>(c);if(clip.mask)++maskFetches;if(!clip.output&&enforceFrameRange&&(t<declaredFrameRange[0]||t>declaredFrameRange[1])){++undeclaredFetches;std::cerr<<"FAIL: source fetch "<<t<<" outside declared range "<<declaredFrameRange[0]<<".."<<declaredFrameRange[1]<<"\n";return kOfxStatFailed;}if(duringImage){auto callback=std::move(duringImage);duringImage=nullptr;callback();}if(slowImageOnce){slowImageOnce=false;std::this_thread::sleep_for(std::chrono::milliseconds(5300));}if(!clip.output)fetched.push_back(int(t));if(!clip.output&&int(t)==missing)return kOfxStatFailed;auto it=clip.images.find(int(t));if(it==clip.images.end())return kOfxStatFailed;*p=H(it->second->props);++acquired;return 0;}
 OfxStatus releaseImage(OfxPropertySetHandle){++released;return 0;}
@@ -622,6 +622,24 @@ int main(int argc,char**argv){
    Image result(reinterpret_cast<OfxImageClipHandle>(&e.output),100);const bool useOriginal=spanish?!painted:painted;
    for(int y=0;y<h;++y)for(int x=0;x<w;++x)for(int c=0;c<3;++c)verify(result.read(x,y,c)==(useOriginal?.375f:sourcePixels[(size_t(y)*w+x)*3+c]),"prepared original/processed endpoints exact");
   }
+  // The original connected to the Original input replaces the prepared folder: no path, no preparation.
+  setString(H(e.parameters["paint_source_folder"].props),kOfxParamPropDefault,0,"");setInt(H(e.parameters["paint_source_offset"].props),kOfxParamPropDefault,0,0);
+  setInt(H(e.parameters["paint_source_kind"].props),kOfxParamPropDefault,0,1);
+  setInt(H(e.original.props),kOfxImageClipPropConnected,0,0);data={paint::encode(doc)};
+  verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)!=0&&lastHostMessage.find("Original input")!=std::string::npos,"Original input route asks for a connected original");
+  {auto image=frameImage(sourcePixels,0,w,h,false,false);std::fill(image->backing.begin(),image->backing.end(),.625f);e.original.images[100]=std::move(image);}
+  setInt(H(e.original.props),kOfxImageClipPropConnected,0,1);
+  for(int spanish:{0,1})for(int painted:{0,1}){
+   data={painted?paint::encode(doc):""};setInt(H(e.parameters["mask_mode"].props),kOfxParamPropDefault,0,spanish);
+   declaredFrameRange[0]=declaredFrameRange[1]=100;const bool savedEnforce=enforceFrameRange;enforceFrameRange=true;fetched.clear();
+   {auto status=plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr);if(status)std::cerr<<lastHostMessage<<"\n";verify(status==0,"Original input render");}enforceFrameRange=savedEnforce;
+   verify(!instance(handle).sequence&&!instance(handle).history,"Original input painting never creates the cleaning engine sequence");
+   verify(std::all_of(fetched.begin(),fetched.end(),[](int t){return t==100;}),"Original input painting fetches only the current frame");
+   Image result(reinterpret_cast<OfxImageClipHandle>(&e.output),100);const bool useOriginal=spanish?!painted:painted;
+   for(int y=0;y<h;++y)for(int x=0;x<w;++x)for(int c=0;c<3;++c)verify(result.read(x,y,c)==(useOriginal?.625f:sourcePixels[(size_t(y)*w+x)*3+c]),"Original input/processed endpoints exact");
+  }
+  setInt(H(e.original.props),kOfxImageClipPropConnected,0,0);e.original.images.clear();
+  std::cout<<"Original input: exact Recovery/Spanish endpoints from the connected original, current frame only, no folder\n";
   data={""};setInt(H(e.parameters["mask_mode"].props),kOfxParamPropDefault,0,0);
   verify(e.parameters["auto_recovery"].props.ints[kOfxParamPropDefault]==std::vector<int>{1},"prepared route preserves automatic-recovery preference");
   setInt(H(e.parameters["paint_source_kind"].props),kOfxParamPropDefault,0,0);
