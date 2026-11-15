@@ -95,6 +95,11 @@ public:
   order.push_front(Entry{key,sourcePrint,std::move(frame)});index[key]=order.begin();used+=need;
  }
  void clear(){std::lock_guard<std::mutex> g(m);order.clear();index.clear();used=0;}
+ // Drops the entries whose key starts with prefix (one effect instance).
+ void erasePrefix(const std::string&prefix){
+  std::lock_guard<std::mutex> g(m);
+  for(auto it=order.begin();it!=order.end();){if(it->key.compare(0,prefix.size(),prefix)==0){used-=bytes(*it);index.erase(it->key);it=order.erase(it);}else ++it;}
+ }
  struct Stats{size_t frames,bytes,budget;uint64_t hits,misses,stale,evicted;};
  Stats stats(){std::lock_guard<std::mutex> g(m);return {order.size(),used,budget,hits,misses,stale,evicted};}
 private:
