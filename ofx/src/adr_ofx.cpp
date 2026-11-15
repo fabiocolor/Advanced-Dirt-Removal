@@ -397,7 +397,7 @@ struct Instance {
  // Diagnostic log: instance number and the live sequence's statistics.
  int id=0;
  std::string label()const{return "instance #"+std::to_string(id);}
- int rendered=0,servedCached=0;double renderMs=0;float sourceMin=0,sourceMax=0;bool sourceSeen=false,flatWarned=false,rangeWarned=false,originalLogged=false,originalWarned=false,originalCompared=false;
+ int rendered=0,servedCached=0;double renderMs=0;float sourceMin=0,sourceMax=0;bool sourceSeen=false,flatWarned=false,rangeWarned=false,originalLogged=false,originalWarned=false;int comparedFrame=std::numeric_limits<int>::min(),compareState=-1;
  void summary(const char*why){
   if(sequence&&(rendered||servedCached)){
    std::ostringstream s;s.precision(4);
@@ -1149,11 +1149,12 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
    }
    if(i.sequence||i.history||!i.key.empty())i.close();
    readSource(i,e,time,w,h,source.b,working);
-   if(originalConnected(i)&&!i.originalCompared&&original->size()==working.size()){
-    // Once per instance: shows in the log whether the additional source really carries another picture.
-    i.originalCompared=true;size_t differ=0;double largest=0;for(size_t k=0;k<working.size();++k){const double d=std::fabs(double((*original)[k])-working[k]);if(d>0){++differ;largest=std::max(largest,d);}}
-    char line[220];std::snprintf(line,sizeof line," additional source frame %d: %zu of %zu samples differ from the processed picture (largest %.4f)%s",time,differ,working.size(),largest,differ?"":"; the additional source carries the same picture");
-    if(differ)adrlog::info(i.label()+line);else adrlog::warn(i.label()+line);
+   if(originalConnected(i)&&time!=i.comparedFrame&&original->size()==working.size()){
+    // Logged when it changes: whether the additional source really carries another picture.
+    i.comparedFrame=time;size_t differ=0;double largest=0;for(size_t k=0;k<working.size();++k){const double d=std::fabs(double((*original)[k])-working[k]);if(d>0){++differ;largest=std::max(largest,d);}}
+    char line[220];std::snprintf(line,sizeof line," additional source (%s input) frame %d: %zu of %zu samples differ from the processed picture (largest %.4f)%s",clipConnected(i.original)?"Additional source":"mask",time,differ,working.size(),largest,differ?"":"; the additional source carries the same picture");
+    const int state=(differ?1:0)+(clipConnected(i.original)?2:0);
+    if(state!=i.compareState){i.compareState=state;if(differ)adrlog::info(i.label()+line);else adrlog::warn(i.label()+line);}
    }
    if(!originalConnected(i))adrlog::info(i.label()+" prepared original frame "+std::to_string(time+paint_ui::getInt(e,"paint_source_offset"))+": input is the processed image, cleaning engine bypassed");
   }else if(skipCleaning){
