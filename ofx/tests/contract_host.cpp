@@ -640,6 +640,16 @@ int main(int argc,char**argv){
    for(int y=0;y<h;++y)for(int x=0;x<w;++x)for(int c=0;c<3;++c)verify(result.read(x,y,c)==(useOriginal?.625f:sourcePixels[(size_t(y)*w+x)*3+c]),"additional source/processed endpoints exact");
   }
   setInt(H(e.original.props),kOfxImageClipPropConnected,0,0);e.original.images.clear();
+  // A host that connects the original to the second (mask) input instead.
+  {auto image=frameImage(sourcePixels,0,w,h,false,false);std::fill(image->backing.begin(),image->backing.end(),.625f);e.mask.images[100]=std::move(image);}
+  setInt(H(e.mask.props),kOfxImageClipPropConnected,0,1);
+  for(int spanish:{0,1})for(int painted:{0,1}){
+   data={painted?paint::encode(doc):""};setInt(H(e.parameters["mask_mode"].props),kOfxParamPropDefault,0,spanish);
+   {auto status=plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr);if(status)std::cerr<<lastHostMessage<<"\n";verify(status==0,"additional source on the mask input renders");}
+   Image result(reinterpret_cast<OfxImageClipHandle>(&e.output),100);const bool useOriginal=spanish?!painted:painted;
+   for(int y=0;y<h;++y)for(int x=0;x<w;++x)for(int c=0;c<3;++c)verify(result.read(x,y,c)==(useOriginal?.625f:sourcePixels[(size_t(y)*w+x)*3+c]),"additional source on the mask input is exact, never used as a mask");
+  }
+  setInt(H(e.mask.props),kOfxImageClipPropConnected,0,0);e.mask.images.clear();
   std::cout<<"Additional source: exact Recovery/Spanish endpoints from the connected original, current frame only, no folder; unconnected shows the processed picture\n";
   data={""};setInt(H(e.parameters["mask_mode"].props),kOfxParamPropDefault,0,0);
   verify(e.parameters["auto_recovery"].props.ints[kOfxParamPropDefault]==std::vector<int>{1},"prepared route preserves automatic-recovery preference");

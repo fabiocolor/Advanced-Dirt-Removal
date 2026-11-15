@@ -397,7 +397,7 @@ struct Instance {
  // Diagnostic log: instance number and the live sequence's statistics.
  int id=0;
  std::string label()const{return "instance #"+std::to_string(id);}
- int rendered=0,servedCached=0;double renderMs=0;float sourceMin=0,sourceMax=0;bool sourceSeen=false,flatWarned=false,rangeWarned=false,originalLogged=false,originalCompared=false;
+ int rendered=0,servedCached=0;double renderMs=0;float sourceMin=0,sourceMax=0;bool sourceSeen=false,flatWarned=false,rangeWarned=false,originalLogged=false,originalWarned=false,originalCompared=false;
  void summary(const char*why){
   if(sequence&&(rendered||servedCached)){
    std::ostringstream s;s.precision(4);
@@ -489,12 +489,16 @@ void readSource(Instance&i,OfxImageEffectHandle e,int time,int w,int h,const std
  trace(&i,time,-1,image.depth==PixelDepth::Float?(image.channels==4?"fetch-float-rgba":"fetch-float-rgb"):"fetch-other",hostMs,std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-tc).count(),0);
 }
 // The Additional source input (the aligned original of a processed picture), packed RGB like readSource.
-bool originalConnected(Instance&i){
- if(!i.original)return false;OfxPropertySetHandle cp=nullptr;if(fx->clipGetPropertySet(i.original,&cp)!=kOfxStatOK)return false;
+bool clipConnected(OfxImageClipHandle clip){
+ if(!clip)return false;OfxPropertySetHandle cp=nullptr;if(fx->clipGetPropertySet(clip,&cp)!=kOfxStatOK)return false;
  int connected=0;prop->propGetInt(cp,kOfxImageClipPropConnected,0,&connected);return connected!=0;
 }
+// The additional source arrives on the Additional source input; when a host
+// connects the picture to the second (mask) input instead, that is used.
+OfxImageClipHandle additionalClip(Instance&i){return clipConnected(i.original)?i.original:clipConnected(i.mask)?i.mask:nullptr;}
+bool originalConnected(Instance&i){return additionalClip(i)!=nullptr;}
 std::shared_ptr<const std::vector<float>> readOriginal(Instance&i,OfxImageEffectHandle e,int time,int w,int h){
- Image image(i.original,time,e,"additional source");
+ Image image(additionalClip(i),time,e,"additional source");
  require(image.width()==w&&image.height()==h,"The additional source is "+std::to_string(image.width())+"x"+std::to_string(image.height())+"; it must match the processed picture ("+std::to_string(w)+"x"+std::to_string(h)+")");
  auto rgb=std::make_shared<std::vector<float>>(size_t(w)*h*3);std::atomic<bool> finite{true};
  parallelRows(h,[&](int y0,int y1){bool ok=true;for(int y=y0;y<y1;++y){float*row=rgb->data()+size_t(y)*w*3;
@@ -1128,12 +1132,12 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
    require(st.mode==0,"Additional source: set Auto recovery to Off");
    if(originalConnected(i)){
     original=readOriginal(i,e,time,w,h);
-    if(!i.originalLogged){i.originalLogged=true;adrlog::info(i.label()+" additional source: painting blends the processed picture and the additional source, cleaning engine bypassed");}
+    if(!i.originalLogged){i.originalLogged=true;adrlog::info(i.label()+" additional source from the "+(clipConnected(i.original)?"Additional source":"mask")+" input: painting blends the processed picture and the additional source, cleaning engine bypassed");}
    }else if(paint_ui::getText(e,"paint_source_folder").empty()){
     // Nothing connected yet: keep the viewer usable with the processed picture.
     readSource(i,e,time,w,h,source.b,currentSource);haveCurrentSource=true;original=std::make_shared<const std::vector<float>>(currentSource);
     if(persistentMessages)persistentMessages->setPersistentMessage(e,kOfxMessageWarning,"adr","%s","Connect the aligned original to the effect's second input (Additional source). Showing the processed picture.");
-    if(!i.originalLogged){i.originalLogged=true;adrlog::warn(i.label()+" additional source not connected: showing the processed picture");}
+    if(!i.originalWarned){i.originalWarned=true;adrlog::warn(i.label()+" additional source not connected (Additional source input "+(i.original?"present":"missing")+", mask input "+(i.mask?"present":"missing")+"; neither reported connected): showing the processed picture");}
    }else{
    const auto folder=paint_ui::getText(e,"paint_source_folder");
     const auto info=paint_source::sourceInfo(folder);
@@ -1268,7 +1272,7 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
    // Existing projects retain the optional external-mask route. Once the
    // built-in brush is used, its document owns manual recovery on every frame,
    // including frames without a stroke and while editing is switched off.
-   const bool haveMask=!builtInBrush&&readMask(i,time,w,h,source.b,mm,ms);
+   const bool haveMask=sourceKind!=1&&!builtInBrush&&readMask(i,time,w,h,source.b,mm,ms);  // with Additional source the mask input may carry the original
    // Spanish dirt removal with nothing painted leaves the picture unrepaired.
    const bool active=prepared||st.encoding||st.mode||haveMask||painted||st.maskMode==2||st.rect||st.frames||st.amount<1||st.view!=0;
    if(active){
