@@ -28,8 +28,8 @@
   longer rendered from the shot start for every stroke.
 - Once a painted Spanish frame is cleaned, stroke edits and playback need only
   that frame, so they no longer re-render the nodes before it.
-- **Original input** replaces the prepared-folder route for a processed export:
-  connect the aligned original to the effect's second RGB input and paint. No
+- **Additional source** replaces the prepared-folder route for a processed
+  export: connect the aligned original to the effect's second input and paint. No
   folder or preparation script is needed.
 - Calculate recovery adds status/timing, optional host progress, cancellation,
   and reuse of valid saved mattes. Whole-shot dependencies are declared to the

@@ -202,8 +202,8 @@ an operator check.
 
 Align the clips at the same native size and frame rate, without retiming,
 transforms or colour matching. On V2 add Advanced Dirt Removal and connect the
-original to its second RGB input, **Original**. Under **Source setup**, choose
-**Original input** and use **Video** input encoding. Automatic recovery pauses
+original to its second input, **Additional source**. Under **Source setup**,
+choose **Additional source** and use **Video** input encoding. Automatic recovery pauses
 for this route. Painting blends the export and the original without running
 cleanup, and reads only the current frame.
 
@@ -374,8 +374,8 @@ original precision. The diagnostic `complete render` line includes source
 fetching, masks, blending, validation and output; older engine/cache timing
 lines cover only part of a render.
 
-For painting an externally processed export, **Original input** reads the
-aligned original from the effect's second RGB input. It requests only the
+For painting an externally processed export, **Additional source** reads the
+aligned original from the effect's second input. It requests only the
 current frame and bypasses the cleaning engine.
 
 A new one-click **Prepare shot** implementation is under development and is

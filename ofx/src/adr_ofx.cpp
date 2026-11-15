@@ -488,20 +488,20 @@ void readSource(Instance&i,OfxImageEffectHandle e,int time,int w,int h,const std
  if((lo<0.f||hi>1.f)&&!i.rangeWarned){i.rangeWarned=true;adrlog::info(i.label()+" source frame "+std::to_string(time)+" has values outside 0..1 ("+std::to_string(lo)+".."+std::to_string(hi)+"); processed as delivered");}
  trace(&i,time,-1,image.depth==PixelDepth::Float?(image.channels==4?"fetch-float-rgba":"fetch-float-rgb"):"fetch-other",hostMs,std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-tc).count(),0);
 }
-// The Original input (an aligned original under a processed picture), packed RGB like readSource.
+// The Additional source input (the aligned original of a processed picture), packed RGB like readSource.
 bool originalConnected(Instance&i){
  if(!i.original)return false;OfxPropertySetHandle cp=nullptr;if(fx->clipGetPropertySet(i.original,&cp)!=kOfxStatOK)return false;
  int connected=0;prop->propGetInt(cp,kOfxImageClipPropConnected,0,&connected);return connected!=0;
 }
 std::shared_ptr<const std::vector<float>> readOriginal(Instance&i,OfxImageEffectHandle e,int time,int w,int h){
- Image image(i.original,time,e,"original input");
- require(image.width()==w&&image.height()==h,"The Original input is "+std::to_string(image.width())+"x"+std::to_string(image.height())+"; it must match the processed picture ("+std::to_string(w)+"x"+std::to_string(h)+")");
+ Image image(i.original,time,e,"additional source");
+ require(image.width()==w&&image.height()==h,"The additional source is "+std::to_string(image.width())+"x"+std::to_string(image.height())+"; it must match the processed picture ("+std::to_string(w)+"x"+std::to_string(h)+")");
  auto rgb=std::make_shared<std::vector<float>>(size_t(w)*h*3);std::atomic<bool> finite{true};
  parallelRows(h,[&](int y0,int y1){bool ok=true;for(int y=y0;y<y1;++y){float*row=rgb->data()+size_t(y)*w*3;
   if(image.depth==PixelDepth::Float){const float*src=reinterpret_cast<const float*>(image.row(y));const int ch=image.channels;for(int x=0;x<w;++x){const float*p=src+size_t(x)*ch;float*q=row+size_t(x)*3;q[0]=p[0];q[1]=p[1];q[2]=p[2];ok&=finiteBits(p[0])&finiteBits(p[1])&finiteBits(p[2]);}}
   else for(int x=0;x<w;++x)for(int c=0;c<3;++c){float v=image.read(x,y,c);row[size_t(x)*3+c]=v;ok&=finiteBits(v);}}
   if(!ok)finite=false;});
- require(finite.load(),"The Original input contains NaN or infinity");
+ require(finite.load(),"The additional source contains NaN or infinity");
  return rgb;
 }
 // Startup summary for the diagnostic log: plugin build, host, machine and overrides.
@@ -1123,14 +1123,19 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
    require(currentSource.size()==original->size()&&std::memcmp(currentSource.data(),original->data(),currentSource.size()*sizeof(float))==0,"Prepared shot source changed; switch to Clean this clip and prepare again");
    preparedClean=pair.cleaned;
   }else if(prepared){
-   require(paintHost(),"Original input painting is supported inside DaVinci Resolve only");
-   require(st.encoding==0,"Original input: use Video input encoding with matching original/processed values");
-   require(st.mode==0,"Original input: set Auto recovery to Off");
+   require(paintHost(),"Additional source painting is supported inside DaVinci Resolve only");
+   require(st.encoding==0,"Additional source: use Video input encoding with matching original/processed values");
+   require(st.mode==0,"Additional source: set Auto recovery to Off");
    if(originalConnected(i)){
     original=readOriginal(i,e,time,w,h);
-    if(!i.originalLogged){i.originalLogged=true;adrlog::info(i.label()+" Original input: painting blends the processed picture and the Original input, cleaning engine bypassed");}
+    if(!i.originalLogged){i.originalLogged=true;adrlog::info(i.label()+" additional source: painting blends the processed picture and the additional source, cleaning engine bypassed");}
+   }else if(paint_ui::getText(e,"paint_source_folder").empty()){
+    // Nothing connected yet: keep the viewer usable with the processed picture.
+    readSource(i,e,time,w,h,source.b,currentSource);haveCurrentSource=true;original=std::make_shared<const std::vector<float>>(currentSource);
+    if(persistentMessages)persistentMessages->setPersistentMessage(e,kOfxMessageWarning,"adr","%s","Connect the aligned original to the effect's second input (Additional source). Showing the processed picture.");
+    if(!i.originalLogged){i.originalLogged=true;adrlog::warn(i.label()+" additional source not connected: showing the processed picture");}
    }else{
-   const auto folder=paint_ui::getText(e,"paint_source_folder");require(!folder.empty(),"Connect the original to the effect's Original input (second RGB input)");
+   const auto folder=paint_ui::getText(e,"paint_source_folder");
     const auto info=paint_source::sourceInfo(folder);
     require(info.width==w&&info.height==h,"Prepared original dimensions differ from the working image");
     require(std::abs(info.fps-number(properties(e),kOfxImageEffectPropFrameRate))<1e-8,"Prepared original frame rate differs from the working image");
@@ -1141,9 +1146,9 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
    if(i.sequence||i.history||!i.key.empty())i.close();
    readSource(i,e,time,w,h,source.b,working);
    if(originalConnected(i)&&!i.originalCompared&&original->size()==working.size()){
-    // Once per instance: shows in the log whether the Original input really carries another picture.
+    // Once per instance: shows in the log whether the additional source really carries another picture.
     i.originalCompared=true;size_t differ=0;double largest=0;for(size_t k=0;k<working.size();++k){const double d=std::fabs(double((*original)[k])-working[k]);if(d>0){++differ;largest=std::max(largest,d);}}
-    char line[220];std::snprintf(line,sizeof line," Original input frame %d: %zu of %zu samples differ from the processed picture (largest %.4f)%s",time,differ,working.size(),largest,differ?"":"; the Original input carries the same picture");
+    char line[220];std::snprintf(line,sizeof line," additional source frame %d: %zu of %zu samples differ from the processed picture (largest %.4f)%s",time,differ,working.size(),largest,differ?"":"; the additional source carries the same picture");
     if(differ)adrlog::info(i.label()+line);else adrlog::warn(i.label()+line);
    }
    if(!originalConnected(i))adrlog::info(i.label()+" prepared original frame "+std::to_string(time+paint_ui::getInt(e,"paint_source_offset"))+": input is the processed image, cleaning engine bypassed");
@@ -1356,7 +1361,7 @@ OfxStatus entry(const char*action,const void*handle,OfxPropertySetHandle in,OfxP
    auto&i=instance(e);auto old=std::atomic_load(&i.prepareFeedback);
    if(old&&old->phase<recovery_feedback::State::Complete){old->cancel=true;return kOfxStatOK;}
    require(paintHost(),"Prepare shot is supported in DaVinci Resolve only");
-   require(paint_ui::getInt(e,"paint_source_kind")!=1,"Original input paints an already processed picture; select Clean this clip before preparing");
+   require(paint_ui::getInt(e,"paint_source_kind")!=1,"Additional source paints an already processed picture; select Clean this clip before preparing");
    require(paint_ui::getInt(e,"mask_mode")==1||paint_ui::getInt(e,"auto_recovery")==0,"Turn Auto recovery off before preparing a shot for manual painting");
    const auto folder=defaultRecoveryFolder()+"/painting/shot-"+std::to_string(adrlog::pid())+"-"+std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
    auto feedback=std::make_shared<recovery_feedback::State>();feedback->title="Advanced Dirt Removal — Prepare shot";std::atomic_store(&i.prepareFeedback,feedback);
@@ -1411,9 +1416,9 @@ OfxStatus entry(const char*action,const void*handle,OfxPropertySetHandle in,OfxP
 #endif
 if(paintHost())check(prop->propSetPointer(p,kOfxImageEffectPluginPropOverlayInteractV1,0,(void*)paint_ui::overlay),"paint overlay");
 ss(p,kOfxPropLabel,ADR_PLUGIN_LABEL);ss(p,kOfxImageEffectPluginPropGrouping,"FabioColor");{auto status=prop->propSetString(p,kOfxPropPluginDescription,0,("Open-source temporal dirt and dust removal for film scans (Metal, CUDA, OpenCL or CPU). Works on the RGB values as delivered; review moving shots before delivery."+(adrlog::path().empty()?std::string():" Diagnostic log: "+adrlog::path())).c_str());if(status!=kOfxStatErrUnknown)check(status,"optional plugin description");}ss(p,kOfxImageEffectPropSupportedContexts,kOfxImageEffectContextFilter);ss(p,kOfxImageEffectPropSupportedPixelDepths,kOfxBitDepthFloat,0);ss(p,kOfxImageEffectPropSupportedPixelDepths,kOfxBitDepthHalf,1);ss(p,kOfxImageEffectPropSupportedPixelDepths,kOfxBitDepthShort,2);ss(p,kOfxImageEffectPluginRenderThreadSafety,kOfxImageEffectRenderInstanceSafe);si(p,kOfxImageEffectPluginPropHostFrameThreading,0);si(p,kOfxImageEffectPropSupportsTiles,0);si(p,kOfxImageEffectPropSupportsMultiResolution,0);si(p,kOfxImageEffectPropTemporalClipAccess,1);si(p,kOfxImageEffectPropSupportsMultipleClipPARs,0);si(p,kOfxImageEffectPropSupportsMultipleClipDepths,0);return kOfxStatOK;}
- if(!std::strcmp(action,kOfxImageEffectActionDescribeInContext)){require(str(in,kOfxImageEffectPropContext)==kOfxImageEffectContextFilter,"Filter context required");for(auto name:{"Source","Output"}){OfxPropertySetHandle p;check(fx->clipDefine(e,name,&p),"define clip");ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGB,0);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGBA,1);si(p,kOfxImageEffectPropSupportsTiles,0);if(!std::strcmp(name,"Source"))si(p,kOfxImageEffectPropTemporalClipAccess,1);}{OfxPropertySetHandle p;check(fx->clipDefine(e,"Mask",&p),"define mask clip");ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentAlpha,0);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGBA,1);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGB,2);si(p,kOfxImageClipPropOptional,1);si(p,kOfxImageClipPropIsMask,1);si(p,kOfxImageEffectPropSupportsTiles,0);}{OfxPropertySetHandle p;check(fx->clipDefine(e,"Original",&p),"define original clip");ss(p,kOfxPropLabel,"Original");ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGB,0);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGBA,1);si(p,kOfxImageClipPropOptional,1);si(p,kOfxImageEffectPropSupportsTiles,0);}OfxParamSetHandle ps;check(fx->getParamSet(e,&ps),"parameters");defineControlPresentation(ps);
+ if(!std::strcmp(action,kOfxImageEffectActionDescribeInContext)){require(str(in,kOfxImageEffectPropContext)==kOfxImageEffectContextFilter,"Filter context required");for(auto name:{"Source","Output"}){OfxPropertySetHandle p;check(fx->clipDefine(e,name,&p),"define clip");ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGB,0);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGBA,1);si(p,kOfxImageEffectPropSupportsTiles,0);if(!std::strcmp(name,"Source"))si(p,kOfxImageEffectPropTemporalClipAccess,1);}{OfxPropertySetHandle p;check(fx->clipDefine(e,"Mask",&p),"define mask clip");ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentAlpha,0);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGBA,1);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGB,2);si(p,kOfxImageClipPropOptional,1);si(p,kOfxImageClipPropIsMask,1);si(p,kOfxImageEffectPropSupportsTiles,0);}{OfxPropertySetHandle p;check(fx->clipDefine(e,"AdditionalSource",&p),"define additional source clip");ss(p,kOfxPropLabel,"Additional source");ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGB,0);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGBA,1);si(p,kOfxImageClipPropOptional,1);si(p,kOfxImageEffectPropSupportsTiles,0);}OfxParamSetHandle ps;check(fx->getParamSet(e,&ps),"parameters");defineControlPresentation(ps);
  return kOfxStatOK;}
- if(!std::strcmp(action,kOfxActionCreateInstance)){auto i=std::make_unique<Instance>();check(fx->clipGetHandle(e,"Source",&i->source,nullptr),"source clip");check(fx->clipGetHandle(e,"Output",&i->output,nullptr),"output clip");OfxParamSetHandle ps;check(fx->getParamSet(e,&ps),"parameters");for(auto&c:controls)check(params->paramGetHandle(ps,c.name,&i->parameters[c.name],nullptr),"control handle");check(params->paramGetHandle(ps,"encoding",&i->parameters["encoding"],nullptr),"encoding handle");for(auto&x:extras)check(params->paramGetHandle(ps,x.name,&i->parameters[x.name],nullptr),"extra handle");for(auto n:{"paint","paint_data","paint_source_kind","paint_source_folder","paint_source_offset","prepare_folder","prepare_request"})check(params->paramGetHandle(ps,n,&i->parameters[n],nullptr),"paint handle");if(fx->clipGetHandle(e,"Mask",&i->mask,nullptr)!=kOfxStatOK)i->mask=nullptr;if(fx->clipGetHandle(e,"Original",&i->original,nullptr)!=kOfxStatOK)i->original=nullptr;check(prop->propSetPointer(properties(e),kOfxPropInstanceData,0,i.get()),"instance data");static int created=0;i->id=++created;trackInstance(e);adrlog::info(i->label()+" created");i.release();lock.unlock();/* Host parameter writes can synchronously reenter the adapter. */try{cleaning_ui::initialize(e);}catch(...){}try{updateRecoveryEnabled(instance(e));}catch(...){}try{paint_ui::initializePainting(e);paint_ui::refresh(e);}catch(...){}return kOfxStatOK;}
+ if(!std::strcmp(action,kOfxActionCreateInstance)){auto i=std::make_unique<Instance>();check(fx->clipGetHandle(e,"Source",&i->source,nullptr),"source clip");check(fx->clipGetHandle(e,"Output",&i->output,nullptr),"output clip");OfxParamSetHandle ps;check(fx->getParamSet(e,&ps),"parameters");for(auto&c:controls)check(params->paramGetHandle(ps,c.name,&i->parameters[c.name],nullptr),"control handle");check(params->paramGetHandle(ps,"encoding",&i->parameters["encoding"],nullptr),"encoding handle");for(auto&x:extras)check(params->paramGetHandle(ps,x.name,&i->parameters[x.name],nullptr),"extra handle");for(auto n:{"paint","paint_data","paint_source_kind","paint_source_folder","paint_source_offset","prepare_folder","prepare_request"})check(params->paramGetHandle(ps,n,&i->parameters[n],nullptr),"paint handle");if(fx->clipGetHandle(e,"Mask",&i->mask,nullptr)!=kOfxStatOK)i->mask=nullptr;if(fx->clipGetHandle(e,"AdditionalSource",&i->original,nullptr)!=kOfxStatOK)i->original=nullptr;check(prop->propSetPointer(properties(e),kOfxPropInstanceData,0,i.get()),"instance data");static int created=0;i->id=++created;trackInstance(e);adrlog::info(i->label()+" created");i.release();lock.unlock();/* Host parameter writes can synchronously reenter the adapter. */try{cleaning_ui::initialize(e);}catch(...){}try{updateRecoveryEnabled(instance(e));}catch(...){}try{paint_ui::initializePainting(e);paint_ui::refresh(e);}catch(...){}return kOfxStatOK;}
  if(!std::strcmp(action,kOfxActionDestroyInstance)){auto&i=instance(e);i.close();adrlog::info(i.label()+" destroyed");untrackInstance(e);paint_ui::changeBatches.erase(e);paint_ui::histories.erase(e);paint_ui::cursorTimes.erase(e);delete &i;check(prop->propSetPointer(properties(e),kOfxPropInstanceData,0,nullptr),"clear instance");return kOfxStatOK;}
  if(!std::strcmp(action,kOfxActionInstanceChanged)){auto&i=instance(e);if(invalidatesHistory(in)){++i.generation;frame_cache::shared().erasePrefix(std::to_string(i.id)+'|');  // this effect's cleaned frames only; other nodes are unaffected
  if(i.sequence){char*type=nullptr;char*name=nullptr;char*why=nullptr;if(in){prop->propGetString(in,kOfxPropType,0,&type);prop->propGetString(in,kOfxPropName,0,&name);prop->propGetString(in,kOfxPropChangeReason,0,&why);}adrlog::info(i.label()+" history reset: host reported a change ("+(type?type:"?")+" "+(name?name:"?")+", "+(why?why:"?")+")");}i.close();}return kOfxStatReplyDefault;}
@@ -1432,7 +1437,7 @@ ss(p,kOfxPropLabel,ADR_PLUGIN_LABEL);ss(p,kOfxImageEffectPluginPropGrouping,"Fab
    if(spanishWindow(e,t)){if(!spanishCleanCached(e,t)){v[0]=std::max(r[0],t-kSpanishBack);v[1]=std::min(r[1],t+kSpanishAhead);}}
    else{v[0]=r[0];v[1]=i.prepareRequested||i.calculateRequested||i.recoveryState==Instance::Queued||i.recoveryState==Instance::Running?r[1]:std::min(r[1],t+4);}
   }
-  {const double now[2]={double(t),double(t)};prop->propSetDoubleN(out,"OfxImageClipPropFrameRange_Original",2,now);}
+  {const double now[2]={double(t),double(t)};prop->propSetDoubleN(out,"OfxImageClipPropFrameRange_AdditionalSource",2,now);}
   return prop->propSetDoubleN(out,"OfxImageClipPropFrameRange_Source",2,v);
  }
  if(!std::strcmp(action,kOfxImageEffectActionGetRegionOfDefinition)||!std::strcmp(action,kOfxImageEffectActionGetRegionsOfInterest)){scaleOne(in);OfxRectD rod;check(fx->clipGetRegionOfDefinition(instance(e).source,number(in,kOfxPropTime),&rod),"source RoD");double v[]={rod.x1,rod.y1,rod.x2,rod.y2};return prop->propSetDoubleN(out,!std::strcmp(action,kOfxImageEffectActionGetRegionOfDefinition)?kOfxImageEffectPropRegionOfDefinition:"OfxImageClipPropRoI_Source",4,v);}
