@@ -527,6 +527,20 @@ int main(int argc,char**argv){
   verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)==kOfxStatOK,"old mask-only project still renders");
   verify(maskFetches==1,"legacy project fetches its original mask");
   {Image result(reinterpret_cast<OfxImageClipHandle>(&e.output),f+100);for(int y=0;y<h;++y)for(int x=0;x<w;++x)for(int c=0;c<3;++c)verify(result.read(x,y,c)==sourcePixels[((size_t(f)*h+y)*w+x)*3+c],"legacy full-white recovery mask retains original output");}
+  {// Spanish cleans a painted frame from its own window (8 back, 3 ahead), never from the clip start.
+   const int g=15;paint::Document late=d;late.strokes[0].first=late.strokes[0].last=100+g;data={paint::encode(late)};mode={1};paintEnabled={1};
+   verify(plugin->mainEntry(kOfxActionPurgeCaches,handle,nullptr,nullptr)==kOfxStatOK,"purge before windowed Spanish");instance(handle).close();
+   setDouble(ip,kOfxPropTime,0,g+100);Properties needed;verify(plugin->mainEntry(kOfxImageEffectActionGetFramesNeeded,handle,ip,H(needed))==kOfxStatOK,"windowed Spanish frames needed");
+   const auto range=needed.doubles["OfxImageClipPropFrameRange_Source"];verify(range==std::vector<double>{100.+g-8,100.+g+3},"Spanish declares only its window");
+   declaredFrameRange[0]=range[0];declaredFrameRange[1]=range[1];const bool savedEnforce=enforceFrameRange;enforceFrameRange=true;fetched.clear();
+   verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)==kOfxStatOK,"windowed Spanish renders");enforceFrameRange=savedEnforce;
+   verify(!fetched.empty()&&std::all_of(fetched.begin(),fetched.end(),[&](int t){return t>=100+g-8&&t<=100+g+3;}),"Spanish fetches only its window");
+   verify(!instance(handle).sequence&&!instance(handle).history,"windowed Spanish keeps no motion history");
+   Image result(reinterpret_cast<OfxImageClipHandle>(&e.output),g+100);
+   for(int y=0;y<h;++y)for(int x=0;x<w;++x)for(int c=0;c<3;++c){const size_t k=((size_t(g)*h+y)*w+x)*3+c;verify(result.read(x,y,c)==(inside(x,y)?targetPixels[k]:sourcePixels[k]),"windowed Spanish equals full-shot cleaning");}
+   std::cout<<"Spanish window: frames "<<g-8<<".."<<g+3<<" only, exact against full-shot cleaning\n";
+   data={paint::encode(d)};paintEnabled={0};mode={0};
+  }
   setInt(H(e.mask.props),kOfxImageClipPropConnected,0,0);e.mask.images.clear();hostProperties=savedHost;interacts=savedInteracts;
   std::cout<<"integrated recovery: exclusive built-in brush, Spanish auto bypass and legacy mask compatibility passed\n";
   data={""};mode={0};renderFrame(f);

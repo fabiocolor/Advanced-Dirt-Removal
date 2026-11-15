@@ -23,6 +23,9 @@
 - Spanish painting skips cleaning on frames without active strokes and reuses
   the cleaned picture across brush edits. Painted frames still use full-frame
   temporal analysis; brush-area-only computation is not implemented.
+- Spanish cleans each painted frame from the frames around it (8 before, 3
+  after) instead of from the start of the shot, so nodes before it are no
+  longer rendered from the shot start for every stroke.
 - Calculate recovery adds status/timing, optional host progress, cancellation,
   and reuse of valid saved mattes. Whole-shot dependencies are declared to the
   host, and the button no longer waits for the render lock.

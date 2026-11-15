@@ -744,6 +744,17 @@ paint::Document frameStrokes(Instance&i,int time){
  if(params->paramGetValueAtTime(i.parameters.at("paint_data"),time,&text)==kOfxStatOK&&text&&*text)return paint::decode(text);
  return {};
 }
+// Spanish dirt removal cleans the finished picture as its own pass: each
+// painted frame is cleaned from its own window of source frames, never from
+// the clip start, so Resolve renders the nodes before it only for those
+// frames. The engine needs 3 frames ahead; 8 back matched the full-shot
+// output exactly, including fast pans (Temporal Restoration Lab,
+// benchmarks/runs/adr-spanish-window-20261115).
+constexpr int kSpanishBack=8,kSpanishAhead=3;
+bool spanishWindow(OfxImageEffectHandle e,int time){
+ auto&i=instance(e);
+ return paintHost()&&paint_ui::getInt(e,"paint_source_kind")==0&&!i.prepareRequested&&readSettings(i,time).maskMode==2;
+}
 bool untouchedSpanish(OfxImageEffectHandle e,int time){
  auto&i=instance(e);
  if(!paintHost()||(paint_ui::getInt(e,"paint_source_kind")!=0||i.prepareRequested)||readSettings(i,time).maskMode!=2)return false;
@@ -1017,8 +1028,10 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
   require(w>=256&&w<=16384&&h>=256&&h<=16384,"Advanced Dirt Removal needs full frames of 256 to 16384 pixels per side");require(source.b==output.b&&source.channels==output.channels,"output geometry/components differ");
   auto window=renderWindow(e,in,source.b);
   std::string identity;adr_controls c=readControls(i,time,identity);const Settings st=readSettings(i,time);if(st.encoding)c.extended_range=1;
-  std::ostringstream key;key<<identity<<'|'<<range[0]<<'|'<<range[1]<<'|'<<w<<'x'<<h<<'|'<<i.generation<<"|enc"<<st.encoding;
   if(i.prepareRequested)prepareShot(e,i);
+  // Windowed Spanish output is kept apart from full-shot output in the shared cache.
+  const bool windowed=spanishWindow(e,time);const char* windowTag=windowed?"|spanish-window":"";
+  std::ostringstream key;key<<identity<<'|'<<range[0]<<'|'<<range[1]<<'|'<<w<<'x'<<h<<'|'<<i.generation<<"|enc"<<st.encoding;
   const int sourceKind=paint_ui::getInt(e,"paint_source_kind");
   const bool prepared=sourceKind!=0;
   if(!prepared&&st.mode&&st.maskMode!=2&&i.calculateRequested.exchange(false)){
@@ -1058,7 +1071,7 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
    i.sourcePrints[time]=print;
    if(i.cachedFrame!=time&&paintOn&&i.key==key.str()){auto it=i.recent.find(time);if(it!=i.recent.end()){i.cached=it->second;i.cachedFrame=time;traceWhat="cached";}}
   }
-  std::string cleanKey;{std::ostringstream ck;ck<<i.id<<'|'<<i.generation<<'|'<<identity<<'|'<<range[0]<<'|'<<range[1]<<'|'<<w<<'x'<<h<<"|enc"<<st.encoding<<"|frame"<<time;cleanKey=ck.str();}
+  std::string cleanKey;{std::ostringstream ck;ck<<i.id<<'|'<<i.generation<<'|'<<identity<<'|'<<range[0]<<'|'<<range[1]<<'|'<<w<<'x'<<h<<"|enc"<<st.encoding<<windowTag<<"|frame"<<time;cleanKey=ck.str();}
   const bool useShared=!prepared&&!skipCleaning&&frame_cache::shared().capacity()>0;
   if(useShared&&i.cachedFrame!=time&&frame_cache::shared().contains(cleanKey)){
    const uint64_t print=sourcePrint();auto t0=std::chrono::steady_clock::now();
@@ -1102,6 +1115,36 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
    adrlog::info(i.label()+" Spanish frame "+std::to_string(time)+": no active strokes; current source only, cleaning engine bypassed");
   }else if(i.cachedFrame!=time){
    char error[2048]={};
+   if(windowed){
+    // A fresh sequence over this frame's window only; no motion history.
+    if(i.sequence)adr_sequence_destroy(i.sequence);i.sequence=nullptr;
+    if(i.history)adr_history_destroy(i.history);i.history=nullptr;
+    const int first=std::max(range[0],time-kSpanishBack),last=std::min(range[1],time+kSpanishAhead),target=time-first;
+    std::unique_ptr<adr_sequence,void(*)(adr_sequence*)> seq(adr_sequence_create(context(),&c,w,h,last-first+1,error,sizeof(error)),adr_sequence_destroy);
+    require(seq!=nullptr,std::string("Advanced Dirt Removal sequence: ")+error,kOfxStatFailed);
+    i.key=key.str();i.first=range[0];
+    if(hashLogDir())hashLog("window "+std::to_string(w)+"x"+std::to_string(h)+" first="+std::to_string(first)+" last="+std::to_string(last)+" target="+std::to_string(time)+" key="+i.key);
+    i.scratch.resize(size_t(w)*h*3);std::vector<float> rgb,raw,lin;
+    for(int next=adr_sequence_next_output(seq.get());next>=0&&next<=target;next=adr_sequence_next_output(seq.get())){
+     require(!fx->abort(e),"render aborted",kOfxStatFailed);
+     auto te=std::chrono::steady_clock::now();
+     const int produced=next==target?adr_sequence_pull(seq.get(),i.scratch.data(),size_t(w)*12,error,sizeof(error)):adr_sequence_skip(seq.get(),error,sizeof(error));
+     tEngine+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-te).count();
+     require(produced>=-1,std::string("Advanced Dirt Removal render: ")+error,kOfxStatFailed);
+     if(produced>=0){if(produced==target)hashFrame("out",time,i.scratch.data(),i.scratch.size());continue;}
+     const int pending=adr_sequence_next_source(seq.get());require(pending>=0,"Advanced Dirt Removal sequence stalled",kOfxStatFailed);
+     auto tf=std::chrono::steady_clock::now();
+     // The current frame is the one fingerprinted above, so cached results
+     // always describe the pixels that were cleaned.
+     const float* pixels=nullptr;
+     if(first+pending==time){sourcePrint();pixels=currentSource.data();}
+     else{readSource(i,e,first+pending,w,h,source.b,rgb);pixels=rgb.data();}
+     tFetch+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-tf).count();
+     hashFrame("in",first+pending,pixels,size_t(w)*h*3);
+     if(st.encoding){raw.assign(pixels,pixels+size_t(w)*h*3);toLinear(raw,lin);pixels=lin.data();}
+     require(adr_sequence_push(seq.get(),pixels,size_t(w)*12,error,sizeof(error))==0,std::string("Advanced Dirt Removal upload: ")+error,kOfxStatFailed);
+    }
+   }else{
    const int live=i.sequence?adr_sequence_next_output(i.sequence):-1;
    // Recreate on backward seeks, and on forward jumps when a checkpoint is
    // closer to the target than the live sequence position.
@@ -1156,6 +1199,7 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
     hashFrame("in",range[0]+pending,pixels,size_t(w)*h*3);
     std::vector<float> raw,lin;if(st.encoding){raw.assign(pixels,pixels+size_t(w)*h*3);toLinear(raw,lin);pixels=lin.data();}
     require(adr_sequence_push(i.sequence,pixels,size_t(w)*12,error,sizeof(error))==0,std::string("Advanced Dirt Removal upload: ")+error,kOfxStatFailed);
+   }
    }
    i.cached=std::make_shared<const std::vector<float>>(std::move(i.scratch));i.cachedFrame=time;i.sourcePrints[time]=sourcePrint();
    if(useShared){const uint64_t print=sourcePrint();auto t0=std::chrono::steady_clock::now();frame_cache::shared().put(cleanKey,print,i.cached);tShared+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count();}
@@ -1345,7 +1389,8 @@ ss(p,kOfxPropLabel,ADR_PLUGIN_LABEL);ss(p,kOfxImageEffectPluginPropGrouping,"Fab
   const int t=frameTime(in);auto&i=instance(e);const auto r=sourceRange(i);
   double v[2]={double(t),double(t)};
   if(t>=r[0]&&t<=r[1]&&(i.prepareRequested||(paint_ui::getInt(e,"paint_source_kind")==0&&!untouchedSpanish(e,t)))){
-   v[0]=r[0];v[1]=i.prepareRequested||i.calculateRequested||i.recoveryState==Instance::Queued||i.recoveryState==Instance::Running?r[1]:std::min(r[1],t+4);
+   if(spanishWindow(e,t)){v[0]=std::max(r[0],t-kSpanishBack);v[1]=std::min(r[1],t+kSpanishAhead);}
+   else{v[0]=r[0];v[1]=i.prepareRequested||i.calculateRequested||i.recoveryState==Instance::Queued||i.recoveryState==Instance::Running?r[1]:std::min(r[1],t+4);}
   }
   return prop->propSetDoubleN(out,"OfxImageClipPropFrameRange_Source",2,v);
  }
