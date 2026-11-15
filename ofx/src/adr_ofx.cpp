@@ -367,6 +367,7 @@ struct Instance {
  uint64_t generation=0;
  std::map<int,uint64_t> sourcePrints; // validate local hits too, including after an upstream edit
  int cachedFrame=std::numeric_limits<int>::min();
+ int frameW=0,frameH=0; // last rendered size, so frames-needed can find a cached Spanish clean
  frame_cache::Cache::Frame cached;  // immutable shared output, top-down packed RGB
  // While Paint in viewer is on: the last few cleaned frames, so stepping back
  // and forth to paint does not clean them again. Same key as the sequence.
@@ -755,6 +756,18 @@ bool spanishWindow(OfxImageEffectHandle e,int time){
  auto&i=instance(e);
  return paintHost()&&paint_ui::getInt(e,"paint_source_kind")==0&&!i.prepareRequested&&readSettings(i,time).maskMode==2;
 }
+// Key of a cleaned frame in the shared cache (the engine picture, without strokes).
+std::string cleanKeyFor(Instance&i,const std::string&identity,const std::array<int,2>&range,int w,int h,int encoding,bool windowed,int time){
+ std::ostringstream ck;ck<<i.id<<'|'<<i.generation<<'|'<<identity<<'|'<<range[0]<<'|'<<range[1]<<'|'<<w<<'x'<<h<<"|enc"<<encoding<<(windowed?"|spanish-window":"")<<"|frame"<<time;return ck.str();
+}
+// A painted Spanish frame whose clean is already cached needs only its own
+// frame from the host. Without this Resolve re-renders the 12 frames before
+// it (all nodes upstream) for every stroke edit and on every playback pass.
+bool spanishCleanCached(OfxImageEffectHandle e,int time){
+ auto&i=instance(e);if(!i.frameW||frame_cache::shared().capacity()==0)return false;
+ std::string identity;readControls(i,time,identity);
+ return frame_cache::shared().contains(cleanKeyFor(i,identity,sourceRange(i),i.frameW,i.frameH,readSettings(i,time).encoding,true,time));
+}
 bool untouchedSpanish(OfxImageEffectHandle e,int time){
  auto&i=instance(e);
  if(!paintHost()||(paint_ui::getInt(e,"paint_source_kind")!=0||i.prepareRequested)||readSettings(i,time).maskMode!=2)return false;
@@ -1030,7 +1043,7 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
   std::string identity;adr_controls c=readControls(i,time,identity);const Settings st=readSettings(i,time);if(st.encoding)c.extended_range=1;
   if(i.prepareRequested)prepareShot(e,i);
   // Windowed Spanish output is kept apart from full-shot output in the shared cache.
-  const bool windowed=spanishWindow(e,time);const char* windowTag=windowed?"|spanish-window":"";
+  const bool windowed=spanishWindow(e,time);i.frameW=w;i.frameH=h;
   std::ostringstream key;key<<identity<<'|'<<range[0]<<'|'<<range[1]<<'|'<<w<<'x'<<h<<'|'<<i.generation<<"|enc"<<st.encoding;
   const int sourceKind=paint_ui::getInt(e,"paint_source_kind");
   const bool prepared=sourceKind!=0;
@@ -1071,7 +1084,7 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
    i.sourcePrints[time]=print;
    if(i.cachedFrame!=time&&paintOn&&i.key==key.str()){auto it=i.recent.find(time);if(it!=i.recent.end()){i.cached=it->second;i.cachedFrame=time;traceWhat="cached";}}
   }
-  std::string cleanKey;{std::ostringstream ck;ck<<i.id<<'|'<<i.generation<<'|'<<identity<<'|'<<range[0]<<'|'<<range[1]<<'|'<<w<<'x'<<h<<"|enc"<<st.encoding<<windowTag<<"|frame"<<time;cleanKey=ck.str();}
+  const std::string cleanKey=cleanKeyFor(i,identity,range,w,h,st.encoding,windowed,time);
   const bool useShared=!prepared&&!skipCleaning&&frame_cache::shared().capacity()>0;
   if(useShared&&i.cachedFrame!=time&&frame_cache::shared().contains(cleanKey)){
    const uint64_t print=sourcePrint();auto t0=std::chrono::steady_clock::now();
@@ -1389,7 +1402,7 @@ ss(p,kOfxPropLabel,ADR_PLUGIN_LABEL);ss(p,kOfxImageEffectPluginPropGrouping,"Fab
   const int t=frameTime(in);auto&i=instance(e);const auto r=sourceRange(i);
   double v[2]={double(t),double(t)};
   if(t>=r[0]&&t<=r[1]&&(i.prepareRequested||(paint_ui::getInt(e,"paint_source_kind")==0&&!untouchedSpanish(e,t)))){
-   if(spanishWindow(e,t)){v[0]=std::max(r[0],t-kSpanishBack);v[1]=std::min(r[1],t+kSpanishAhead);}
+   if(spanishWindow(e,t)){if(!spanishCleanCached(e,t)){v[0]=std::max(r[0],t-kSpanishBack);v[1]=std::min(r[1],t+kSpanishAhead);}}
    else{v[0]=r[0];v[1]=i.prepareRequested||i.calculateRequested||i.recoveryState==Instance::Queued||i.recoveryState==Instance::Running?r[1]:std::min(r[1],t+4);}
   }
   return prop->propSetDoubleN(out,"OfxImageClipPropFrameRange_Source",2,v);

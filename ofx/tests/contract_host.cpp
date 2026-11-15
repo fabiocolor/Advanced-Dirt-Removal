@@ -539,6 +539,14 @@ int main(int argc,char**argv){
    Image result(reinterpret_cast<OfxImageClipHandle>(&e.output),g+100);
    for(int y=0;y<h;++y)for(int x=0;x<w;++x)for(int c=0;c<3;++c){const size_t k=((size_t(g)*h+y)*w+x)*3+c;verify(result.read(x,y,c)==(inside(x,y)?targetPixels[k]:sourcePixels[k]),"windowed Spanish equals full-shot cleaning");}
    std::cout<<"Spanish window: frames "<<g-8<<".."<<g+3<<" only, exact against full-shot cleaning\n";
+   // Once that frame is cleaned, a stroke edit or playback pass needs only the frame itself.
+   Properties again;verify(plugin->mainEntry(kOfxImageEffectActionGetFramesNeeded,handle,ip,H(again))==kOfxStatOK&&again.doubles["OfxImageClipPropFrameRange_Source"]==std::vector<double>{100.+g,100.+g},"cached Spanish clean declares only its own frame");
+   const int cleanedBefore=instance(handle).rendered;declaredFrameRange[0]=declaredFrameRange[1]=100+g;enforceFrameRange=true;fetched.clear();
+   late.strokes[0].opacity=.5;data={paint::encode(late)};
+   verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)==kOfxStatOK,"cached Spanish stroke edit renders from its own frame");enforceFrameRange=savedEnforce;
+   verify(std::all_of(fetched.begin(),fetched.end(),[&](int t){return t==100+g;})&&instance(handle).rendered==cleanedBefore,"cached Spanish stroke edit fetches no neighbours and does not clean again");
+   {Image edited(reinterpret_cast<OfxImageClipHandle>(&e.output),g+100);for(int y=0;y<h;++y)for(int x=0;x<w;++x)for(int c=0;c<3;++c){const size_t k=((size_t(g)*h+y)*w+x)*3+c;verify(edited.read(x,y,c)==(inside(x,y)?sourcePixels[k]+(targetPixels[k]-sourcePixels[k])*.5f:sourcePixels[k]),"cached Spanish stroke edit stays exact");}}
+   std::cout<<"Spanish cached frame: stroke edits need only frame "<<g<<"\n";
    data={paint::encode(d)};paintEnabled={0};mode={0};
   }
   setInt(H(e.mask.props),kOfxImageClipPropConnected,0,0);e.mask.images.clear();hostProperties=savedHost;interacts=savedInteracts;
