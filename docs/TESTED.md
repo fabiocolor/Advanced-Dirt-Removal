@@ -446,10 +446,13 @@ replaced by preview results. A queued whole-shot calculation remains pending
 for a native render. Reduced live cleaning/classification is a preview estimate,
 not a claim of equality with a downsampled native result.
 
-Resolve's normal application launcher does not discover the per-user test
-bundle on this Mac. Quit Resolve and use `tools/open_resolve_test.command` to
-include the per-user OFX directory when opening the development build. The
-system installation and published installers are separate.
+The earlier per-user development installation required an explicit OFX search
+path. For normal Resolve launches, install the verified test bundle at
+`/Library/OFX/Plugins/AdvancedDirtRemovalTest.ofx.bundle`, keeping its test
+identity separate from the existing release. This standard-folder installation
+requires macOS administrator authentication. The optional
+`tools/open_resolve_test.command` is a development diagnostic, not a requirement
+for a standard-folder installation. Published installers remain separate.
 
 On Apple M5 Pro / Resolve Studio 21.1.1.10, fresh 92×46 thumbnails and
 576×324 viewer requests completed without render errors. The same real-footage
