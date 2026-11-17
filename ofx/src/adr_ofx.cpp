@@ -147,6 +147,9 @@ void si(OfxPropertySetHandle p,const char*k,int v){check(prop->propSetInt(p,k,0,
 void ss(OfxPropertySetHandle p,const char*k,const char*v,int i=0){check(prop->propSetString(p,k,i,v),k);}
 OfxPropertySetHandle properties(OfxImageEffectHandle e){OfxPropertySetHandle p;check(fx->getPropertySet(e,&p),"effect properties");return p;}
 int frameTime(OfxPropertySetHandle p){double t=number(p,kOfxPropTime);require(t==std::round(t)&&std::abs(t)<=1e9,"fractional frame times are unsupported");return int(t);}
+// GetFramesNeeded only guarantees time. Without an optional scale, declare
+// conservative temporal dependencies so later proxy renders may fetch them.
+bool nativeScale(OfxPropertySetHandle p){double x=0,y=0;return prop->propGetDouble(p,kOfxImageEffectPropRenderScale,0,&x)==kOfxStatOK&&prop->propGetDouble(p,kOfxImageEffectPropRenderScale,1,&y)==kOfxStatOK&&x==1.&&y==1.;}
 void scaleOne(OfxPropertySetHandle p){double x=number(p,kOfxImageEffectPropRenderScale,0),y=number(p,kOfxImageEffectPropRenderScale,1);require(x==1.&&y==1.,"proxy/renderScale other than 1 is unsupported ("+std::to_string(x)+","+std::to_string(y)+")");}
 float decodeShort(uint16_t value){return float(value)/65535.f;}
 uint16_t encodeShort(float value){
@@ -195,7 +198,7 @@ struct Image {
 #elif ADR_HOST_GPU_TRANSPORT
  std::unique_ptr<adr_host::GpuImage> gpuImage;
 #endif
- Image(OfxImageClipHandle clip,int t,OfxImageEffectHandle=nullptr,const char*role="probe"){
+ Image(OfxImageClipHandle clip,int t,OfxImageEffectHandle=nullptr,const char*role="probe",bool preview=false){
 #if ADR_HOST_GPU_TRANSPORT
   adr_host::HostContextScope hostContext;
 #endif
@@ -205,7 +208,7 @@ struct Image {
    auto token=str(handle,kOfxImageEffectPropPixelDepth);require(token==kOfxBitDepthFloat||token==kOfxBitDepthHalf||token==kOfxBitDepthShort,"Float, Half or unsigned Short RGB/RGBA required");depth=token==kOfxBitDepthFloat?PixelDepth::Float:token==kOfxBitDepthHalf?PixelDepth::Half:PixelDepth::Short;sampleBytes=depth==PixelDepth::Float?4:2;
    auto c=str(handle,kOfxImageEffectPropComponents);channels=c==kOfxImageComponentRGB?3:c==kOfxImageComponentRGBA?4:0;require(channels,"RGB/RGBA required");
    premult=channels==4&&str(handle,kOfxImageEffectPropPreMultiplication)==kOfxImagePreMultiplied;
-   try{scaleOne(handle);}catch(const std::exception&ex){throw std::runtime_error(std::string(role)+" image: "+ex.what());}auto field=str(handle,kOfxImagePropField);
+   try{if(!preview)scaleOne(handle);else{double sx=number(handle,kOfxImageEffectPropRenderScale,0),sy=number(handle,kOfxImageEffectPropRenderScale,1);require(sx>0&&sx<=1&&sy>0&&sy<=1,"Invalid preview image scale");}}catch(const std::exception&ex){throw std::runtime_error(std::string(role)+" image: "+ex.what());}auto field=str(handle,kOfxImagePropField);
    // Some hosts label progressive full frames "Both"; accept that only when the clip itself is progressive.
    if(field!=kOfxImageFieldNone){OfxPropertySetHandle cp=nullptr;check(fx->clipGetPropertySet(clip,&cp),"image clip fields");auto order=str(cp,kOfxImageClipPropFieldOrder);require((field.empty()||field==kOfxImageFieldBoth)&&order==kOfxImageFieldNone,"Fielded image unsupported: image="+field+", clip="+order);}
 
@@ -1037,6 +1040,7 @@ void finish(const Settings&s,int time,int w,int h,const std::vector<float>&src,c
  }});
 }
 #include "prepare_shot.h"
+#include "preview_render.h"
 OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
  auto&i=instance(e);
  struct CompleteTiming {
@@ -1044,9 +1048,9 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
   std::chrono::steady_clock::time_point start=std::chrono::steady_clock::now();
   ~CompleteTiming(){if(success){char line[180];std::snprintf(line,sizeof line," frame %d complete render %.3f ms (includes fetch, masks, blend, validation and output)",frame,std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count());adrlog::info(i.label()+line);}}
  } completeTiming{i,frameTime(in)};
- // Reject unsupported thumbnail/proxy requests before the error cleanup:
- // they have not touched the full-resolution sequence or its useful cache.
- scaleOne(in);
+ const double sx=number(in,kOfxImageEffectPropRenderScale,0),sy=number(in,kOfxImageEffectPropRenderScale,1);
+ require(sx>0&&sx<=1&&sy>0&&sy<=1,"Invalid render scale");
+ if(sx!=1.||sy!=1.)return renderPreview(e,in,i,sx,sy);
  try{
 #if ADR_HOST_METAL_TRANSPORT
   HostMetalScope transport(in);
@@ -1439,13 +1443,13 @@ ss(p,kOfxPropLabel,ADR_PLUGIN_LABEL);ss(p,kOfxImageEffectPluginPropGrouping,"Fab
   const int t=frameTime(in);auto&i=instance(e);const auto r=sourceRange(i);
   double v[2]={double(t),double(t)};
   if(t>=r[0]&&t<=r[1]&&(i.prepareRequested||(paint_ui::getInt(e,"paint_source_kind")==0&&!untouchedSpanish(e,t)))){
-   if(spanishWindow(e,t)){if(!spanishCleanCached(e,t)){v[0]=std::max(r[0],t-kSpanishBack);v[1]=std::min(r[1],t+kSpanishAhead);}}
+   if(spanishWindow(e,t)){if(!nativeScale(in)||!spanishCleanCached(e,t)){v[0]=std::max(r[0],t-kSpanishBack);v[1]=std::min(r[1],t+kSpanishAhead);}}
    else{v[0]=r[0];v[1]=i.prepareRequested||i.calculateRequested||i.recoveryState==Instance::Queued||i.recoveryState==Instance::Running?r[1]:std::min(r[1],t+4);}
   }
   {const double now[2]={double(t),double(t)};prop->propSetDoubleN(out,"OfxImageClipPropFrameRange_Original",2,now);}
   return prop->propSetDoubleN(out,"OfxImageClipPropFrameRange_Source",2,v);
  }
- if(!std::strcmp(action,kOfxImageEffectActionGetRegionOfDefinition)||!std::strcmp(action,kOfxImageEffectActionGetRegionsOfInterest)){scaleOne(in);OfxRectD rod;check(fx->clipGetRegionOfDefinition(instance(e).source,number(in,kOfxPropTime),&rod),"source RoD");double v[]={rod.x1,rod.y1,rod.x2,rod.y2};return prop->propSetDoubleN(out,!std::strcmp(action,kOfxImageEffectActionGetRegionOfDefinition)?kOfxImageEffectPropRegionOfDefinition:"OfxImageClipPropRoI_Source",4,v);}
+ if(!std::strcmp(action,kOfxImageEffectActionGetRegionOfDefinition)||!std::strcmp(action,kOfxImageEffectActionGetRegionsOfInterest)){require(number(in,kOfxImageEffectPropRenderScale,0)>0&&number(in,kOfxImageEffectPropRenderScale,1)>0,"Invalid metadata render scale");OfxRectD rod;check(fx->clipGetRegionOfDefinition(instance(e).source,number(in,kOfxPropTime),&rod),"source RoD");double v[]={rod.x1,rod.y1,rod.x2,rod.y2};return prop->propSetDoubleN(out,!std::strcmp(action,kOfxImageEffectActionGetRegionOfDefinition)?kOfxImageEffectPropRegionOfDefinition:"OfxImageClipPropRoI_Source",4,v);}
  if(!std::strcmp(action,kOfxImageEffectActionGetClipPreferences)){si(out,kOfxImageEffectFrameVarying,1);
   // Alpha passes through unchanged, so the output keeps the source's
   // premultiplication state (an opaque source stays opaque downstream).

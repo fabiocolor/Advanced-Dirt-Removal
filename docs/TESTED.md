@@ -432,3 +432,35 @@ for normal use. The existing prepared-original export workflow remains
 available. Live processing retains conservative temporal frame declarations.
 Windows/Linux execution, other Macs and physical tablet latency have not been
 qualified for these changes. Public installers and release approval are unchanged.
+
+### Reduced Resolve renders — 17 November 2026 (local Mac test build)
+
+The development adapter now handles host-requested reduced-resolution images,
+including anisotropic thumbnails and viewer requests. Recovery and Spanish
+painting map the saved canonical stroke geometry to that derivative grid.
+Connected originals and prepared sources retain their normal finishing views.
+Live preview cleaning runs in an independent sequence; images smaller than the
+engine minimum are edge-padded and cropped for this derivative only. Native
+processing, temporal history, paint dimensions and saved recovery files are not
+replaced by preview results. A queued whole-shot calculation remains pending
+for a native render. Reduced live cleaning/classification is a preview estimate,
+not a claim of equality with a downsampled native result.
+
+Resolve's normal application launcher does not discover the per-user test
+bundle on this Mac. Quit Resolve and use `tools/open_resolve_test.command` to
+include the per-user OFX directory when opening the development build. The
+system installation and published installers are separate.
+
+On Apple M5 Pro / Resolve Studio 21.1.1.10, fresh 92×46 thumbnails and
+576×324 viewer requests completed without render errors. The same real-footage
+frame exported as RGB-float EXR from Color and Edit matched the pre-change
+native samples exactly (maximum absolute difference 0). This is one native
+frame, not a whole-shot or operator quality approval.
+
+All 58 deterministic engine fixtures passed on CPU and Metal, including their
+shot/flash guards and extended-range cases. Both OFX contracts and the three
+CTests passed. Additional contract checks cover tiny and anisotropic Recovery/
+Spanish endpoints, rounded proxy dimensions, alpha, independent live-preview
+engine output, return to unchanged native rendering, and thumbnail auto
+recovery without consuming queued native analysis or writing proxy mattes.
+Other systems and physical tablet feel were not tested by this change.

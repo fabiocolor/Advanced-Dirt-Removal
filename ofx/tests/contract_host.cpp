@@ -47,7 +47,8 @@ OfxStatus clipHandle(OfxImageEffectHandle e,const char*n,OfxImageClipHandle*c,Of
 OfxStatus clipProps(OfxImageClipHandle c,OfxPropertySetHandle*p){*p=H(reinterpret_cast<Clip*>(c)->props);return 0;}
 OfxStatus getImage(OfxImageClipHandle c,double t,const OfxRectD*,OfxPropertySetHandle*p){auto&clip=*reinterpret_cast<Clip*>(c);if(clip.mask)++maskFetches;if(!clip.output&&enforceFrameRange&&(t<declaredFrameRange[0]||t>declaredFrameRange[1])){++undeclaredFetches;std::cerr<<"FAIL: source fetch "<<t<<" outside declared range "<<declaredFrameRange[0]<<".."<<declaredFrameRange[1]<<"\n";return kOfxStatFailed;}if(duringImage){auto callback=std::move(duringImage);duringImage=nullptr;callback();}if(slowImageOnce){slowImageOnce=false;std::this_thread::sleep_for(std::chrono::milliseconds(5300));}if(!clip.output)fetched.push_back(int(t));if(!clip.output&&int(t)==missing)return kOfxStatFailed;auto it=clip.images.find(int(t));if(it==clip.images.end())return kOfxStatFailed;*p=H(it->second->props);++acquired;return 0;}
 OfxStatus releaseImage(OfxPropertySetHandle){++released;return 0;}
-OfxStatus rod(OfxImageClipHandle,double,OfxRectD*r){*r={-7,11,-3,14};return 0;}
+OfxRectD testRod{-7,11,-3,14};
+OfxStatus rod(OfxImageClipHandle,double,OfxRectD*r){*r=testRod;return 0;}
 int aborted(OfxImageEffectHandle){return abortEnabled&&++abortCount>12;}
 OfxStatus defineParameter(OfxParamSetHandle s,const char*t,const char*n,OfxPropertySetHandle*p){auto&items=*reinterpret_cast<std::map<std::string,Parameter>*>(s);auto inserted=items.emplace(n,Parameter{});auto&v=inserted.first->second;if(inserted.second)v.ordinal=items.size()-1;v.type=t;v.choice=std::string(t)==kOfxParamTypeChoice||std::string(t)==kOfxParamTypeBoolean||std::string(t)==kOfxParamTypeInteger;v.text=std::string(t)==kOfxParamTypeString;*p=H(v.props);return 0;}
 OfxStatus parameterHandle(OfxParamSetHandle s,const char*n,OfxParamHandle*h,OfxPropertySetHandle*p){auto&v=(*reinterpret_cast<std::map<std::string,Parameter>*>(s))[n];*h=reinterpret_cast<OfxParamHandle>(&v);if(p)*p=H(v.props);return 0;}
@@ -871,11 +872,67 @@ int main(int argc,char**argv){
  {
   const auto*sequence=instance(handle).sequence;const auto*history=instance(handle).history;
   const int cached=instance(handle).cachedFrame;const auto pixels=instance(handle).cached;
-  const auto output=e.output.images[100]->backing;const double proxy[]={.5,.5};setDoubleN(ip,kOfxImageEffectPropRenderScale,2,proxy);
-  verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)!=kOfxStatOK,"unsupported preview scale remains explicit");
+  const auto output=e.output.images[100]->backing;const double proxy[]={0,.5};setDoubleN(ip,kOfxImageEffectPropRenderScale,2,proxy);
+  verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)!=kOfxStatOK,"invalid preview scale rejected");
   verify(instance(handle).sequence==sequence&&instance(handle).history==history&&instance(handle).cachedFrame==cached&&instance(handle).cached==pixels,"rejected preview never clears full-resolution history or cleaned cache");
   verify(e.output.images[100]->backing==output,"rejected preview publishes no pixels");
   setDoubleN(ip,kOfxImageEffectPropRenderScale,2,scale);renderFrame(0);
+ }
+
+ {
+  const auto nativeRod=testRod;testRod={-7,11,double(w-7),double(h+11)};
+  const auto nativeParameters=e.parameters;auto nativeSource=std::move(e.source.images),nativeOutput=std::move(e.output.images),nativeOriginal=std::move(e.original.images);
+  const auto originalProperties=e.original.props;
+  const auto*sequence=instance(handle).sequence;const auto*history=instance(handle).history;const auto nativeCache=instance(handle).cached;
+  const int nativeW=instance(handle).frameW,nativeH=instance(handle).frameH;
+  setInt(H(e.original.props),kOfxImageClipPropConnected,0,1);
+  setInt(H(e.parameters.at("paint_source_kind").props),kOfxParamPropDefault,0,1);
+  setInt(H(e.parameters.at("auto_recovery").props),kOfxParamPropDefault,0,0);
+  setInt(H(e.parameters.at("paint").props),kOfxParamPropDefault,0,1);
+  paint::Document document;document.width=w;document.height=h;
+  paint::Stroke stroke;stroke.id=1;stroke.first=stroke.last=100;stroke.shape=paint::Shape::Rectangle;stroke.points={{.25,.25,1},{.75,.75,1}};stroke.opacity=1;stroke.softness=0;document.strokes.push_back(stroke);document.nextId=2;
+  setString(H(e.parameters.at("paint_data").props),kOfxParamPropDefault,0,paint::encode(document).c_str());
+  for(auto dimensions:{std::make_pair(92,46),std::make_pair(256,128),std::make_pair(171,117)}){
+   const int pw=dimensions.first,ph=dimensions.second;double proxy[]={pw==171?.333:double(pw)/w,pw==171?.229:double(ph)/h};setDoubleN(ip,kOfxImageEffectPropRenderScale,2,proxy);
+   std::vector<float> native(sourcePixels.begin(),sourcePixels.begin()+size_t(w)*h*3);auto clean=paint_source::preview(native,w,h,pw,ph),original=clean;for(auto&v:original)v+=.125f;
+   e.source.images[100]=frameImage(clean,0,pw,ph,true,false);e.output.images[100]=frameImage(clean,0,pw,ph,false,true);e.original.images[100]=frameImage(original,0,pw,ph,false,false);
+   // Resolve labels images scale 1 even though the action requests a proxy.
+   int proxyBounds[]={-7,11,pw-7,ph+11};setIntN(ip,kOfxImageEffectPropRenderWindow,4,proxyBounds);
+   for(int method:{0,1}){
+    setInt(H(e.parameters.at("mask_mode").props),kOfxParamPropDefault,0,method);setInt(H(e.parameters.at("view").props),kOfxParamPropDefault,0,0);
+    if(method==1){Properties query,needed;setDouble(H(query),kOfxPropTime,0,100);verify(plugin->mainEntry(kOfxImageEffectActionGetFramesNeeded,handle,H(query),H(needed))==kOfxStatOK,"frames-needed without optional render scale");}
+    verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)==kOfxStatOK,"anisotropic thumbnail and viewer proxy render");
+    Image result(reinterpret_cast<OfxImageClipHandle>(&e.output),100,nullptr,"preview result",true);Image input(reinterpret_cast<OfxImageClipHandle>(&e.source),100,nullptr,"preview input",true);
+    for(int y=0;y<ph;++y)for(int x=0;x<pw;++x){bool inside=(x+.5)/pw>.25&&(x+.5)/pw<.75&&(y+.5)/ph>.25&&(y+.5)/ph<.75;
+     for(int c=0;c<3;++c){size_t k=(size_t(y)*pw+x)*3+c;const float expected=(method==0?inside:!inside)?original[k]:clean[k];verify(result.read(x,y,c)==expected,"Recovery and Spanish proxy restore correct original/processed endpoint");}
+     verify(result.read(x,y,3)==input.read(x,y,3),"proxy alpha preserved");
+    }
+   }
+   verify(instance(handle).sequence==sequence&&instance(handle).history==history&&instance(handle).cached==nativeCache&&instance(handle).frameW==nativeW&&instance(handle).frameH==nativeH,"proxy preserves native history, pixels and paint dimensions");
+  }
+  // Live cleaning on a tiny derivative uses an isolated padded engine, not a
+  // passthrough. Compare against a separate direct-engine oracle.
+  const int pw=92,ph=46;double proxy[]={double(pw)/w,double(ph)/h};setDoubleN(ip,kOfxImageEffectPropRenderScale,2,proxy);
+  setInt(H(e.parameters.at("paint_source_kind").props),kOfxParamPropDefault,0,0);setInt(H(e.parameters.at("mask_mode").props),kOfxParamPropDefault,0,0);setString(H(e.parameters.at("paint_data").props),kOfxParamPropDefault,0,"");
+  e.source.images.clear();for(int f=0;f<count;++f){std::vector<float> native(sourcePixels.begin()+size_t(f)*w*h*3,sourcePixels.begin()+size_t(f+1)*w*h*3);auto rgb=paint_source::preview(native,w,h,pw,ph);e.source.images[f+100]=frameImage(rgb,0,pw,ph,f%2,false);}
+  std::vector<float> blank(size_t(pw)*ph*3);e.output.images[100]=frameImage(blank,0,pw,ph,false,true);int liveBounds[]={-7,11,pw-7,ph+11};setIntN(ip,kOfxImageEffectPropRenderWindow,4,liveBounds);
+  setDouble(ip,kOfxPropTime,0,100);enforceFrameRange=false;auto previewStatus=plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr);if(previewStatus)std::cerr<<lastHostMessage<<'\n';verify(previewStatus==kOfxStatOK,"tiny live-cleaning preview renders");
+  {std::string identity;auto controls=readControls(instance(handle),100,identity);if(readSettings(instance(handle),100).encoding)controls.extended_range=1;
+   char error[2048]={};std::unique_ptr<adr_sequence,decltype(&adr_sequence_destroy)> oracle(adr_sequence_create(context(),&controls,256,256,count,error,sizeof error),adr_sequence_destroy);verify(bool(oracle),"preview oracle sequence");std::vector<float> expected(size_t(256)*256*3),linear;
+   for(;;){int f=adr_sequence_pull(oracle.get(),expected.data(),size_t(256)*12,error,sizeof error);verify(f>=-1,"preview oracle pull");if(f==0)break;int next=adr_sequence_next_source(oracle.get());verify(next>=0,"preview oracle source index");Image input(reinterpret_cast<OfxImageClipHandle>(&e.source),100+next);std::vector<float> padded(size_t(256)*256*3);for(int y=0;y<256;++y)for(int x=0;x<256;++x)for(int c=0;c<3;++c)padded[(size_t(y)*256+x)*3+c]=input.read(std::min(x,pw-1),std::min(y,ph-1),c);const float* pixels=padded.data();if(readSettings(instance(handle),100).encoding){toLinear(padded,linear);pixels=linear.data();}verify(adr_sequence_push(oracle.get(),pixels,size_t(256)*12,error,sizeof error)==0,"preview oracle upload");}
+   std::vector<float> cropped(size_t(pw)*ph*3);for(int y=0;y<ph;++y)std::copy_n(expected.data()+size_t(y)*256*3,size_t(pw)*3,cropped.data()+size_t(y)*pw*3);
+   Image input(reinterpret_cast<OfxImageClipHandle>(&e.source),100),result(reinterpret_cast<OfxImageClipHandle>(&e.output),100);if(readSettings(instance(handle),100).encoding){std::vector<float> encoded;cineonDelta(previewPixels(input),cropped,encoded);cropped=std::move(encoded);}
+   for(int y=0;y<ph;++y)for(int x=0;x<pw;++x)for(int c=0;c<3;++c)verify(result.read(x,y,c)==cropped[(size_t(y)*pw+x)*3+c],"live tiny preview equals independent direct-engine crop");
+  }
+  verify(instance(handle).sequence==sequence&&instance(handle).history==history&&instance(handle).cached==nativeCache,"live preview also preserves native cache");
+  const auto previewFolder=logFolder/"preview-must-not-save-mattes";setString(H(e.parameters.at("recovery_folder").props),kOfxParamPropDefault,0,previewFolder.u8string().c_str());setInt(H(e.parameters.at("auto_recovery").props),kOfxParamPropDefault,0,1);
+  const bool queued=instance(handle).calculateRequested;const auto state=instance(handle).recoveryState.load();instance(handle).calculateRequested=true;instance(handle).recoveryState=Instance::Queued;
+  verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)==kOfxStatOK,"tiny auto-recovery preview renders");
+  verify(instance(handle).calculateRequested&&instance(handle).recoveryState==Instance::Queued&&!std::filesystem::exists(previewFolder),"preview does not consume queued native analysis or save reduced mattes");
+  instance(handle).calculateRequested=queued;instance(handle).recoveryState=state;
+  e.source.images=std::move(nativeSource);e.output.images=std::move(nativeOutput);e.original.images=std::move(nativeOriginal);e.original.props=originalProperties;e.parameters=nativeParameters;testRod=nativeRod;
+  setDoubleN(ip,kOfxImageEffectPropRenderScale,2,scale);setIntN(ip,kOfxImageEffectPropRenderWindow,4,bounds);renderFrame(0);
+  std::cout<<"proxy: anisotropic tiny/viewer Recovery and Spanish endpoints, alpha, native history isolation, live cleaning and native return passed\n";
  }
  setDouble(ip,kOfxPropTime,0,100.5);verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)!=0,"fractional time rejected");
  verify(plugin->mainEntry(kOfxActionDestroyInstance,handle,nullptr,nullptr)==0,"destroy");verify(acquired==released,"all image handles released");verify(undeclaredFetches==0,"all source fetches inside actual render declaration");verify(plugin->mainEntry(kOfxActionUnload,nullptr,nullptr,nullptr)==0,"unload");
