@@ -475,3 +475,30 @@ The saved Color test timeline reopened, reduced viewer/thumbnail renders
 completed without plugin errors, and a fresh native RGB-float frame matched
 the preceding verified build exactly. The existing release bundle hashes were
 unchanged. No special launcher is required for this installation.
+
+### Additional-source playback and recovery — 17 November 2026
+
+A subsequent operator playback failure was traced to the validation setup:
+a one-frame export had left both timeline In/Out marks on the same frame while
+loop playback was on. A rendered still had not tested playback. The playback
+marks were cleared; the validation exporter now preserves independent audio/
+video marks, render settings, playhead and page. A real-host regression restored
+video marks 5–9 and audio marks 12–18 after a one-frame export. Resolve requires
+the mark setters outside the Deliver page.
+
+Using the installed system-folder test build on the same Mac/Resolve host,
+an isolated duplicate of the connected-original setup passed fresh checks:
+all 78 unpainted Recovery frames matched the processed input exactly, and all
+78 unpainted Spanish frames matched the connected original reference within
+5.97e-8 RGB. A stroke created in the native Color viewer restored original
+pixels inside the brush while preserving processed pixels outside it; the
+Spanish result used the complementary mask. Neighboring frames were unchanged
+in Recovery and original in Spanish. The Recovery/Spanish sum agreed with the
+original-plus-processed reference within 2.99e-8 RGB. Selecting and deleting the
+test stroke returned to the zero-stroke result.
+
+Actual Color and Edit transport playback was exercised, with advancing frame
+numbers/timecode and changing viewer images. These checks establish this
+connected-source route and playback on this Mac, not a new quality approval,
+physical tablet assessment or real-time performance claim. The test strokes
+were confined to the duplicate timeline.
