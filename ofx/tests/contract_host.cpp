@@ -278,7 +278,12 @@ int main(int argc,char**argv){
    paint_ui::setInt(handle,"paint",0);paint_ui::applyChanged(handle,"mask_mode",kOfxChangeUserEdited);verify(paint_ui::getInt(handle,"paint")==1&&paint_ui::getInt(handle,"paint_tool")==paint_ui::ToolPaint&&paint_ui::getInt(handle,"paint_stroke")==0,"choosing Recovery resumes painting instead of stroke review");
    paint_ui::setInt(handle,"paint",0);paint_ui::applyChanged(handle,"mask_mode",kOfxChangePluginEdited);verify(paint_ui::getInt(handle,"paint")==0,"loading settings preserves an explicitly disabled brush");
    paint_ui::setText(handle,"paint_data","");paint_ui::setInt(handle,"paint",1);setInt(H(e.mask.props),kOfxImageClipPropConnected,0,1);paint_ui::initializePainting(handle);
-   verify(paint_ui::getInt(handle,"paint")==0,"old connected-mask project keeps its compatibility route on initialization");setInt(H(e.mask.props),kOfxImageClipPropConnected,0,0);
+   verify(paint_ui::getInt(handle,"paint")==0,"old connected-mask project keeps its compatibility route on initialization");
+   for(int sourceKind:{1,2})for(int enabled:{0,1}){
+    paint_ui::setInt(handle,"paint_source_kind",sourceKind);paint_ui::setInt(handle,"paint",enabled);paint_ui::initializePainting(handle);
+    verify(paint_ui::getInt(handle,"paint")==enabled,"explicit original/prepared source preserves saved paint on/off with a connected Mask input");
+   }
+   paint_ui::setInt(handle,"paint_source_kind",0);setInt(H(e.mask.props),kOfxImageClipPropConnected,0,0);
    paint_ui::fallbackSeek=savedFallback;hostProperties=savedHost;interacts=savedInteracts;ts.getTime=timeCursor;ts.gotoTime=nullptr;inPaintCallback=false;paint_ui::histories.erase(handle);
    std::cout<<"stroke navigation in frame order moves the playhead: passed\n";
   }

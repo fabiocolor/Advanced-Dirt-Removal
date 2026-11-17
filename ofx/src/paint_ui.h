@@ -101,6 +101,9 @@ bool restorePaint(OfxImageEffectHandle e,bool redo){
 // built-in strokes starts on its original route until Recovery is chosen.
 void initializePainting(OfxImageEffectHandle e){
  if(!paintHost()||!params->paramSetValue||!instance(e).mask||!document(e).strokes.empty())return;
+ // Resolve can expose the connected original through Mask. An explicit
+ // source route owns that input; it must not disable saved viewer painting.
+ if(getInt(e,"paint_source_kind")!=0)return;
  OfxPropertySetHandle p=nullptr;int connected=0;
  if(fx->clipGetPropertySet(instance(e).mask,&p)==kOfxStatOK&&prop->propGetInt(p,kOfxImageClipPropConnected,0,&connected)==kOfxStatOK&&connected){Updating guard;setInt(e,"paint",0);}
 }

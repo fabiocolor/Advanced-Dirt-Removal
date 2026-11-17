@@ -502,3 +502,23 @@ numbers/timecode and changing viewer images. These checks establish this
 connected-source route and playback on this Mac, not a new quality approval,
 physical tablet assessment or real-time performance claim. The test strokes
 were confined to the duplicate timeline.
+
+The restart check then exposed a separate startup issue: with no strokes,
+Resolve's connected original could be reported as a connected Mask input, so
+the legacy-mask initializer disabled painting even on the explicit Additional
+source route. The initializer now applies that compatibility behavior only to
+Clean this clip. Additional/prepared sources preserve the saved paint-enabled
+or paint-disabled state. New CPU/Metal contract cases cover both states with a
+connected Mask input; the existing legacy-mask behavior remains covered.
+A fresh normally launched Mac test build retained Paint in viewer enabled with
+an empty stroke document and Additional source selected. Resolve's own Open FX
+Overlay is activated explicitly for the working viewer.
+
+The final startup-fix binary repeated the 78-frame processed-input and
+connected-original checks with the same limits (exact processed RGB;
+5.97e-8 maximum original RGB error), plus a fresh round-brush stroke and its
+Spanish complement (2.99e-8 sum error). Native Color and Edit playback were
+repeated on that installed binary after a normal launch. The working timeline
+has no validation strokes or In/Out marks, with Recovery, Additional source,
+Paint in viewer and Open FX Overlay ready for inspection. CPU/Metal OFX
+contracts and all three CTests pass for this binary.
