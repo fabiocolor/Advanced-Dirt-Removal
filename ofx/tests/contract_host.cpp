@@ -187,6 +187,8 @@ int main(int argc,char**argv){
   for(auto&g:groups)verify(compact.parameters.at(g.name).props.strings.at(kOfxPropLabel)==std::vector<std::string>{g.label},"published automatic group labels retained");
   for(auto name:{"auto_recovery_group","processing","stroke_details_group","paint_options_group","paint_source_group","view_group","cleaning_defaults_group"})verify(compact.parameters.at(name).props.ints.at(kOfxParamPropGroupOpen)==std::vector<int>{0},"secondary groups start collapsed");
   verify(compact.parameters.at("paint_hold").props.strings.at(kOfxParamPropParent)==std::vector<std::string>{"stroke_details_group"},"duration is a stroke detail");
+  const auto&outlines=compact.parameters.at("paint_outlines").props;
+  verify(outlines.ints.at(kOfxParamPropDefault)==std::vector<int>{0}&&outlines.strings.at(kOfxParamPropParent)==std::vector<std::string>{"paint_group"},"stroke review is off by default and available beside the tool");
   const auto&children=compact.parameters.at("page_paint").props.strings.at(kOfxParamPropPageChild);for(auto name:{"paint_undo","paint_redo"})verify(std::find(children.begin(),children.end(),name)!=children.end(),"page-respecting hosts retain paint history buttons");
   hostProperties=savedHost;interacts=savedInteracts;std::cout<<"compact UI parameter contract and group defaults: passed\n";
  }
@@ -266,14 +268,24 @@ int main(int argc,char**argv){
    paint_ui::command(handle,paint_ui::Action::Next);verify(picked()==10&&moves.back()==10,"Next wraps to the first stroke");
    paint_ui::command(handle,paint_ui::Action::Previous);verify(picked()==30&&moves.back()==30,"Previous wraps to the last stroke");
    verify(paint_ui::getInt(handle,"paint_tool")==paint_ui::ToolPaint,"stroke browsing keeps Paint active");
-   paint_ui::setInt(handle,"paint_tool",paint_ui::ToolSelect);
+   const auto reviewed=paint_ui::getText(handle,"paint_data");
+   auto notifyPaint=[&](const char*name){setString(H(notification),kOfxPropName,0,name);paint_ui::changed(handle,H(notification));};
+   paint_ui::setInt(handle,"paint_outlines",1);notifyPaint("paint_outlines");
+   verify(paint_ui::getInt(handle,"paint_tool")==paint_ui::ToolSelect,"Show strokes activates Select");
    paint_ui::command(handle,paint_ui::Action::Previous);
    verify(picked()==20&&paint_ui::getInt(handle,"paint_tool")==paint_ui::ToolSelect,"stroke browsing keeps explicit Select active");
-   paint_ui::setInt(handle,"paint",0);paint_ui::setDouble(handle,"difference_threshold",7.);
-   const auto reviewed=paint_ui::getText(handle,"paint_data");
-   setString(H(notification),kOfxPropName,0,"paint_resume");paint_ui::changed(handle,H(notification));
-   verify(paint_ui::getInt(handle,"paint")==1&&paint_ui::getInt(handle,"paint_tool")==paint_ui::ToolPaint&&paint_ui::getInt(handle,"paint_stroke")==0,"Resume painting re-enables the brush and clears selection");
+   paint_ui::setDouble(handle,"difference_threshold",7.);
+   paint_ui::setInt(handle,"paint_outlines",0);notifyPaint("paint_outlines");
+   verify(paint_ui::getInt(handle,"paint")==1&&paint_ui::getInt(handle,"paint_tool")==paint_ui::ToolPaint&&paint_ui::getInt(handle,"paint_stroke")==0,"hiding strokes immediately restores Paint and clears selection");
+   verify(paint_ui::getText(handle,"paint_data")==reviewed&&paint_ui::getDouble(handle,"difference_threshold")==7.,"Show strokes preserves the stroke document and viewer threshold");
+   paint_ui::setInt(handle,"paint_tool",paint_ui::ToolSelect);notifyPaint("paint_tool");
+   verify(paint_ui::getInt(handle,"paint_outlines")==1,"choosing Select also shows stroke outlines");
+   paint_ui::setInt(handle,"paint",0);notifyPaint("paint_resume");
+   verify(paint_ui::getInt(handle,"paint")==1&&paint_ui::getInt(handle,"paint_tool")==paint_ui::ToolPaint&&paint_ui::getInt(handle,"paint_outlines")==0,"Resume painting re-enables the brush and hides outlines");
    verify(paint_ui::getText(handle,"paint_data")==reviewed&&paint_ui::getDouble(handle,"difference_threshold")==7.,"resuming preserves the stroke document and viewer threshold");
+   paint_ui::setInt(handle,"paint_tool",paint_ui::ToolSelect);paint_ui::setInt(handle,"paint_stroke",2);
+   paint_ui::refresh(handle,true);
+   verify(paint_ui::getInt(handle,"paint_tool")==paint_ui::ToolPaint&&paint_ui::getInt(handle,"paint_stroke")==0&&paint_ui::getText(handle,"paint_data")==reviewed,"saved Select with hidden outlines opens in Paint and preserves the strokes");
    paint_ui::setInt(handle,"paint_stroke",0);paint_ui::command(handle,paint_ui::Action::Previous);verify(picked()==10&&moves.back()==10,"Previous from the playhead selects the stroke before it");
    paint::Document here=strokes;here.strokes[0].first=0;here.strokes[0].last=40;paint_ui::store(handle,here);paint_ui::setInt(handle,"paint_stroke",0);const size_t before=moves.size();
    paint_ui::command(handle,paint_ui::Action::Next);verify(moves.size()==before+1&&moves.back()==0,"held stroke navigation goes to its first frame even when visible now");

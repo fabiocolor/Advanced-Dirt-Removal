@@ -66,7 +66,12 @@ void resize(paint::Stroke&s,const paint::Document&d,double size,double previous)
 // Brings the label and enabled states up to date. loadBrush: show the selected stroke's values in the controls.
 void refresh(OfxImageEffectHandle e,bool loadBrush=false){
  if(!params->paramGetValue||!params->paramSetValue)return;  // minimal test hosts
- Updating guard;auto d=document(e);int selected=getInt(e,"paint_stroke");
+ Updating guard;
+ // Older projects could save Select with its outlines hidden.
+ if(!getInt(e,"paint_outlines")&&getInt(e,"paint_tool")==ToolSelect){
+  setInt(e,"paint_tool",ToolPaint);setInt(e,"paint_stroke",0);
+ }
+ auto d=document(e);int selected=getInt(e,"paint_stroke");
  if(selected<0||selected>int(d.strokes.size())){selected=0;setInt(e,"paint_stroke",0);}
  const bool spanish=getInt(e,"mask_mode")==1;std::string info;
  if(selected){
@@ -107,7 +112,15 @@ void initializePainting(OfxImageEffectHandle e){
  OfxPropertySetHandle p=nullptr;int connected=0;
  if(fx->clipGetPropertySet(instance(e).mask,&p)==kOfxStatOK&&prop->propGetInt(p,kOfxImageClipPropConnected,0,&connected)==kOfxStatOK&&connected){Updating guard;setInt(e,"paint",0);}
 }
-void readyToPaint(OfxImageEffectHandle e){Updating guard;setInt(e,"paint",1);setInt(e,"paint_tool",ToolPaint);setInt(e,"paint_stroke",0);}
+void readyToPaint(OfxImageEffectHandle e){
+ Updating guard;
+ setInt(e,"paint",1);setInt(e,"paint_tool",ToolPaint);setInt(e,"paint_outlines",0);setInt(e,"paint_stroke",0);
+}
+void setStrokeReview(OfxImageEffectHandle e,bool show){
+ if(!show){readyToPaint(e);return;}
+ Updating guard;
+ setInt(e,"paint",1);setInt(e,"paint_outlines",1);setInt(e,"paint_tool",ToolSelect);
+}
 std::map<OfxImageEffectHandle,double> cursorTimes;
 void observeTime(OfxImageEffectHandle e,OfxPropertySetHandle in){double t=0;if(in&&prop->propGetDouble(in,kOfxPropTime,0,&t)==kOfxStatOK&&std::isfinite(t))cursorTimes[e]=t;}
 bool playhead(OfxImageEffectHandle e,double&t){
@@ -145,9 +158,11 @@ void command(OfxImageEffectHandle e,Action action){
  auto d=document(e);int selected=getInt(e,"paint_stroke");const bool has=selected>0&&selected<=int(d.strokes.size());const int count=int(d.strokes.size());
  switch(action){
   case A::UndoPaint:case A::RedoPaint:restorePaint(e,action==A::RedoPaint);return;
-  case A::Paint:case A::Erase:case A::Select:{Updating guard;setInt(e,"paint_tool",action==A::Paint?ToolPaint:action==A::Erase?ToolErase:ToolSelect);if(action!=A::Select)setInt(e,"paint_stroke",0);refresh(e);return;}
+  case A::Paint:readyToPaint(e);refresh(e);return;
+  case A::Select:setStrokeReview(e,true);refresh(e);return;
+  case A::Erase:{Updating guard;setInt(e,"paint_tool",ToolErase);setInt(e,"paint_stroke",0);refresh(e);return;}
   case A::Previous:case A::Next:if(!count)return;step(e,d,has?selected:0,action==A::Next);refresh(e,true);return;
-  case A::Outlines:{Updating guard;setInt(e,"paint_outlines",!getInt(e,"paint_outlines"));return;}
+  case A::Outlines:setStrokeReview(e,!getInt(e,"paint_outlines"));refresh(e);return;
   case A::View1:case A::View2:case A::View3:case A::View4:{const int v=int(action)-int(A::View1);if(getInt(e,"view")==v)return;Undo undo(e,"View");Updating guard;setInt(e,"view",v);return;}
   case A::Mode:{Undo undo(e,"Recovery mode");{Updating guard;setInt(e,"mask_mode",!getInt(e,"mask_mode"));readyToPaint(e);}refresh(e);return;}
   case A::Delete:case A::Toggle:if(!has)return;break;
@@ -177,11 +192,18 @@ struct ChangeBatch {int depth=0;std::vector<std::pair<std::string,std::string>> 
 std::map<OfxImageEffectHandle,ChangeBatch> changeBatches;
 void applyChanged(OfxImageEffectHandle e,const std::string&name,const char*reason){
  if(updating)return;
+ const bool userEdited=reason&&!std::strcmp(reason,kOfxChangeUserEdited);
  if(name=="paint_data"||name=="paint_stroke"){if(name=="paint_data")histories.erase(e);refresh(e,true);return;}
- if(name=="mask_mode"){if(reason&&!std::strcmp(reason,kOfxChangeUserEdited))readyToPaint(e);refresh(e);return;}
+ if(name=="mask_mode"){if(userEdited)readyToPaint(e);refresh(e);return;}
  if(name=="paint_source_kind"){updateRecoveryEnabled(instance(e));refreshRecoveryUI(e);return;}
- if(name=="paint_tool"){if(getInt(e,"paint_tool")!=ToolSelect&&getInt(e,"paint_stroke")){Updating guard;setInt(e,"paint_stroke",0);}refresh(e);return;}
- if(!reason||std::strcmp(reason,kOfxChangeUserEdited))return;
+ if(name=="paint_tool"){
+  const int tool=getInt(e,"paint_tool");
+  if(tool==ToolSelect&&userEdited)setStrokeReview(e,true);
+  else if(tool!=ToolSelect&&getInt(e,"paint_stroke")){Updating guard;setInt(e,"paint_stroke",0);}
+  refresh(e);return;
+ }
+ if(!userEdited)return;
+ if(name=="paint_outlines"){setStrokeReview(e,getInt(e,"paint_outlines")!=0);refresh(e);return;}
  if(name=="paint_resume"){readyToPaint(e);refresh(e);return;}
  if(name=="paint_previous"){command(e,Action::Previous);return;}
  if(name=="paint_next"){command(e,Action::Next);return;}
@@ -236,8 +258,9 @@ void define(OfxParamSetHandle ps,bool visible,bool groupDefined=false){
  auto label=[&](const char*name,const char*text,const char*parent,const char*initial){auto p=make(kOfxParamTypeString,name,text,parent,nullptr);ss(p,kOfxParamPropStringMode,kOfxParamStringIsLabel);ss(p,kOfxParamPropDefault,initial);si(p,kOfxParamPropPersistant,0);};
  if(!groupDefined){auto p=make(kOfxParamTypeGroup,"paint_group","Paint",nullptr,nullptr);si(p,kOfxParamPropGroupOpen,1);}
  boolean("paint","Paint in viewer","paint_group","Paint directly in this effect's viewer (turn on Open FX Overlay). Recovery gives original detail back; Spanish dirt removal repairs only where painted. No separate Mask Paint is needed. While editing is enabled or strokes exist, the built-in brush replaces the legacy external mask.",visible?1:0,true);
+ boolean("paint_outlines","Show strokes","paint_group","Show the strokes on the current frame and activate Select. Turn off to hide the outlines and return to Paint.",0);
  choice("paint_tool","Tool","paint_group","Paint, Erase (take paint away) or Select (click a stroke to select, move or resize it).",{"Paint","Erase","Select"});
- make(kOfxParamTypePushButton,"paint_resume","Resume painting","paint_group","Clear the selection, enable viewer painting and switch to Paint.");
+ make(kOfxParamTypePushButton,"paint_resume","Resume painting","paint_group","Hide stroke outlines, clear the selection and enable Paint.");
  choice("paint_shape","Brush","paint_group","Round or square brush, or a rectangle dragged from corner to corner.",{"Round","Square","Rectangle"});
  real("paint_size","Size","paint_group","Brush diameter in picture pixels. Shift-drag in the viewer.",80,1,2048,400);
  real("paint_softness","Softness","paint_group","0 is a hard edge. Option/Alt-drag in the viewer.",.5,0,1,1);
@@ -256,7 +279,6 @@ void define(OfxParamSetHandle ps,bool visible,bool groupDefined=false){
  {auto p=make(kOfxParamTypeGroup,"paint_options_group","Brush options",detailsParent,nullptr);si(p,kOfxParamPropGroupOpen,0);}
  real("paint_smoothing","Smoothing","paint_options_group","Smooths the pen path while you paint.",.2,0,.95,.95);
  boolean("paint_pressure","Tablet pressure","paint_options_group","Pen pressure changes the brush size. Leave off for a mouse.",0);
- boolean("paint_outlines","Show strokes","paint_options_group","Outline every stroke in the viewer. When off, only the selected stroke is outlined. Outlines never render.",0);
  {auto p=make(kOfxParamTypeGroup,"paint_source_group","Source setup",detailsParent,nullptr);si(p,kOfxParamPropGroupOpen,0);}
  {auto p=make(kOfxParamTypeChoice,"paint_source_kind","Paint source","paint_source_group","Clean this clip: repair this input. Additional source: paint a processed picture back to the aligned original connected to the second input.",true);ss(p,kOfxParamPropChoiceOption,"Clean this clip",0);ss(p,kOfxParamPropChoiceOption,"Additional source",1);if(preparationAvailable())ss(p,kOfxParamPropChoiceOption,"Prepared shot (experimental)",2);si(p,kOfxParamPropDefault,0);}
  {auto p=make(kOfxParamTypeString,"paint_source_folder","Original folder","paint_source_group","Run Prepare ADR Recovery Source with the processed export on V2 and the aligned original on V1. Keep the verified source folder with the project.",true);ss(p,kOfxParamPropStringMode,kOfxParamStringIsDirectoryPath);ss(p,kOfxParamPropDefault,"");si(p,kOfxParamPropSecret,1);}
@@ -346,15 +368,15 @@ void brushOutline(const Overlay&o,const paint::Point&p,double diameter,paint::Sh
 void draw(Overlay&o,OfxPropertySetHandle in){
  auto e=o.effect;observeTime(e,in);const double time=number(in,kOfxPropTime);geometry(o,time);readScale(o,in);
  // Read every host value before touching GL state.
- const auto d=document(e);const int selected=getInt(e,"paint_stroke"),outlines=getInt(e,"paint_outlines"),tool=getInt(e,"paint_tool");
+ const bool outlines=getInt(e,"paint_outlines")!=0;
+ const auto d=outlines?document(e):paint::Document{};
+ const int selected=outlines?getInt(e,"paint_stroke"):0,tool=getInt(e,"paint_tool");
  const double diameter=getDouble(e,"paint_size"),softness=getDouble(e,"paint_softness");const auto shape=paint::Shape(getInt(e,"paint_shape"));
  if(!paint_gl::ready())return;
  paint_gl::Scope gl;
- // Show strokes outlines all strokes on this frame. Always show the selection.
  for(size_t j=0;j<d.strokes.size();++j){
   const auto&s=d.strokes[j];if(time<s.first||time>s.last)continue;
   const bool isSelected=int(j+1)==selected;
-  if(!outlines&&!isSelected)continue;
   if(isSelected)paint_gl::color(1,.85f,0,1);else if(!s.enabled)paint_gl::color(.5f,.5f,.5f,.5f);else if(s.erase)paint_gl::color(1,.35f,.25f,.7f);else paint_gl::color(.1f,1,.7f,.7f);
   if(s.shape==paint::Shape::Rectangle){
    box(o,s.points[0],s.points[1]);

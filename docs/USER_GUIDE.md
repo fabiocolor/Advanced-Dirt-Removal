@@ -114,7 +114,7 @@ stroke and while brush editing is off. This prevents overlapping corrections.
 Development build only. Existing 2.0 installers do not include viewer painting.
 
 The original automatic controls stay first. **Manual recovery / Spanish**
-contains **Method**, Paint in viewer, Tool, Brush, Size, Softness, Opacity,
+contains **Method**, Paint in viewer, Show strokes, Tool, Brush, Size, Softness, Opacity,
 selection status and Undo/Redo. Its collapsed **Strokes**, **Brush options** and
 **Source setup** sections contain the remaining manual controls. Collapse
 Detection while concentrating on painting; available panel height and display
@@ -170,18 +170,17 @@ uses `%LOCALAPPDATA%\FabioColor\AdvancedDirtRemoval\Defaults`, and Linux uses
 Once loaded, settings are stored in the project; the project does not require
 those preference files on another machine.
 
-The viewer outlines the selected stroke. **Show strokes**, under **Brush
-options**, outlines all strokes on the current frame. **Previous stroke** and
-**Next stroke** select strokes in frame order and move the playhead while
-keeping the active tool. If you are already in **Paint**, the next brush drag
-starts a new stroke.
+The viewer starts with stroke outlines hidden. Turn on **Show strokes** to
+outline the strokes on the current frame and activate **Select**. Click a
+stroke to edit it, or use **Previous stroke** and **Next stroke** to visit strokes
+in frame order. These buttons keep the active tool.
 On Resolve Studio, stroke navigation requires **Preferences → System → General →
 External scripting using: Local**. The plugin uses Resolve's bundled scripting
 interpreter; no separate Python installation is needed.
 
 **Select** lets you move a stroke or resize a rectangle by its corner handles.
-Click **Resume painting** to clear the selection and return to **Paint** with
-your current viewer settings.
+Turn off **Show strokes** or click **Resume painting** to hide the outlines,
+clear the selection and return to **Paint**.
 The visible controls edit its size, softness and opacity; open **Strokes**
 for duration, enable state, deletion and rectangle dimensions. **Delete stroke**
 removes it; **Undo paint** brings it back, including its properties and selection.
@@ -363,9 +362,9 @@ navigation uses Resolve's bundled Lua interpreter and local scripting API when
 the OFX timeline suite cannot seek. There is no Python dependency or utility to
 launch. Resolve Studio must allow Local external scripting. Mapping follows the
 current clip and trims; navigation does not change stroke data or image pixels.
-**Show strokes** defaults off. Painting shows the result and brush cursor; an
-explicit Select action shows only the selected shape. Turn Show strokes on for
-review when outlines are useful.
+**Show strokes** defaults off. Painting shows the result and brush cursor.
+Turn on **Show strokes** to select and edit existing strokes. Turn it off to
+resume painting.
 
 
 ## Painting performance (development build)
