@@ -154,7 +154,7 @@ int main(int argc,char**argv){
  verify(rejectedMetalSupport>=2,"CPU-only host rejects optional GPU extensions without preventing discovery");
 #endif
  rejectMetalSupport=false;verify(plugin->mainEntry(kOfxActionDescribe,handle,nullptr,nullptr)==kOfxStatOK,"GPU-capable descriptor also accepted");
- verify(plugin->mainEntry(kOfxImageEffectActionDescribeInContext,handle,ip,nullptr)==0,"context");verify(e.parameters.size()==77,"all controls, groups and pages exposed");verify(e.parameters.count("page_paint")==0&&e.parameters["paint"].props.ints[kOfxParamPropSecret]==std::vector<int>{1}&&e.parameters["paint_tool"].props.ints[kOfxParamPropSecret]==std::vector<int>{1},"viewer painting hidden outside Resolve");verify(e.props.pointers.count(kOfxImageEffectPluginPropOverlayInteractV1)==0,"no viewer overlay outside Resolve");for(auto pg:{"page_cleaning","page_recovery","page_view"})verify(e.parameters.count(pg)==1,"inspector page defined");for(auto g:{"detection","processing","safeguards"})verify(e.parameters.count(g)==1,"control group defined");verify(e.parameters["sensitivity"].props.strings[kOfxParamPropParent]==std::vector<std::string>{"detection"},"controls are grouped");verify(plugin->mainEntry(kOfxActionCreateInstance,handle,nullptr,nullptr)==0,"create");
+ verify(plugin->mainEntry(kOfxImageEffectActionDescribeInContext,handle,ip,nullptr)==0,"context");verify(e.parameters.size()==78,"all controls, groups and pages exposed");verify(e.parameters.count("page_paint")==0&&e.parameters["paint"].props.ints[kOfxParamPropSecret]==std::vector<int>{1}&&e.parameters["paint_tool"].props.ints[kOfxParamPropSecret]==std::vector<int>{1},"viewer painting hidden outside Resolve");verify(e.props.pointers.count(kOfxImageEffectPluginPropOverlayInteractV1)==0,"no viewer overlay outside Resolve");for(auto pg:{"page_cleaning","page_recovery","page_view"})verify(e.parameters.count(pg)==1,"inspector page defined");for(auto g:{"detection","processing","safeguards"})verify(e.parameters.count(g)==1,"control group defined");verify(e.parameters["sensitivity"].props.strings[kOfxParamPropParent]==std::vector<std::string>{"detection"},"controls are grouped");verify(plugin->mainEntry(kOfxActionCreateInstance,handle,nullptr,nullptr)==0,"create");
  // Compact Resolve presentation preserves every existing value/type/range/choice.
  // The normal-host descriptor is an independent ordering of the same controls.
  {
@@ -260,11 +260,20 @@ int main(int argc,char**argv){
    paint::Document strokes;strokes.width=1920;strokes.height=1080;strokes.nextId=4;
    for(int f:{30,10,20}){paint::Stroke s;s.id=int(strokes.strokes.size())+1;s.first=s.last=f;s.points.push_back({.5,.5,1});strokes.strokes.push_back(s);}
    paint_ui::store(handle,strokes);paint_ui::setInt(handle,"paint_stroke",0);paint_ui::setInt(handle,"paint_tool",paint_ui::ToolPaint);inPaintCallback=true;
-   auto picked=[&]{return paint_ui::document(handle).strokes[size_t(paint_ui::getInt(handle,"paint_stroke")-1)].first;};
-   paint_ui::command(handle,paint_ui::Action::Next);verify(picked()==20&&moves==std::vector<double>{20}&&paint_ui::getInt(handle,"paint_tool")==paint_ui::ToolSelect,"Next from the playhead selects the next stroke in frame order and goes to it");
+   auto picked=[&]{return paint_ui::document(handle).strokes.at(size_t(paint_ui::getInt(handle,"paint_stroke")-1)).first;};
+   paint_ui::command(handle,paint_ui::Action::Next);verify(picked()==20&&moves==std::vector<double>{20},"Next from the playhead selects the next stroke in frame order and goes to it");
    paint_ui::command(handle,paint_ui::Action::Next);verify(picked()==30&&moves.back()==30,"Next follows frame order, not paint order");
    paint_ui::command(handle,paint_ui::Action::Next);verify(picked()==10&&moves.back()==10,"Next wraps to the first stroke");
    paint_ui::command(handle,paint_ui::Action::Previous);verify(picked()==30&&moves.back()==30,"Previous wraps to the last stroke");
+   verify(paint_ui::getInt(handle,"paint_tool")==paint_ui::ToolPaint,"stroke browsing keeps Paint active");
+   paint_ui::setInt(handle,"paint_tool",paint_ui::ToolSelect);
+   paint_ui::command(handle,paint_ui::Action::Previous);
+   verify(picked()==20&&paint_ui::getInt(handle,"paint_tool")==paint_ui::ToolSelect,"stroke browsing keeps explicit Select active");
+   paint_ui::setInt(handle,"paint",0);paint_ui::setDouble(handle,"difference_threshold",7.);
+   const auto reviewed=paint_ui::getText(handle,"paint_data");
+   setString(H(notification),kOfxPropName,0,"paint_resume");paint_ui::changed(handle,H(notification));
+   verify(paint_ui::getInt(handle,"paint")==1&&paint_ui::getInt(handle,"paint_tool")==paint_ui::ToolPaint&&paint_ui::getInt(handle,"paint_stroke")==0,"Resume painting re-enables the brush and clears selection");
+   verify(paint_ui::getText(handle,"paint_data")==reviewed&&paint_ui::getDouble(handle,"difference_threshold")==7.,"resuming preserves the stroke document and viewer threshold");
    paint_ui::setInt(handle,"paint_stroke",0);paint_ui::command(handle,paint_ui::Action::Previous);verify(picked()==10&&moves.back()==10,"Previous from the playhead selects the stroke before it");
    paint::Document here=strokes;here.strokes[0].first=0;here.strokes[0].last=40;paint_ui::store(handle,here);paint_ui::setInt(handle,"paint_stroke",0);const size_t before=moves.size();
    paint_ui::command(handle,paint_ui::Action::Next);verify(moves.size()==before+1&&moves.back()==0,"held stroke navigation goes to its first frame even when visible now");

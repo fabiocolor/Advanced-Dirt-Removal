@@ -107,7 +107,6 @@ void initializePainting(OfxImageEffectHandle e){
  OfxPropertySetHandle p=nullptr;int connected=0;
  if(fx->clipGetPropertySet(instance(e).mask,&p)==kOfxStatOK&&prop->propGetInt(p,kOfxImageClipPropConnected,0,&connected)==kOfxStatOK&&connected){Updating guard;setInt(e,"paint",0);}
 }
-void select(OfxImageEffectHandle e,int stroke){Updating guard;setInt(e,"paint_stroke",stroke);if(stroke)setInt(e,"paint_tool",ToolSelect);}
 void readyToPaint(OfxImageEffectHandle e){Updating guard;setInt(e,"paint",1);setInt(e,"paint_tool",ToolPaint);setInt(e,"paint_stroke",0);}
 std::map<OfxImageEffectHandle,double> cursorTimes;
 void observeTime(OfxImageEffectHandle e,OfxPropertySetHandle in){double t=0;if(in&&prop->propGetDouble(in,kOfxPropTime,0,&t)==kOfxStatOK&&std::isfinite(t))cursorTimes[e]=t;}
@@ -118,7 +117,7 @@ bool playhead(OfxImageEffectHandle e,double&t){
 using SeekFallback=bool(*)(void*,double,double,int,int);
 SeekFallback fallbackSeek=paint_navigation::request;
 // Previous/Next stroke: strokes in frame order. With nothing selected, start
-// from the playhead. The playhead moves to the stroke so it can be seen.
+// from the playhead. Move to the stroke and keep the active pointer tool.
 void step(OfxImageEffectHandle e,const paint::Document&d,int selected,bool next){
  const int count=int(d.strokes.size());if(!count)return;
  std::vector<int> order(static_cast<size_t>(count));for(int k=0;k<count;++k)order[size_t(k)]=k;
@@ -129,7 +128,8 @@ void step(OfxImageEffectHandle e,const paint::Document&d,int selected,bool next)
   if(next){at=0;if(known)for(int k=0;k<count;++k)if(d.strokes[size_t(order[size_t(k)])].last>=now){at=k;break;}}
   else{at=count-1;if(known)for(int k=count-1;k>=0;--k)if(d.strokes[size_t(order[size_t(k)])].first<=now){at=k;break;}}
  }else at=(at+(next?1:count-1))%count;
- const int chosen=order[size_t(at)];select(e,chosen+1);
+ const int chosen=order[size_t(at)];
+ {Updating guard;setInt(e,"paint_stroke",chosen+1);}
  const auto&s=d.strokes[size_t(chosen)];
  {
   const auto status=timeline&&timeline->gotoTime?timeline->gotoTime(e,double(s.first)):kOfxStatErrUnsupported;
@@ -182,6 +182,7 @@ void applyChanged(OfxImageEffectHandle e,const std::string&name,const char*reaso
  if(name=="paint_source_kind"){updateRecoveryEnabled(instance(e));refreshRecoveryUI(e);return;}
  if(name=="paint_tool"){if(getInt(e,"paint_tool")!=ToolSelect&&getInt(e,"paint_stroke")){Updating guard;setInt(e,"paint_stroke",0);}refresh(e);return;}
  if(!reason||std::strcmp(reason,kOfxChangeUserEdited))return;
+ if(name=="paint_resume"){readyToPaint(e);refresh(e);return;}
  if(name=="paint_previous"){command(e,Action::Previous);return;}
  if(name=="paint_next"){command(e,Action::Next);return;}
  if(name=="paint_delete"){command(e,Action::Delete);return;}
@@ -236,6 +237,7 @@ void define(OfxParamSetHandle ps,bool visible,bool groupDefined=false){
  if(!groupDefined){auto p=make(kOfxParamTypeGroup,"paint_group","Paint",nullptr,nullptr);si(p,kOfxParamPropGroupOpen,1);}
  boolean("paint","Paint in viewer","paint_group","Paint directly in this effect's viewer (turn on Open FX Overlay). Recovery gives original detail back; Spanish dirt removal repairs only where painted. No separate Mask Paint is needed. While editing is enabled or strokes exist, the built-in brush replaces the legacy external mask.",visible?1:0,true);
  choice("paint_tool","Tool","paint_group","Paint, Erase (take paint away) or Select (click a stroke to select, move or resize it).",{"Paint","Erase","Select"});
+ make(kOfxParamTypePushButton,"paint_resume","Resume painting","paint_group","Clear the selection, enable viewer painting and switch to Paint.");
  choice("paint_shape","Brush","paint_group","Round or square brush, or a rectangle dragged from corner to corner.",{"Round","Square","Rectangle"});
  real("paint_size","Size","paint_group","Brush diameter in picture pixels. Shift-drag in the viewer.",80,1,2048,400);
  real("paint_softness","Softness","paint_group","0 is a hard edge. Option/Alt-drag in the viewer.",.5,0,1,1);
@@ -254,7 +256,7 @@ void define(OfxParamSetHandle ps,bool visible,bool groupDefined=false){
  {auto p=make(kOfxParamTypeGroup,"paint_options_group","Brush options",detailsParent,nullptr);si(p,kOfxParamPropGroupOpen,0);}
  real("paint_smoothing","Smoothing","paint_options_group","Smooths the pen path while you paint.",.2,0,.95,.95);
  boolean("paint_pressure","Tablet pressure","paint_options_group","Pen pressure changes the brush size. Leave off for a mouse.",0);
- boolean("paint_outlines","Show strokes","paint_options_group","Outline every stroke in the viewer. Off: you see only the result and the brush; a stroke you select with Select is outlined. Never rendered.",0);
+ boolean("paint_outlines","Show strokes","paint_options_group","Outline every stroke in the viewer. When off, only the selected stroke is outlined. Outlines never render.",0);
  {auto p=make(kOfxParamTypeGroup,"paint_source_group","Source setup",detailsParent,nullptr);si(p,kOfxParamPropGroupOpen,0);}
  {auto p=make(kOfxParamTypeChoice,"paint_source_kind","Paint source","paint_source_group","Clean this clip: repair this input. Additional source: paint a processed picture back to the aligned original connected to the second input.",true);ss(p,kOfxParamPropChoiceOption,"Clean this clip",0);ss(p,kOfxParamPropChoiceOption,"Additional source",1);if(preparationAvailable())ss(p,kOfxParamPropChoiceOption,"Prepared shot (experimental)",2);si(p,kOfxParamPropDefault,0);}
  {auto p=make(kOfxParamTypeString,"paint_source_folder","Original folder","paint_source_group","Run Prepare ADR Recovery Source with the processed export on V2 and the aligned original on V1. Keep the verified source folder with the project.",true);ss(p,kOfxParamPropStringMode,kOfxParamStringIsDirectoryPath);ss(p,kOfxParamPropDefault,"");si(p,kOfxParamPropSecret,1);}
@@ -348,15 +350,15 @@ void draw(Overlay&o,OfxPropertySetHandle in){
  const double diameter=getDouble(e,"paint_size"),softness=getDouble(e,"paint_softness");const auto shape=paint::Shape(getInt(e,"paint_shape"));
  if(!paint_gl::ready())return;
  paint_gl::Scope gl;
- // Strokes stay off the picture: only the result shows. Show strokes outlines
- // them all; otherwise only the stroke deliberately selected with Select.
+ // Show strokes outlines all strokes on this frame. Always show the selection.
  for(size_t j=0;j<d.strokes.size();++j){
   const auto&s=d.strokes[j];if(time<s.first||time>s.last)continue;
-  if(!outlines&&!(tool==ToolSelect&&int(j+1)==selected))continue;
-  if(int(j+1)==selected)paint_gl::color(1,.85f,0,1);else if(!s.enabled)paint_gl::color(.5f,.5f,.5f,.5f);else if(s.erase)paint_gl::color(1,.35f,.25f,.7f);else paint_gl::color(.1f,1,.7f,.7f);
+  const bool isSelected=int(j+1)==selected;
+  if(!outlines&&!isSelected)continue;
+  if(isSelected)paint_gl::color(1,.85f,0,1);else if(!s.enabled)paint_gl::color(.5f,.5f,.5f,.5f);else if(s.erase)paint_gl::color(1,.35f,.25f,.7f);else paint_gl::color(.1f,1,.7f,.7f);
   if(s.shape==paint::Shape::Rectangle){
    box(o,s.points[0],s.points[1]);
-   if(int(j+1)==selected){const double rx=4*o.pixelScale[0]/(o.rod.x2-o.rod.x1),ry=4*o.pixelScale[1]/(o.rod.y2-o.rod.y1);for(auto q:corners(s))box(o,{q.x-rx,q.y-ry,1},{q.x+rx,q.y+ry,1});}
+   if(isSelected&&tool==ToolSelect){const double rx=4*o.pixelScale[0]/(o.rod.x2-o.rod.x1),ry=4*o.pixelScale[1]/(o.rod.y2-o.rod.y1);for(auto q:corners(s))box(o,{q.x-rx,q.y-ry,1},{q.x+rx,q.y+ry,1});}
    continue;
   }
   paint_gl::strip();for(auto&q:s.points)paint_gl::vertex(X(o,q.x),Y(o,q.y));paint_gl::end();

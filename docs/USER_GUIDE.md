@@ -170,15 +170,18 @@ uses `%LOCALAPPDATA%\FabioColor\AdvancedDirtRemoval\Defaults`, and Linux uses
 Once loaded, settings are stored in the project; the project does not require
 those preference files on another machine.
 
-Strokes stay off the picture: you see only the result and the brush. A stroke
-you pick with **Select** is outlined; **Show strokes**, under **Brush options**,
-outlines all of them. **Previous stroke** and **Next stroke** go through the
-strokes in frame order and move the playhead to each one.
+The viewer outlines the selected stroke. **Show strokes**, under **Brush
+options**, outlines all strokes on the current frame. **Previous stroke** and
+**Next stroke** select strokes in frame order and move the playhead while
+keeping the active tool. If you are already in **Paint**, the next brush drag
+starts a new stroke.
 On Resolve Studio, stroke navigation requires **Preferences → System → General →
 External scripting using: Local**. The plugin uses Resolve's bundled scripting
 interpreter; no separate Python installation is needed.
 
 **Select** lets you move a stroke or resize a rectangle by its corner handles.
+Click **Resume painting** to clear the selection and return to **Paint** with
+your current viewer settings.
 The visible controls edit its size, softness and opacity; open **Strokes**
 for duration, enable state, deletion and rectangle dimensions. **Delete stroke**
 removes it; **Undo paint** brings it back, including its properties and selection.
