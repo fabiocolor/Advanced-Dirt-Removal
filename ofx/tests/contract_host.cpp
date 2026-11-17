@@ -930,6 +930,14 @@ int main(int argc,char**argv){
    for(int y=0;y<ph;++y)for(int x=0;x<pw;++x)for(int c=0;c<3;++c)verify(result.read(x,y,c)==cropped[(size_t(y)*pw+x)*3+c],"live tiny preview equals independent direct-engine crop");
   }
   verify(instance(handle).sequence==sequence&&instance(handle).history==history&&instance(handle).cached==nativeCache,"live preview also preserves native cache");
+  for(int outside:{99,100+count}){
+   e.output.images[outside]=frameImage(blank,0,pw,ph,false,true);setDouble(ip,kOfxPropTime,0,outside);const auto fetches=fetched.size();
+   verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)==kOfxStatOK,"outside-shot preview completes without source fetches or persistent error");
+   Image result(reinterpret_cast<OfxImageClipHandle>(&e.output),outside);
+   for(int y=0;y<ph;++y)for(int x=0;x<pw;++x)for(int c=0;c<4;++c)verify(result.read(x,y,c)==0,"outside-shot preview is transparent black");
+   verify(fetched.size()==fetches&&instance(handle).sequence==sequence&&instance(handle).history==history&&instance(handle).cached==nativeCache,"outside-shot preview preserves source dependencies and native history");
+  }
+  setDouble(ip,kOfxPropTime,0,100);
   const auto previewFolder=logFolder/"preview-must-not-save-mattes";setString(H(e.parameters.at("recovery_folder").props),kOfxParamPropDefault,0,previewFolder.u8string().c_str());setInt(H(e.parameters.at("auto_recovery").props),kOfxParamPropDefault,0,1);
   const bool queued=instance(handle).calculateRequested;const auto state=instance(handle).recoveryState.load();instance(handle).calculateRequested=true;instance(handle).recoveryState=Instance::Queued;
   verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)==kOfxStatOK,"tiny auto-recovery preview renders");

@@ -522,3 +522,10 @@ repeated on that installed binary after a normal launch. The working timeline
 has no validation strokes or In/Out marks, with Recovery, Additional source,
 Paint in viewer and Open FX Overlay ready for inspection. CPU/Metal OFX
 contracts and all three CTests pass for this binary.
+
+Playing through the Edit timeline end also exposed an out-of-shot thumbnail
+request. Reduced requests outside the source range now return an empty,
+transparent frame without fetching or holding another source frame, touching
+native history, consuming analysis requests or posting a persistent error.
+Native in-range rendering is unchanged. Contract cases check both sides of the
+shot, zero RGBA output, no source fetches and native cache/history preservation.

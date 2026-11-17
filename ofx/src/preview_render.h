@@ -13,7 +13,21 @@ OfxStatus renderPreview(OfxImageEffectHandle e,OfxPropertySetHandle in,Instance&
 #elif ADR_HOST_GPU_TRANSPORT
  HostGpuScope transport(in);
 #endif
- const int time=frameTime(in);auto range=sourceRange(i);require(time>=range[0]&&time<=range[1],"Preview time outside source");
+ const int time=frameTime(in);auto range=sourceRange(i);
+ if(time<range[0]||time>range[1]){
+  // Resolve requests an end-cursor thumbnail one frame beyond the shot.
+  // There is no source picture there: publish transparent black without
+  // fetching another frame, extending the shot or touching native history.
+  Image output(i.output,time,e,"outside-shot preview output",true);
+  const auto window=renderWindow(e,in,output.b);
+  require(!fx->abort(e),"Preview render aborted",kOfxStatFailed);
+  for(int y=window[1];y<window[3];++y)for(int x=window[0];x<window[2];++x)
+   for(int c=0;c<output.channels;++c)output.write(x-output.b[0],output.b[3]-1-y,c,0.f);
+  output.publish(window);
+  if(persistentMessages)persistentMessages->clearPersistentMessage(e);
+  adrlog::info(i.label()+" preview frame "+std::to_string(time)+" outside shot: empty frame (native history unchanged)");
+  return kOfxStatOK;
+ }
  Image source(i.source,time,e,"preview source",true),output(i.output,time,e,"preview output",true);
  const int w=source.width(),h=source.height();
  require(source.b==output.b&&source.channels==output.channels,"Preview output geometry/components differ");
