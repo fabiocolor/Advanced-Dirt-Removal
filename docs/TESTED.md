@@ -467,3 +467,11 @@ Spanish endpoints, rounded proxy dimensions, alpha, independent live-preview
 engine output, return to unchanged native rendering, and thumbnail auto
 recovery without consuming queued native analysis or writing proxy mattes.
 Other systems and physical tablet feel were not tested by this change.
+
+The verified local test bundle was subsequently installed in the standard macOS
+OFX folder with administrator authentication. A normal Resolve launch, with no
+OFX search-path override, discovered the test identity at that system path.
+The saved Color test timeline reopened, reduced viewer/thumbnail renders
+completed without plugin errors, and a fresh native RGB-float frame matched
+the preceding verified build exactly. The existing release bundle hashes were
+unchanged. No special launcher is required for this installation.
