@@ -529,3 +529,12 @@ transparent frame without fetching or holding another source frame, touching
 native history, consuming analysis requests or posting a persistent error.
 Native in-range rendering is unchanged. Contract cases check both sides of the
 shot, zero RGBA output, no source fetches and native cache/history preservation.
+
+The end-preview correction was then installed and tested through the actual
+Edit timeline end: frame 78 produced an empty preview and the fresh plugin log
+contained zero errors. Color playback also advanced with changing viewer
+images. On that exact binary, both 78-frame comparisons passed again, and fresh
+Recovery/Spanish viewer strokes retained the same native results. The working
+project was saved with cleared playback marks, no test strokes, painting enabled
+and Open FX Overlay selected. The validation snapshots and test strokes remain
+in separate validation timelines/runs.
