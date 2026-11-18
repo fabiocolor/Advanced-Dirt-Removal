@@ -3,17 +3,13 @@
 Each installer adds the **Advanced Dirt Removal OFX plugin** for DaVinci
 Resolve, Nuke and other OFX hosts. Restart your host afterwards.
 
-Version 1.x was a Fusion macro. On Windows the 2.0 installer first uninstalls a
+Version 1.x was a Fusion macro. On Windows the OFX installer first uninstalls a
 1.x installation, including its macros. On macOS and Linux a 1.x macro is left
 in place, so compositions that use it keep working; delete the
 `Advanced Dirt Removal*.setting` files from the Fusion Macros folder if you no
 longer need them.
 
 ## Windows
-
-The 2.0.0 release is awaiting publication. Until then, winget and the existing
-public downloads provide 1.1.3. The following installer instructions describe
-2.0; check the version before installing.
 
 ```powershell
 winget install FabioColor.AdvancedDirtRemoval
