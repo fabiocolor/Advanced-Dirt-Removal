@@ -269,12 +269,19 @@ int main(int argc,char**argv){
   };
   const auto documentHandle=paint_ui::parameter(handle,"paint_data");
   duringParameterSet=[&](OfxParamHandle changed){if(changed==documentHandle)notifyStrokeWrite();};
-  {paint_ui::Undo undo(handle,"Paint stroke");paint_ui::store(handle,painted);}
+  const auto preview=paint::encode(painted);
+  {
+   paint_ui::Undo undo(handle,"Paint stroke");
+   paint_ui::store(handle,painted);
+   painted.strokes.back().points.push_back({.55,.5,1});
+   paint_ui::store(handle,painted,true);
+  }
   duringParameterSet=nullptr;
+  paint_ui::setText(handle,"paint_data",preview);
   notifyStrokeWrite();
-  verify(paint_ui::restorePaint(handle,false)&&paint_ui::getText(handle,"paint_data")==beforeStroke,"host notifications for a brush write preserve its undo entry");
+  verify(paint_ui::restorePaint(handle,false)&&paint_ui::getText(handle,"paint_data")==beforeStroke,"host replay of the last preview preserves the stroke undo entry");
   notifyStrokeWrite();
-  verify(paint_ui::restorePaint(handle,true)&&paint_ui::getText(handle,"paint_data")==paint::encode(painted),"redo restores the exact stroke after a host notification");
+  verify(paint_ui::restorePaint(handle,true)&&paint_ui::getText(handle,"paint_data")==preview,"redo restores the exact stroke accepted by the host");
   paint_ui::setText(handle,"paint_data",beforeStroke);notifyStrokeWrite();
   verify(!paint_ui::canPaintUndo(handle,false)&&!paint_ui::canPaintUndo(handle,true),"a different host-restored stroke document invalidates local history");
   inPaintCallback=false;paint_ui::histories.erase(handle);

@@ -35,18 +35,22 @@ struct PaintHistory {
  int depth=0;
  bool restoring=false;
  PaintState before;
- std::string writtenDocument;
+ std::string writtenDocument,releasePreview;
 };
 std::map<OfxImageEffectHandle,PaintHistory> histories;
 PaintState paintState(OfxImageEffectHandle e){return {getText(e,"paint_data"),getInt(e,"paint_stroke")};}
-void writeDocument(OfxImageEffectHandle e,std::string encoded){
+void writeDocument(OfxImageEffectHandle e,std::string encoded,bool penUp=false){
  Updating guard;
  setText(e,"paint_data",encoded);
- histories[e].writtenDocument=std::move(encoded);
+ auto&h=histories[e];
+ if(penUp&&h.writtenDocument!=encoded&&h.writtenDocument!=h.before.data)h.releasePreview=std::move(h.writtenDocument);
+ else h.releasePreview.clear();
+ h.writtenDocument=std::move(encoded);
 }
-void store(OfxImageEffectHandle e,const paint::Document&d){writeDocument(e,paint::encode(d));}
+void store(OfxImageEffectHandle e,const paint::Document&d,bool penUp=false){writeDocument(e,paint::encode(d),penUp);}
 void boundHistory(PaintHistory&h){
- size_t bytes=h.writtenDocument.size();for(auto*list:{&h.undo,&h.redo})for(auto&v:*list)bytes+=v.data.size();
+ size_t bytes=h.writtenDocument.size()+h.releasePreview.size();
+ for(auto*list:{&h.undo,&h.redo})for(auto&v:*list)bytes+=v.data.size();
  while(h.undo.size()+h.redo.size()>64||bytes>(size_t(64)<<20)){
   auto&list=h.undo.empty()?h.redo:h.undo;bytes-=list.front().data.size();list.erase(list.begin());
  }
@@ -105,11 +109,18 @@ void refresh(OfxImageEffectHandle e,bool loadBrush=false){
  for(auto n:{"paint_rect_width","paint_rect_height"})enable(e,n,rect);
  for(auto n:{"paint_previous","paint_next"})enable(e,n,!d.strokes.empty());
 }
-// Resolve can report our own completed stroke as a later user edit. Only a
-// different document invalidates the local paint history.
+// Resolve can report either the completed stroke or its last preview as a
+// later user edit. Keep both versions of that gesture available to compare.
 void documentChanged(OfxImageEffectHandle e){
  const auto history=histories.find(e);
- if(history!=histories.end()&&getText(e,"paint_data")!=history->second.writtenDocument)histories.erase(history);
+ if(history!=histories.end()){
+  auto&h=history->second;
+  const auto current=getText(e,"paint_data");
+  if(current!=h.writtenDocument){
+   if(!h.releasePreview.empty()&&current==h.releasePreview)std::swap(h.writtenDocument,h.releasePreview);
+   else histories.erase(history);
+  }
+ }
  refresh(e,true);
 }
 bool restorePaint(OfxImageEffectHandle e,bool redo){
@@ -461,12 +472,12 @@ OfxStatus penMove(Overlay&o,OfxInteractHandle h,OfxPropertySetHandle in,bool up)
  else if(o.drawing&&o.work.strokes[o.index].shape==paint::Shape::Rectangle){
   auto&s=o.work.strokes[o.index];s.points[1]=o.cursor;
   const bool empty=std::abs(s.points[1].x-s.points[0].x)*o.work.width<1||std::abs(s.points[1].y-s.points[0].y)*o.work.height<1;
-  if(!empty)store(e,o.work);
+  if(!empty)store(e,o.work,up);
   else if(up){o.work.strokes.erase(o.work.strokes.begin()+o.index);store(e,o.work);}  // a click makes no rectangle
  }else if(o.drawing){
   auto&ps=o.work.strokes[o.index].points;auto q=o.cursor;
   if(!ps.empty()&&!up){const double smooth=getDouble(e,"paint_smoothing");q.x=ps.back().x*smooth+q.x*(1-smooth);q.y=ps.back().y*smooth+q.y*(1-smooth);}
-  if(ps.empty()||std::hypot((q.x-ps.back().x)*o.work.width,(q.y-ps.back().y)*o.work.height)>.25||std::abs(q.pressure-ps.back().pressure)>1e-4){ps.push_back(q);store(e,o.work);}
+  if(ps.empty()||std::hypot((q.x-ps.back().x)*o.work.width,(q.y-ps.back().y)*o.work.height)>.25||std::abs(q.pressure-ps.back().pressure)>1e-4){ps.push_back(q);store(e,o.work,up);}
  }else if(o.moving){
   auto d=o.work;auto&s=d.strokes[o.index];
   if(o.corner>=0){auto opposite=corners(s)[(o.corner+2)%4],edge=o.cursor;
@@ -474,7 +485,7 @@ OfxStatus penMove(Overlay&o,OfxInteractHandle h,OfxPropertySetHandle in,bool up)
    if(std::abs(edge.y-opposite.y)*d.height<1)edge.y=opposite.y+(edge.y<opposite.y?-1.:1.)/d.height;
    s.points={opposite,edge};}
   else{const double dx=o.cursor.x-o.down.x,dy=o.cursor.y-o.down.y;for(auto&q:s.points){q.x+=dx;q.y+=dy;}}
-  store(e,d);refresh(e,true);
+  store(e,d,up);refresh(e,true);
  }
  if(up)finishGesture(o);
  interacts->interactRedraw(h);return kOfxStatOK;
