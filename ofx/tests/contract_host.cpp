@@ -833,7 +833,24 @@ int main(int argc,char**argv){
   verify(i.recoveryState==Instance::Complete&&i.recoveryDone==count&&i.sequence==sequence&&i.rendered==rendered,"cached analysis creates no cleaning or classification pass");
   verify(feedback->phase==recovery_feedback::State::Complete&&feedback->done==count&&feedback->total==count,"presentation receives completed frame counts without a UI refresh callback");
   verify(progressStarts==2&&progressEnds==2&&!progressValues.empty()&&progressValues.front()==0&&progressValues.back()==1&&std::is_sorted(progressValues.begin(),progressValues.end()),"V2 progress is monotonic and closes on completion");
+  auto&status=e.parameters.at("recovery_status").props.strings.at(kOfxParamPropDefault)[0];
+  const auto statusHandle=paint_ui::parameter(handle,"recovery_status");
+  int statusWrites=0;
+  Properties statusChanged;
+  setString(H(statusChanged),kOfxPropType,0,kOfxTypeParameter);
+  setString(H(statusChanged),kOfxPropName,0,"recovery_status");
+  setString(H(statusChanged),kOfxPropChangeReason,0,kOfxChangePluginEdited);
+  duringParameterSet=[&](OfxParamHandle written){
+   if(written!=statusHandle)return;
+   verify(++statusWrites==1,"status notification does not recursively write");
+   auto published=status;
+   status="Queued";
+   plugin->mainEntry(kOfxActionInstanceChanged,handle,H(statusChanged),nullptr);
+   status=std::move(published);
+  };
   refreshRecoveryUI(handle);
+  duringParameterSet=nullptr;
+  verify(statusWrites==1,"completion status was written once");
   verify(e.parameters.at("recovery_status").props.strings.at(kOfxParamPropDefault)[0].find("Complete:")!=std::string::npos,"completion and timing refresh in UI callback");
   // A partially cached shot must skip existing mattes, then classify the
   // missing frame from exactly the same repaired pixels as the full engine.

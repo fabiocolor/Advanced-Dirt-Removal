@@ -750,7 +750,14 @@ void syncRecoveryFeedback(Instance&i){
 // Called only from InstanceChanged/interact actions, where OFX permits writes.
 // A render only updates atomics and the optional host progress suite.
 void refreshRecoveryUI(OfxImageEffectHandle e){
- if(!params->paramSetValue||!isLiveInstance(e))return;
+ // Some hosts immediately re-enter InstanceChanged before publishing the new value.
+ static thread_local bool refreshing=false;
+ if(refreshing||!params->paramSetValue||!isLiveInstance(e))return;
+ struct RefreshScope {
+  bool& active;
+  explicit RefreshScope(bool& flag):active(flag){active=true;}
+  ~RefreshScope(){active=false;}
+ } scope(refreshing);
  auto&i=instance(e);syncRecoveryFeedback(i);const int state=i.recoveryState.load();
  if((state==Instance::Cancelled||state==Instance::Failed)&&i.restoreAutoOnCancel.exchange(false)){
   int current=0;auto h=i.parameters.at("auto_recovery");params->paramGetValue(h,&current);
