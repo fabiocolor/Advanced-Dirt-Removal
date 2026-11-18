@@ -26,7 +26,11 @@ void setInt(OfxImageEffectHandle e,const char*n,int v){if(getInt(e,n)!=v)check(p
 void setDouble(OfxImageEffectHandle e,const char*n,double v){if(getDouble(e,n)!=v)check(params->paramSetValue(parameter(e,n),v),n);}
 void setText(OfxImageEffectHandle e,const char*n,const std::string&v){if(getText(e,n)!=v)check(params->paramSetValue(parameter(e,n),v.c_str()),n);}
 void enable(OfxImageEffectHandle e,const char*n,bool on){if(!params->paramGetPropertySet)return;OfxPropertySetHandle p=nullptr;if(params->paramGetPropertySet(parameter(e,n),&p)==kOfxStatOK&&p)prop->propSetInt(p,kOfxParamPropEnabled,0,on?1:0);}
-void store(OfxImageEffectHandle e,const paint::Document&d){setText(e,"paint_data",paint::encode(d));}
+void store(OfxImageEffectHandle e,const paint::Document&d){
+ const auto encoded=paint::encode(d);
+ Updating guard;
+ setText(e,"paint_data",encoded);
+}
 // Resolve Edit coalesces keyboard-only OFX edits into a host entry. Keep a
 // bounded paint history so the explicit paint buttons undo
 // exactly one stroke/property edit without touching a timeline operation.
@@ -190,10 +194,13 @@ void command(OfxImageEffectHandle e,Action action){
 // authoritative whenever the host restores it in the same change group.
 struct ChangeBatch {int depth=0;std::vector<std::pair<std::string,std::string>> names;};
 std::map<OfxImageEffectHandle,ChangeBatch> changeBatches;
+bool restoresDocument(const std::string&name,const char*reason){
+ return name=="paint_data"&&(!reason||std::strcmp(reason,kOfxChangePluginEdited));
+}
 void applyChanged(OfxImageEffectHandle e,const std::string&name,const char*reason){
  if(updating)return;
  const bool userEdited=reason&&!std::strcmp(reason,kOfxChangeUserEdited);
- if(name=="paint_data"||name=="paint_stroke"){if(name=="paint_data")histories.erase(e);refresh(e,true);return;}
+ if(name=="paint_data"||name=="paint_stroke"){if(restoresDocument(name,reason))histories.erase(e);refresh(e,true);return;}
  if(name=="mask_mode"){if(userEdited)readyToPaint(e);refresh(e);return;}
  if(name=="paint_source_kind"){updateRecoveryEnabled(instance(e));refreshRecoveryUI(e);return;}
  if(name=="paint_tool"){
@@ -232,7 +239,7 @@ void endChanges(OfxImageEffectHandle e){
  auto names=std::move(found->second.names);changeBatches.erase(found);
  if(names.empty())return;
  struct HostGroup {bool previous=hostChangeGroup;HostGroup(){hostChangeGroup=true;}~HostGroup(){hostChangeGroup=previous;}} group;
- const bool documentRestored=std::any_of(names.begin(),names.end(),[](const auto&n){return n.first=="paint_data";});
+ const bool documentRestored=std::any_of(names.begin(),names.end(),[](const auto&n){return restoresDocument(n.first,n.second.c_str());});
  gestureTrace(documentRestored?"restore complete stroke document":"apply grouped brush controls");
  if(documentRestored){histories.erase(e);refresh(e,true);return;}
  for(const auto&name:names)applyChanged(e,name.first,name.second.c_str());

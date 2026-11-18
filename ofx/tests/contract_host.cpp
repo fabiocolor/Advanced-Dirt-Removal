@@ -258,6 +258,22 @@ int main(int argc,char**argv){
   verify(!paint_ui::canPaintUndo(handle,true),"new paint edit clears the redo branch");
   for(int n=0;n<80;++n)paint_ui::command(handle,n%2?paint_ui::Action::SizeDown:paint_ui::Action::SizeUp);
   verify(paint_ui::histories.at(handle).undo.size()<=64,"paint history count is bounded");
+  paint_ui::histories.erase(handle);
+  const auto beforeStroke=paint_ui::getText(handle,"paint_data");
+  auto painted=paint_ui::document(handle);
+  auto newStroke=painted.strokes.back();newStroke.id=painted.nextId++;
+  painted.strokes.push_back(newStroke);
+  auto notifyStrokeWrite=[&](const char*reason){
+   Properties change;setString(H(change),kOfxPropName,0,"paint_data");setString(H(change),kOfxPropChangeReason,0,reason);
+   paint_ui::beginChanges(handle);paint_ui::changed(handle,H(change));paint_ui::endChanges(handle);
+  };
+  const auto documentHandle=paint_ui::parameter(handle,"paint_data");
+  duringParameterSet=[&](OfxParamHandle changed){if(changed==documentHandle)notifyStrokeWrite(kOfxChangeUserEdited);};
+  {paint_ui::Undo undo(handle,"Paint stroke");paint_ui::store(handle,painted);}
+  duringParameterSet=nullptr;
+  notifyStrokeWrite(kOfxChangePluginEdited);
+  verify(paint_ui::restorePaint(handle,false)&&paint_ui::getText(handle,"paint_data")==beforeStroke,"host notifications for a brush write preserve its undo entry");
+  verify(paint_ui::restorePaint(handle,true)&&paint_ui::getText(handle,"paint_data")==paint::encode(painted),"redo restores the exact stroke after a host notification");
   inPaintCallback=false;paint_ui::histories.erase(handle);
   std::cout<<"viewer paint undo/redo, property restoration and bounds: passed\n";
   // Previous/Next stroke: frame order, starting from the playhead (12 in this
