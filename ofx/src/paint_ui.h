@@ -260,25 +260,26 @@ void define(OfxParamSetHandle ps,bool visible,bool groupDefined=false){
  boolean("paint","Paint in viewer","paint_group","Paint directly in this effect's viewer (turn on Open FX Overlay). Recovery gives original detail back; Spanish dirt removal repairs only where painted. No separate Mask Paint is needed. While editing is enabled or strokes exist, the built-in brush replaces the legacy external mask.",visible?1:0,true);
  boolean("paint_outlines","Show strokes","paint_group","Show the strokes on the current frame and activate Select. Turn off to hide the outlines and return to Paint.",0);
  choice("paint_tool","Tool","paint_group","Paint, Erase (take paint away) or Select (click a stroke to select, move or resize it).",{"Paint","Erase","Select"});
- make(kOfxParamTypePushButton,"paint_resume","Resume painting","paint_group","Hide stroke outlines, clear the selection and enable Paint.");
  choice("paint_shape","Brush","paint_group","Round or square brush, or a rectangle dragged from corner to corner.",{"Round","Square","Rectangle"});
  real("paint_size","Size","paint_group","Brush diameter in picture pixels. Shift-drag in the viewer.",80,1,2048,400);
  real("paint_softness","Softness","paint_group","0 is a hard edge. Option/Alt-drag in the viewer.",.5,0,1,1);
- real("paint_opacity","Opacity","paint_group","How much one stroke gives back.",1,0,1,1);
- label("paint_stroke_info","Selected","paint_group","No strokes yet");
  make(kOfxParamTypePushButton,"paint_undo","Undo paint","paint_group","Undo one paint stroke or property edit. History is kept for this editing session.");
- make(kOfxParamTypePushButton,"paint_redo","Redo paint","paint_group","Redo a paint edit. ");
+ make(kOfxParamTypePushButton,"paint_redo","Redo paint","paint_group","Redo a paint edit.");
  {auto p=make(kOfxParamTypeGroup,"stroke_details_group","Strokes",detailsParent,nullptr);si(p,kOfxParamPropGroupOpen,0);}
- {auto p=make(kOfxParamTypeInteger,"paint_hold","Hold (frames)","stroke_details_group","How many frames a new stroke lasts, from the frame it is painted on. 1 paints only the current frame.");si(p,kOfxParamPropDefault,1);si(p,kOfxParamPropMin,1);si(p,kOfxParamPropMax,100000);si(p,kOfxParamPropDisplayMin,1);si(p,kOfxParamPropDisplayMax,250);}
+ label("paint_stroke_info","Selected","stroke_details_group","No strokes yet");
  make(kOfxParamTypePushButton,"paint_previous","Previous stroke","stroke_details_group","Select the previous stroke in frame order and go to its frame.");
  make(kOfxParamTypePushButton,"paint_next","Next stroke","stroke_details_group","Select the next stroke in frame order and go to its frame.");
  make(kOfxParamTypePushButton,"paint_delete","Delete stroke","stroke_details_group","Delete the selected stroke. Undo brings it back.");
+ make(kOfxParamTypePushButton,"paint_resume","Resume painting","stroke_details_group","Hide stroke outlines, clear the selection and enable Paint.");
+ {auto p=make(kOfxParamTypeInteger,"paint_hold","Hold (frames)","stroke_details_group","How many frames a new stroke lasts, from the frame it is painted on. 1 paints only the current frame.");si(p,kOfxParamPropDefault,1);si(p,kOfxParamPropMin,1);si(p,kOfxParamPropMax,100000);si(p,kOfxParamPropDisplayMin,1);si(p,kOfxParamPropDisplayMax,250);}
  boolean("paint_stroke_on","Stroke on","stroke_details_group","Turn the selected stroke off to compare without it.",1);
  real("paint_rect_width","Rectangle width","stroke_details_group","Width of the selected rectangle in picture pixels.",80,1,32768,2048);
  real("paint_rect_height","Rectangle height","stroke_details_group","Height of the selected rectangle in picture pixels.",80,1,32768,2048);
  {auto p=make(kOfxParamTypeGroup,"paint_options_group","Brush options",detailsParent,nullptr);si(p,kOfxParamPropGroupOpen,0);}
+ real("paint_opacity","Opacity","paint_options_group","How strongly the stroke applies.",1,0,1,1);
  real("paint_smoothing","Smoothing","paint_options_group","Smooths the pen path while you paint.",.2,0,.95,.95);
  boolean("paint_pressure","Tablet pressure","paint_options_group","Pen pressure changes the brush size. Leave off for a mouse.",0);
+ label("paint_keys","Gestures","paint_options_group","Shift-drag: size; Option/Alt-drag: softness. Keyboard commands stay with Resolve.");
  {auto p=make(kOfxParamTypeGroup,"paint_source_group","Source setup",detailsParent,nullptr);si(p,kOfxParamPropGroupOpen,0);}
  {auto p=make(kOfxParamTypeChoice,"paint_source_kind","Paint source","paint_source_group","Clean this clip: repair this input. Additional source: paint a processed picture back to the aligned original connected to the second input.",true);ss(p,kOfxParamPropChoiceOption,"Clean this clip",0);ss(p,kOfxParamPropChoiceOption,"Additional source",1);if(preparationAvailable())ss(p,kOfxParamPropChoiceOption,"Prepared shot (experimental)",2);si(p,kOfxParamPropDefault,0);}
  {auto p=make(kOfxParamTypeString,"paint_source_folder","Original folder","paint_source_group","Run Prepare ADR Recovery Source with the processed export on V2 and the aligned original on V1. Keep the verified source folder with the project.",true);ss(p,kOfxParamPropStringMode,kOfxParamStringIsDirectoryPath);ss(p,kOfxParamPropDefault,"");si(p,kOfxParamPropSecret,1);}
@@ -286,7 +287,6 @@ void define(OfxParamSetHandle ps,bool visible,bool groupDefined=false){
  {auto p=make(kOfxParamTypePushButton,"prepare_shot","Prepare shot for painting","paint_source_group","Save a new exact original/cleaned snapshot of this shot for manual painting. Cleaning is calculated once; later frames need only the current input. Auto recovery is not included. Cancel preserves earlier preparations.");if(!preparationAvailable())si(p,kOfxParamPropSecret,1);}
  {auto p=make(kOfxParamTypeString,"prepare_folder","Prepared shot folder","paint_source_group","Keep this folder with the project. Prepared shot freezes the cleaning settings and temporal source at preparation time. Prepare again after upstream changes.",true);ss(p,kOfxParamPropStringMode,kOfxParamStringIsDirectoryPath);ss(p,kOfxParamPropDefault,"");if(!preparationAvailable())si(p,kOfxParamPropSecret,1);}
  {auto p=make(kOfxParamTypeInteger,"prepare_request","Preparation revision","paint_source_group",nullptr,true);si(p,kOfxParamPropDefault,0);si(p,kOfxParamPropSecret,1);}
- label("paint_keys","Gestures","paint_options_group","Shift-drag: size; Option/Alt-drag: softness. Keyboard commands stay with Resolve.");
  {auto p=make(kOfxParamTypeInteger,"paint_stroke","Selected stroke","paint_group",nullptr);si(p,kOfxParamPropDefault,0);si(p,kOfxParamPropMin,0);si(p,kOfxParamPropMax,4096);si(p,kOfxParamPropSecret,1);}
  {auto p=make(kOfxParamTypeString,"paint_data","Strokes","paint_group",nullptr,true);ss(p,kOfxParamPropDefault,"");ss(p,kOfxParamPropStringMode,kOfxParamStringIsMultiLine);si(p,kOfxParamPropSecret,1);si(p,kOfxParamPropPersistant,1);}
 }

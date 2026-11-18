@@ -642,23 +642,30 @@ void defineExtraParams(OfxParamSetHandle ps,const char*group){
  if(group){OfxPropertySetHandle p;check(params->paramDefine(ps,kOfxParamTypeGroup,group,&p),"define group");ss(p,kOfxPropLabel,!std::strcmp(group,"auto_recovery_group")?"Recovery":"View options");si(p,kOfxParamPropGroupOpen,!std::strcmp(group,"auto_recovery_group"));}
  for(auto&x:extras){const bool top=!x.group;if(group?(top||std::strcmp(x.group,group)):!top)continue;defineExtraParam(ps,x,x.group);}
 }
-void defineUserDefaults(OfxParamSetHandle ps,bool visible){
+void defineUserDefaults(OfxParamSetHandle ps,const char*parent=nullptr){
  OfxPropertySetHandle p;check(params->paramDefine(ps,kOfxParamTypeGroup,"cleaning_defaults_group",&p),"define cleaning defaults");
  ss(p,kOfxPropLabel,"Cleaning defaults");si(p,kOfxParamPropGroupOpen,0);
- if(visible)ss(p,kOfxParamPropParent,"paint_group");else si(p,kOfxParamPropSecret,1);
+ if(parent)ss(p,kOfxParamPropParent,parent);else si(p,kOfxParamPropSecret,1);
  for(const auto&x:extras)if(x.group&&!std::strcmp(x.group,"cleaning_defaults_group")){
   defineExtraParam(ps,x,x.group);
-  if(!visible){OfxParamHandle h=nullptr;check(params->paramGetHandle(ps,x.name,&h,&p),"default control");si(p,kOfxParamPropSecret,1);}
+  if(!parent){OfxParamHandle h=nullptr;check(params->paramGetHandle(ps,x.name,&h,&p),"default control");si(p,kOfxParamPropSecret,1);}
  }
 }
 // Inspector tabs (OFX pages). Children are listed in display order.
 void definePages(OfxParamSetHandle ps,bool paintHost){
  std::vector<std::string> cleaning={"encoding","view"};
  for(auto&c:controls)if(std::strcmp(c.name,"enabled"))cleaning.push_back(c.name);
- const std::vector<std::string> recovery={"mask_mode","recovery_calculate","recovery_status","auto_recovery","recovery_confidence","recovery_folder"};
+ if(paintHost)for(auto&x:extras)if(x.group&&!std::strcmp(x.group,"cleaning_defaults_group"))cleaning.push_back(x.name);
+ std::vector<std::string> recovery={"recovery_calculate","recovery_status","auto_recovery","recovery_confidence","recovery_folder"};
+ if(!paintHost)recovery.insert(recovery.begin(),"mask_mode");
  const std::vector<std::string> view={"difference_threshold","red_intensity","red_opacity","gray_background","difference_gain"};
  struct Page{const char*name;const char*label;const std::vector<std::string>*kids;};
- const std::vector<std::string> paintPage={"paint","paint_outlines","paint_tool","paint_resume","paint_shape","paint_size","paint_softness","paint_opacity","paint_hold","paint_stroke_info","paint_previous","paint_next","paint_undo","paint_redo","paint_delete","paint_stroke_on","paint_rect_width","paint_rect_height","paint_smoothing","paint_pressure","paint_keys","paint_source_kind","paint_source_folder","paint_source_offset","prepare_shot","prepare_folder","cleaning_default_save","cleaning_default_load","cleaning_default_factory","cleaning_default_status"};
+ const std::vector<std::string> paintPage={
+  "mask_mode","paint","paint_outlines","paint_tool","paint_shape","paint_size","paint_softness","paint_undo","paint_redo",
+  "paint_stroke_info","paint_previous","paint_next","paint_delete","paint_resume","paint_hold","paint_stroke_on","paint_rect_width","paint_rect_height",
+  "paint_opacity","paint_smoothing","paint_pressure","paint_keys",
+  "paint_source_kind","paint_source_folder","paint_source_offset","prepare_shot","prepare_folder"
+ };
  const Page pages[]={{"page_cleaning","Cleaning",&cleaning},{"page_recovery","Recovery",&recovery},{"page_paint","Paint",&paintPage},{"page_view","View",&view}};
  for(auto&pg:pages){
   if(pg.kids==&paintPage&&!paintHost)continue;
@@ -678,24 +685,29 @@ void defineControlPresentation(OfxParamSetHandle ps){
    if(c.group&&definedGroups.insert(c.group).second)for(auto&g:groups)if(!std::strcmp(g.name,c.group)){OfxPropertySetHandle p;check(params->paramDefine(ps,kOfxParamTypeGroup,g.name,&p),"define group");ss(p,kOfxPropLabel,g.label);si(p,kOfxParamPropGroupOpen,!std::strcmp(g.name,"detection"));}
    defineCleaningControl(ps,c,c.group);
   }
-  defineUserDefaults(ps,false);defineExtraParams(ps,"view_group");definePages(ps,false);return;
+  defineUserDefaults(ps);defineExtraParams(ps,"view_group");definePages(ps,false);return;
  }
- auto group=[&](const char*name,const char*label,bool open,bool hidden=false){OfxPropertySetHandle p;check(params->paramDefine(ps,kOfxParamTypeGroup,name,&p),"define group");ss(p,kOfxPropLabel,label);si(p,kOfxParamPropGroupOpen,open);if(hidden)si(p,kOfxParamPropSecret,1);};
+ auto group=[&](const char*name,const char*label,bool open,const char*parent=nullptr){
+  OfxPropertySetHandle p;check(params->paramDefine(ps,kOfxParamTypeGroup,name,&p),"define group");
+  ss(p,kOfxPropLabel,label);si(p,kOfxParamPropGroupOpen,open);if(parent)ss(p,kOfxParamPropParent,parent);
+ };
  auto extra=[&](const char*name,const char*parent){for(auto&x:extras)if(!std::strcmp(name,x.name)){defineExtraParam(ps,x,parent,!std::strcmp(name,"mask_mode")?"Method":nullptr);return;}require(false,"missing display extra");};
- // Preserve the published automatic-cleaning layout and control order.
- defineEncodingParam(ps);extra("view",nullptr);
+ defineEncodingParam(ps);extra("view",nullptr);defineExtraParams(ps,"view_group");
+ const char*cleaningGroup="automatic_cleaning_group";
+ group(cleaningGroup,"Automatic cleaning",false);
+ // Preserve the original order inside the automatic cleaning section.
  std::set<std::string> definedGroups;
  for(auto&c:controls){
-  if(c.group&&definedGroups.insert(c.group).second)for(auto&g:groups)if(!std::strcmp(g.name,c.group))group(g.name,g.label,!std::strcmp(g.name,"detection"));
+  if(c.group&&definedGroups.insert(c.group).second)for(auto&g:groups)if(!std::strcmp(g.name,c.group))group(g.name,g.label,!std::strcmp(g.name,"detection"),cleaningGroup);
   defineCleaningControl(ps,c,c.group);
  }
- group("auto_recovery_group","Auto recovery",false);
+ group("auto_recovery_group","Auto recovery",false,cleaningGroup);
  for(auto name:{"auto_recovery","recovery_confidence","recovery_calculate","recovery_status","recovery_request","recovery_folder","cleaning_profiles"})extra(name,"auto_recovery_group");
- group("paint_group","Manual recovery / Spanish",true);
+ defineUserDefaults(ps,cleaningGroup);
+ group("paint_group","Paint",true);
  extra("mask_mode","paint_group");
  paint_ui::define(ps,true,true);
- defineUserDefaults(ps,true);
- defineExtraParams(ps,"view_group");definePages(ps,true);
+ definePages(ps,true);
 }
 // Spanish dirt removal makes auto recovery irrelevant: grey its controls out while it is on.
 void updateRecoveryEnabled(Instance&i){

@@ -185,8 +185,13 @@ int main(int argc,char**argv){
   verify(!compact.parameters.at("encoding").props.strings.count(kOfxParamPropParent),"published input encoding remains top level");
   for(auto&c:controls)if(c.group)verify(compact.parameters.at(c.name).props.strings.at(kOfxParamPropParent)==std::vector<std::string>{c.group},"published automatic control grouping retained");
   for(auto&g:groups)verify(compact.parameters.at(g.name).props.strings.at(kOfxPropLabel)==std::vector<std::string>{g.label},"published automatic group labels retained");
-  for(auto name:{"auto_recovery_group","processing","stroke_details_group","paint_options_group","paint_source_group","view_group","cleaning_defaults_group"})verify(compact.parameters.at(name).props.ints.at(kOfxParamPropGroupOpen)==std::vector<int>{0},"secondary groups start collapsed");
-  verify(compact.parameters.at("paint_hold").props.strings.at(kOfxParamPropParent)==std::vector<std::string>{"stroke_details_group"},"duration is a stroke detail");
+  auto inGroup=[&](const char*name,const char*parent){return compact.parameters.at(name).props.strings.at(kOfxParamPropParent)==std::vector<std::string>{parent};};
+  for(auto name:{"detection","processing","safeguards","auto_recovery_group","cleaning_defaults_group"})verify(inGroup(name,"automatic_cleaning_group"),"automatic settings share one section");
+  for(auto name:{"automatic_cleaning_group","auto_recovery_group","processing","stroke_details_group","paint_options_group","paint_source_group","view_group","cleaning_defaults_group"})verify(compact.parameters.at(name).props.ints.at(kOfxParamPropGroupOpen)==std::vector<int>{0},"secondary groups start collapsed");
+  verify(compact.parameters.at("paint_group").props.ints.at(kOfxParamPropGroupOpen)==std::vector<int>{1},"Paint opens by default");
+  for(auto name:{"paint_tool","paint_shape","paint_size","paint_softness","paint_undo","paint_redo"})verify(inGroup(name,"paint_group"),"everyday paint controls are directly accessible");
+  for(auto name:{"paint_stroke_info","paint_resume","paint_hold"})verify(inGroup(name,"stroke_details_group"),"stroke management stays together");
+  verify(inGroup("paint_opacity","paint_options_group"),"opacity is available in Brush options");
   const auto&outlines=compact.parameters.at("paint_outlines").props;
   verify(outlines.ints.at(kOfxParamPropDefault)==std::vector<int>{0}&&outlines.strings.at(kOfxParamPropParent)==std::vector<std::string>{"paint_group"},"stroke review is off by default and available beside the tool");
   const auto&children=compact.parameters.at("page_paint").props.strings.at(kOfxParamPropPageChild);for(auto name:{"paint_undo","paint_redo"})verify(std::find(children.begin(),children.end(),name)!=children.end(),"page-respecting hosts retain paint history buttons");

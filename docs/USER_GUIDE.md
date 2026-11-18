@@ -48,10 +48,9 @@ The first control. Pick what the values entering the effect are:
 
 ## Cleaning controls
 
-The published automatic-cleaning layout is retained: **Input encoding** and
-**View**, followed by **Detection**, **Processing** and **Safeguards** in their
-original order. All cleaning options stay in those groups. **Auto recovery**
-follows them, then the integrated **Manual recovery / Spanish** section.
+In Resolve, expand **Automatic cleaning** to reach **Detection**, **Processing**,
+**Safeguards**, **Auto recovery** and **Cleaning defaults**. **Input encoding**
+and **View** are at the top, with **View options** just below.
 Start with the defaults. If real detail is being removed, lower **Sensitivity** or raise
 **Motion guard**; if dirt remains, raise **Sensitivity** or try **Analyse: RGB**.
 
@@ -84,9 +83,9 @@ shot again, and auto recovery calculates a new matte for the new settings.
 
 Automatic repair sometimes removes things that belong to the picture: a
 fast-moving hand, a spark, a highlight. Recovery gives the original back there.
-In Resolve, **Method** selects Recovery or Spanish dirt removal; the collapsed
-**Auto recovery** group holds the automatic matte controls. Other hosts keep
-these controls in **Recovery**:
+In Resolve, **Method** in **Paint** selects Recovery or Spanish dirt removal.
+Open **Automatic cleaning → Auto recovery** for the automatic matte controls.
+Other hosts keep those controls in **Recovery**.
 
 | Control | Default | What it does |
 | --- | --- | --- |
@@ -113,12 +112,10 @@ stroke and while brush editing is off. This prevents overlapping corrections.
 
 Development build only. Existing 2.0 installers do not include viewer painting.
 
-The original automatic controls stay first. **Manual recovery / Spanish**
-contains **Method**, Paint in viewer, Show strokes, Tool, Brush, Size, Softness, Opacity,
-selection status and Undo/Redo. Its collapsed **Strokes**, **Brush options** and
-**Source setup** sections contain the remaining manual controls. Collapse
-Detection while concentrating on painting; available panel height and display
-scaling determine how much scrolling is needed.
+**Paint** opens with the method, viewer toggle, **Show strokes**, the tool and
+brush controls, and **Undo paint** and **Redo paint**. Expand **Strokes** to
+manage existing strokes, **Brush options** for opacity, smoothing or tablet
+pressure, and **Source setup** to choose where the brush gets its picture.
 
 Painting is enabled by default. Choosing **Method: Recovery** or **Spanish dirt
 removal** resumes Paint and clears the review selection. Turn on the viewer's
@@ -149,9 +146,9 @@ settings stay shared. Auto recovery retains its saved preference and pauses in
 Spanish. Existing projects keep their current values when loaded; a previously
 unused method gets its first-use configuration when explicitly selected.
 
-**Your own defaults.** Open the collapsed **Cleaning defaults** section under
-Manual recovery / Spanish. Choose the **Method**, adjust its cleaning controls,
-then click **Save as my default**. In another node or project, select that method
+**Your own defaults.** Choose the **Method** in **Paint** and adjust its cleaning
+controls. Open **Automatic cleaning → Cleaning defaults** and click **Save as
+my default**. In another node or project, select that method
 and click **Load my default**. Automatic/Recovery and Spanish have separate
 saved user defaults; saving one does not replace the other.
 
@@ -172,17 +169,17 @@ those preference files on another machine.
 
 The viewer starts with stroke outlines hidden. Turn on **Show strokes** to
 outline the strokes on the current frame and activate **Select**. Click a
-stroke to edit it, or use **Previous stroke** and **Next stroke** to visit strokes
-in frame order. These buttons keep the active tool.
+stroke to edit it. Under **Strokes**, **Previous stroke** and **Next stroke**
+visit strokes in frame order and keep the active tool.
 On Resolve Studio, stroke navigation requires **Preferences → System → General →
 External scripting using: Local**. The plugin uses Resolve's bundled scripting
 interpreter; no separate Python installation is needed.
 
 **Select** lets you move a stroke or resize a rectangle by its corner handles.
-Turn off **Show strokes** or click **Resume painting** to hide the outlines,
-clear the selection and return to **Paint**.
-The visible controls edit its size, softness and opacity; open **Strokes**
-for duration, enable state, deletion and rectangle dimensions. **Delete stroke**
+Turn off **Show strokes** or click **Strokes → Resume painting** to hide the
+outlines, clear the selection and return to **Paint**. Use the brush controls
+for size and softness, and **Brush options** for opacity. Open **Strokes** for
+duration, enable state, deletion and rectangle dimensions. **Delete stroke**
 removes it; **Undo paint** brings it back, including its properties and selection.
 **Redo paint** repeats the edit. Paint history is kept for the current editing
 session and resets when the effect or project is reloaded. **Hold (frames)** defaults to one
