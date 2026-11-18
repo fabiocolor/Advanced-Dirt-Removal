@@ -1408,7 +1408,13 @@ OfxStatus entry(const char*action,const void*handle,OfxPropertySetHandle in,OfxP
    i.cancelCalculation=false;i.recoveryDone=0;i.recoveryTotal=0;i.recoveryState=Instance::Queued;i.calculateRequested=true;
    auto feedback=std::make_shared<recovery_feedback::State>();std::atomic_store(&i.recoveryFeedback,feedback);
    if(paintHost()){
-    recovery_feedback::show(feedback);adrlog::info(i.label()+(feedback->presented?" auto recovery: native progress panel shown":" auto recovery: native progress panel unavailable in this callback"));
+    recovery_feedback::show(feedback);
+#ifdef _WIN32
+    // The Windows panel opens on its own message loop.
+    adrlog::info(i.label()+" auto recovery: requested native progress panel");
+#else
+    adrlog::info(i.label()+(feedback->presented?" auto recovery: native progress panel shown":" auto recovery: native progress panel unavailable in this callback"));
+#endif
    }
    refreshRecoveryUI(e);
    int n=0;params->paramGetValue(i.parameters.at("recovery_request"),&n);

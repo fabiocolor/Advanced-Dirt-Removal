@@ -12,7 +12,7 @@ struct State {
  std::atomic<double> seconds{0};
  std::atomic<bool> cancel{false},presented{false};
 };
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(_WIN32)
 void show(const std::shared_ptr<State>&);
 void shutdown();
 #else
