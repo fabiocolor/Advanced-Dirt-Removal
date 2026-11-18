@@ -1012,7 +1012,10 @@ int main(int argc,char**argv){
   verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)==kOfxStatOK,"tiny auto-recovery preview renders");
   verify(instance(handle).calculateRequested&&instance(handle).recoveryState==Instance::Queued&&!std::filesystem::exists(previewFolder),"preview does not consume queued native analysis or save reduced mattes");
   instance(handle).calculateRequested=queued;instance(handle).recoveryState=state;
-  e.source.images=std::move(nativeSource);e.output.images=std::move(nativeOutput);e.original.images=std::move(nativeOriginal);e.original.props=originalProperties;e.parameters=nativeParameters;testRod=nativeRod;
+  e.source.images=std::move(nativeSource);e.output.images=std::move(nativeOutput);e.original.images=std::move(nativeOriginal);e.original.props=originalProperties;testRod=nativeRod;
+  // The mock host hands out pointers to its parameter objects as OFX handles.
+  // Restore their values in place so the active instance keeps valid handles.
+  for(const auto&[name,parameter]:nativeParameters)e.parameters.at(name)=parameter;
   setDoubleN(ip,kOfxImageEffectPropRenderScale,2,scale);setIntN(ip,kOfxImageEffectPropRenderWindow,4,bounds);renderFrame(0);
   std::cout<<"proxy: anisotropic tiny/viewer Recovery and Spanish endpoints, alpha, native history isolation, live cleaning and native return passed\n";
  }
