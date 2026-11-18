@@ -76,6 +76,9 @@ class ReleaseTools(unittest.TestCase):
             (root / 'docs/RELEASE_NOTES.md').write_text('2.0.0 [Tests](TESTED.md)')
             (root / 'LICENSE').write_text('Code licence')
             (root / 'WEIGHTS_LICENSE').write_text('Weights licence')
+            weights = root / 'ofx/resources/recovery-model.bin'
+            weights.parent.mkdir(parents=True)
+            weights.write_bytes(b'model weights')
             inputs = root / 'inputs'
             inputs.mkdir()
             assets = []
@@ -96,6 +99,8 @@ class ReleaseTools(unittest.TestCase):
                 self.assertIn('/blob/v2.0.0/docs/TESTED.md', (output / 'RELEASE_NOTES.md').read_text())
                 self.assertEqual((output / 'LICENSE').read_text(), 'Code licence')
                 self.assertEqual((output / 'WEIGHTS_LICENSE.txt').read_text(), 'Weights licence')
+                self.assertEqual((output / 'recovery-model-2.0.0.bin').read_bytes(), weights.read_bytes())
+                self.assertEqual((output / 'installer.exe').read_bytes(), b'windows installer')
                 for line in (output / 'SHA256SUMS').read_text().splitlines():
                     digest, name = line.split('  ')
                     self.assertEqual(stage.digest(output / name), digest)

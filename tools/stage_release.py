@@ -39,12 +39,18 @@ def stage(manifest: Path, inputs: Path, output: Path) -> dict:
         verified.append((asset, source))
     if {a['platform'] for a, _ in verified} != {'macos', 'windows', 'linux'} or len(verified) != 3:
         raise ValueError('expected one verified installer for each platform')
+    weights = ROOT / 'ofx' / 'resources' / 'recovery-model.bin'
+    weights_hash = digest(weights)
+    if spec.get('weights_sha256', weights_hash) != weights_hash:
+        raise ValueError('weights hash differs from the release manifest')
     output.mkdir(parents=True)
     for asset, source in verified:
         platform = asset['platform']
         if platform == 'linux':
             shutil.copyfile(source, output / source.name)
         else:
+            if platform == 'windows':
+                shutil.copyfile(source, output / source.name)
             name = (f'AdvancedDirtRemoval-{version}-macos.zip' if platform == 'macos'
                     else f'AdvancedDirtRemoval-Setup-{version}-win64.zip')
             with zipfile.ZipFile(output / name, 'x', compression=zipfile.ZIP_DEFLATED) as archive:
@@ -65,7 +71,9 @@ def stage(manifest: Path, inputs: Path, output: Path) -> dict:
         (output / name).write_text(text)
     shutil.copyfile(ROOT / 'LICENSE', output / 'LICENSE')
     shutil.copyfile(ROOT / 'WEIGHTS_LICENSE', output / 'WEIGHTS_LICENSE.txt')
+    shutil.copyfile(weights, output / f'recovery-model-{version}.bin')
     report = {'version': version, 'publication': 'held_for_owner_approval', 'inputs': spec['assets'],
+              'weights_sha256': weights_hash,
               'downloads': {p.name: {'sha256': digest(p), 'bytes': p.stat().st_size}
                             for p in sorted(output.iterdir())}}
     (output / 'release-manifest.json').write_text(json.dumps(report, indent=2) + '\n')

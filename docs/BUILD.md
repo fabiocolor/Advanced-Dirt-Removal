@@ -98,13 +98,10 @@ training checkpoint and documents the format.
 The model weights are licensed under CC BY-NC 4.0. The plug-in bundle includes
 the [weights licence](../WEIGHTS_LICENSE) and records model provenance in
 `recovery-model.json` alongside the weights.
-The current development model is **Ringo · 9 Nov 2026 · run 22 epoch 1 · Ghost Story only**
-(`ringo-recovery-20261109-r22e1-63f18ae7`). It is a subject-only model;
-`ringo-recovery-20261101-r15e4-fdc8c4eb` remains the promoted general model.
-See the model identity convention below. Auto-recovery
-matte folders include the weights SHA-256, so changing checkpoints cannot reuse
-an earlier model's saved mattes. Prior folders are preserved. Update model files
-with the host closed and restart it before testing the new checkpoint.
+The release version and weights SHA-256 identify the bundled model.
+Auto Recovery matte folders include the weights SHA-256, so a checkpoint
+change keeps the earlier model's saved mattes in their original folders.
+Close the host before changing model files, then restart it.
 
 ## Determinism
 
@@ -133,19 +130,3 @@ The engine benchmark measures speed and prints the output hash:
 build/engine/adr_bench --synthetic 7 --width 1920 --height 1080 --frames 24 --backend metal --repeat 3
 build/engine/adr_bench --input clip.f32 --width W --height H --frames N --control sensitivity=0.5
 ```
-
-## Model identity convention
-
-Use the approved model ID everywhere a model is identified:
-`<pipeline>-<task>-<training-date>-<run-and-epoch>-<checkpoint-sha8>`.
-For example, `ringo-recovery-20261109-r22e1-63f18ae7`. Ringo identifies the
-recovery pipeline; Figue cleanup models use `figue-cleanup-…`. Dates refer to
-training, not packaging or publication. The short hash comes from the original
-checkpoint; the converted ADRRM001 file has its own separately recorded SHA-256.
-The full hashes remain authoritative.
-
-The display title is `Ringo · 9 Nov 2026 · run 22 epoch 1 · Ghost Story only`.
-Record `model_id`, `pipeline`, `parent_model_id`, `scope` and `status` in the
-bundled manifest. Names identify a model; they do not promote it or approve
-its output. Existing release tags, asset names, plugin IDs and project parameter
-IDs remain stable. Historical receipts retain their original identities.
