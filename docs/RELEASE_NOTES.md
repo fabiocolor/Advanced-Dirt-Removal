@@ -1,6 +1,6 @@
 # Release notes
 
-## Unreleased fix
+## 2.1.0
 
 - Reduced memory use during GPU rendering in Resolve on macOS, Windows and Linux.
 - Fixed memory not being freed after CPU processing on Windows.
@@ -10,7 +10,7 @@
   for later.
 - Cleaning math is unchanged.
 
-### Viewer-paint development candidate
+### Viewer painting and Auto Recovery
 
 - A collapsed **Cleaning defaults** section lets Resolve users save, explicitly
   load, or use factory cleaning settings for the selected method. User defaults
@@ -35,8 +35,13 @@
   and reuse of valid saved mattes. Whole-shot dependencies are declared to the
   host, and the button no longer waits for the render lock.
 - Rejected thumbnail/proxy requests preserve full-resolution cleaning caches.
-- These changes are not in the published installers. Contract checks and native
-  Resolve interaction checks have separate qualification scopes.
+- The Windows Auto Recovery panel reports frames and elapsed time during a
+  calculation, supports cancellation, and closes automatically on success.
+- Fixed a crash when a host immediately notifies the effect of a recovery
+  status write.
+- Includes the Ringo run 22, epoch 1 checkpoint used in the review build. It
+  was fine-tuned for one film and has not been qualified for general
+  restoration quality.
 
 ## 2.0.0
 

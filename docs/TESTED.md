@@ -371,7 +371,7 @@ must not be read as publication approval.
 The owner chose removal when the plugin shortcuts could not coexist reliably
 with Resolve. The current development build removes the Mac event monitor, the
 Windows key hook/F24 dispatch, and command-key handling in both the integrated
-brush and standalone Recovery Paint. Every OFX key-down, repeat and key-up is
+brush and the standalone painting tool. Every OFX key-down, repeat and key-up is
 returned to the host. Modifier state is observed only for pointer gestures;
 Shift-drag size and Option/Alt-drag softness remain available. The inspector's
 shortcut hints and user-guide key tables were updated. Saved parameter IDs,

@@ -53,6 +53,9 @@
 #ifndef ADR_PLUGIN_LABEL
 #define ADR_PLUGIN_LABEL "Advanced Dirt Removal"
 #endif
+#ifndef ADR_PLUGIN_VERSION_MINOR
+#define ADR_PLUGIN_VERSION_MINOR 0
+#endif
 #ifndef ADR_SOURCE_REVISION
 #define ADR_SOURCE_REVISION "unknown"
 #endif
@@ -791,8 +794,7 @@ paint::Document frameStrokes(Instance&i,int time){
 // painted frame is cleaned from its own window of source frames, never from
 // the clip start, so Resolve renders the nodes before it only for those
 // frames. The engine needs 3 frames ahead; 8 back matched the full-shot
-// output exactly, including fast pans (Temporal Restoration Lab,
-// benchmarks/runs/adr-spanish-window-20261115).
+// output exactly, including fast pans, in the native-host qualification.
 constexpr int kSpanishBack=8,kSpanishAhead=3;
 bool spanishWindow(OfxImageEffectHandle e,int time){
  auto&i=instance(e);
@@ -1491,7 +1493,7 @@ ss(p,kOfxPropLabel,ADR_PLUGIN_LABEL);ss(p,kOfxImageEffectPluginPropGrouping,"Fab
  catch(const std::exception&ex){adrlog::error(who(e)+" "+action+": "+ex.what());reportError(e,ex.what());return kOfxStatFailed;}
  catch(...){adrlog::error(who(e)+" "+action+": unknown failure");return kOfxStatFailed;}}
 void setHost(OfxHost*h){host=h;}
-OfxPlugin plugin={kOfxImageEffectPluginApi,1,ADR_PLUGIN_ID,2,0,setHost,entry};
+OfxPlugin plugin={kOfxImageEffectPluginApi,1,ADR_PLUGIN_ID,2,ADR_PLUGIN_VERSION_MINOR,setHost,entry};
 }
 #include "source_capture.h"
 #ifdef _WIN32

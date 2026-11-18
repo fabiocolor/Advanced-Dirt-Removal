@@ -20,6 +20,5 @@
   "status": "subject-only",
   "general_model_id": "ringo-recovery-20261101-r15e4-fdc8c4eb",
   "release_tag": "recovery-run22-epoch1-ghoststory-v1",
-  "release_url": "https://github.com/fabiocolor/phoenix-matte-recovery-research/releases/tag/recovery-run22-epoch1-ghoststory-v1",
   "scope_note": "Adapted to Ghost Story; not validated or promoted for other films. Ringo run 15 epoch 4 remains the promoted general model."
 }

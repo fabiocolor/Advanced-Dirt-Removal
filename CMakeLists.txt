@@ -12,7 +12,7 @@ if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
 endif()
 # Self-contained Windows binaries: no MSVC redistributable needed.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-project(AdvancedDirtRemoval VERSION 2.0.0 LANGUAGES C CXX)
+project(AdvancedDirtRemoval VERSION 2.1.0 LANGUAGES C CXX)
 enable_testing()
 add_subdirectory(engine)
 add_subdirectory(ofx)
