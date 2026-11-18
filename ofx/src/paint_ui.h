@@ -26,25 +26,35 @@ void setInt(OfxImageEffectHandle e,const char*n,int v){if(getInt(e,n)!=v)check(p
 void setDouble(OfxImageEffectHandle e,const char*n,double v){if(getDouble(e,n)!=v)check(params->paramSetValue(parameter(e,n),v),n);}
 void setText(OfxImageEffectHandle e,const char*n,const std::string&v){if(getText(e,n)!=v)check(params->paramSetValue(parameter(e,n),v.c_str()),n);}
 void enable(OfxImageEffectHandle e,const char*n,bool on){if(!params->paramGetPropertySet)return;OfxPropertySetHandle p=nullptr;if(params->paramGetPropertySet(parameter(e,n),&p)==kOfxStatOK&&p)prop->propSetInt(p,kOfxParamPropEnabled,0,on?1:0);}
-void store(OfxImageEffectHandle e,const paint::Document&d){
- const auto encoded=paint::encode(d);
- Updating guard;
- setText(e,"paint_data",encoded);
-}
 // Resolve Edit coalesces keyboard-only OFX edits into a host entry. Keep a
 // bounded paint history so the explicit paint buttons undo
 // exactly one stroke/property edit without touching a timeline operation.
 struct PaintState {std::string data;int selected=0;};
-struct PaintHistory {std::vector<PaintState> undo,redo;int depth=0;bool restoring=false;PaintState before;};
+struct PaintHistory {
+ std::vector<PaintState> undo,redo;
+ int depth=0;
+ bool restoring=false;
+ PaintState before;
+ std::string writtenDocument;
+};
 std::map<OfxImageEffectHandle,PaintHistory> histories;
 PaintState paintState(OfxImageEffectHandle e){return {getText(e,"paint_data"),getInt(e,"paint_stroke")};}
+void writeDocument(OfxImageEffectHandle e,std::string encoded){
+ Updating guard;
+ setText(e,"paint_data",encoded);
+ histories[e].writtenDocument=std::move(encoded);
+}
+void store(OfxImageEffectHandle e,const paint::Document&d){writeDocument(e,paint::encode(d));}
 void boundHistory(PaintHistory&h){
- size_t bytes=0;for(auto*list:{&h.undo,&h.redo})for(auto&v:*list)bytes+=v.data.size();
+ size_t bytes=h.writtenDocument.size();for(auto*list:{&h.undo,&h.redo})for(auto&v:*list)bytes+=v.data.size();
  while(h.undo.size()+h.redo.size()>64||bytes>(size_t(64)<<20)){
   auto&list=h.undo.empty()?h.redo:h.undo;bytes-=list.front().data.size();list.erase(list.begin());
  }
 }
-void beginPaintEdit(OfxImageEffectHandle e){auto&h=histories[e];if(h.restoring)return;if(h.depth++==0)h.before=paintState(e);}
+void beginPaintEdit(OfxImageEffectHandle e){
+ auto&h=histories[e];if(h.restoring)return;
+ if(h.depth++==0){h.before=paintState(e);if(h.writtenDocument.empty())h.writtenDocument=h.before.data;}
+}
 void endPaintEdit(OfxImageEffectHandle e){
  auto&h=histories[e];if(h.restoring||h.depth==0)return;if(--h.depth)return;
  auto now=paintState(e);if(h.before.data!=now.data){h.undo.push_back(std::move(h.before));h.redo.clear();boundHistory(h);}h.before={};
@@ -95,6 +105,13 @@ void refresh(OfxImageEffectHandle e,bool loadBrush=false){
  for(auto n:{"paint_rect_width","paint_rect_height"})enable(e,n,rect);
  for(auto n:{"paint_previous","paint_next"})enable(e,n,!d.strokes.empty());
 }
+// Resolve can report our own completed stroke as a later user edit. Only a
+// different document invalidates the local paint history.
+void documentChanged(OfxImageEffectHandle e){
+ const auto history=histories.find(e);
+ if(history!=histories.end()&&getText(e,"paint_data")!=history->second.writtenDocument)histories.erase(history);
+ refresh(e,true);
+}
 bool restorePaint(OfxImageEffectHandle e,bool redo){
  auto&h=histories[e];auto&from=redo?h.redo:h.undo;if(from.empty())return false;
  PaintState target=from.back(),current=paintState(e);
@@ -102,7 +119,7 @@ bool restorePaint(OfxImageEffectHandle e,bool redo){
  paint::decode(target.data);
  h.restoring=true;
  try{
-  {Undo undo(e,redo?"Redo paint":"Undo paint");Updating guard;setText(e,"paint_data",target.data);setInt(e,"paint_stroke",target.selected);refresh(e,true);}
+  {Undo undo(e,redo?"Redo paint":"Undo paint");Updating guard;writeDocument(e,std::move(target.data));setInt(e,"paint_stroke",target.selected);refresh(e,true);}
   from.pop_back();(redo?h.undo:h.redo).push_back(std::move(current));boundHistory(h);h.restoring=false;refresh(e);return true;
  }catch(...){h.restoring=false;throw;}
 }
@@ -194,13 +211,11 @@ void command(OfxImageEffectHandle e,Action action){
 // authoritative whenever the host restores it in the same change group.
 struct ChangeBatch {int depth=0;std::vector<std::pair<std::string,std::string>> names;};
 std::map<OfxImageEffectHandle,ChangeBatch> changeBatches;
-bool restoresDocument(const std::string&name,const char*reason){
- return name=="paint_data"&&(!reason||std::strcmp(reason,kOfxChangePluginEdited));
-}
 void applyChanged(OfxImageEffectHandle e,const std::string&name,const char*reason){
  if(updating)return;
  const bool userEdited=reason&&!std::strcmp(reason,kOfxChangeUserEdited);
- if(name=="paint_data"||name=="paint_stroke"){if(restoresDocument(name,reason))histories.erase(e);refresh(e,true);return;}
+ if(name=="paint_data"){documentChanged(e);return;}
+ if(name=="paint_stroke"){refresh(e,true);return;}
  if(name=="mask_mode"){if(userEdited)readyToPaint(e);refresh(e);return;}
  if(name=="paint_source_kind"){updateRecoveryEnabled(instance(e));refreshRecoveryUI(e);return;}
  if(name=="paint_tool"){
@@ -239,9 +254,9 @@ void endChanges(OfxImageEffectHandle e){
  auto names=std::move(found->second.names);changeBatches.erase(found);
  if(names.empty())return;
  struct HostGroup {bool previous=hostChangeGroup;HostGroup(){hostChangeGroup=true;}~HostGroup(){hostChangeGroup=previous;}} group;
- const bool documentRestored=std::any_of(names.begin(),names.end(),[](const auto&n){return restoresDocument(n.first,n.second.c_str());});
- gestureTrace(documentRestored?"restore complete stroke document":"apply grouped brush controls");
- if(documentRestored){histories.erase(e);refresh(e,true);return;}
+ const bool containsDocument=std::any_of(names.begin(),names.end(),[](const auto&n){return n.first=="paint_data";});
+ gestureTrace(containsDocument?"apply complete stroke document":"apply grouped brush controls");
+ if(containsDocument){documentChanged(e);return;}
  for(const auto&name:names)applyChanged(e,name.first,name.second.c_str());
 }
 // InstanceChanged for paint parameters (and Mode, which changes the wording).

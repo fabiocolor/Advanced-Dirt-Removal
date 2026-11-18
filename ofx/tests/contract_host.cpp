@@ -263,17 +263,20 @@ int main(int argc,char**argv){
   auto painted=paint_ui::document(handle);
   auto newStroke=painted.strokes.back();newStroke.id=painted.nextId++;
   painted.strokes.push_back(newStroke);
-  auto notifyStrokeWrite=[&](const char*reason){
-   Properties change;setString(H(change),kOfxPropName,0,"paint_data");setString(H(change),kOfxPropChangeReason,0,reason);
+  auto notifyStrokeWrite=[&]{
+   Properties change;setString(H(change),kOfxPropName,0,"paint_data");setString(H(change),kOfxPropChangeReason,0,kOfxChangeUserEdited);
    paint_ui::beginChanges(handle);paint_ui::changed(handle,H(change));paint_ui::endChanges(handle);
   };
   const auto documentHandle=paint_ui::parameter(handle,"paint_data");
-  duringParameterSet=[&](OfxParamHandle changed){if(changed==documentHandle)notifyStrokeWrite(kOfxChangeUserEdited);};
+  duringParameterSet=[&](OfxParamHandle changed){if(changed==documentHandle)notifyStrokeWrite();};
   {paint_ui::Undo undo(handle,"Paint stroke");paint_ui::store(handle,painted);}
   duringParameterSet=nullptr;
-  notifyStrokeWrite(kOfxChangePluginEdited);
+  notifyStrokeWrite();
   verify(paint_ui::restorePaint(handle,false)&&paint_ui::getText(handle,"paint_data")==beforeStroke,"host notifications for a brush write preserve its undo entry");
+  notifyStrokeWrite();
   verify(paint_ui::restorePaint(handle,true)&&paint_ui::getText(handle,"paint_data")==paint::encode(painted),"redo restores the exact stroke after a host notification");
+  paint_ui::setText(handle,"paint_data",beforeStroke);notifyStrokeWrite();
+  verify(!paint_ui::canPaintUndo(handle,false)&&!paint_ui::canPaintUndo(handle,true),"a different host-restored stroke document invalidates local history");
   inPaintCallback=false;paint_ui::histories.erase(handle);
   std::cout<<"viewer paint undo/redo, property restoration and bounds: passed\n";
   // Previous/Next stroke: frame order, starting from the playhead (12 in this
