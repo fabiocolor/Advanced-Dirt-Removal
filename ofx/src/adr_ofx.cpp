@@ -403,6 +403,7 @@ struct Instance {
  // Diagnostic log: instance number and the live sequence's statistics.
  int id=0;
  std::string label()const{return "instance #"+std::to_string(id);}
+ int sharedReason=-1;  // last logged shared-cache decision
  int rendered=0,servedCached=0;double renderMs=0;float sourceMin=0,sourceMax=0;bool sourceSeen=false,flatWarned=false,rangeWarned=false,originalLogged=false,originalWarned=false;int comparedFrame=std::numeric_limits<int>::min(),compareState=-1;
  void summary(const char*why){
   if(sequence&&(rendered||servedCached)){
@@ -1130,7 +1131,13 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
    if(i.cachedFrame!=time&&paintOn&&i.key==key.str()){auto it=i.recent.find(time);if(it!=i.recent.end()){i.cached=it->second;i.cachedFrame=time;traceWhat="cached";}}
   }
   const std::string cleanKey=cleanKeyFor(i,identity,range,w,h,st.encoding,windowed,time);
-  const bool useShared=!prepared&&!skipCleaning&&frame_cache::shared().capacity()>0;
+  // Only nodes with strokes, Spanish nodes or masked nodes re-render whole shots on
+  // each edit ("paint" is on by default, so it does not count). Ordinary
+  // playback and renders must not hold extra frames: on long shots that filled
+  // memory and swap (issue #9).
+  const bool paintingNode=!strokes.strokes.empty()||st.maskMode==2||clipConnected(i.mask);
+  if(i.sharedReason<0||i.sharedReason!=int(paintingNode)){i.sharedReason=int(paintingNode);adrlog::info(i.label()+(paintingNode?" keeps cleaned frames for painting (paint ":" keeps no cleaned frames (paint ")+std::to_string(paintOn)+", strokes "+std::to_string(strokes.strokes.size())+", mode "+std::to_string(st.maskMode)+", mask input "+std::to_string(int(clipConnected(i.mask)))+")");}
+  const bool useShared=paintingNode&&!prepared&&!skipCleaning&&frame_cache::shared().capacity()>0;
   if(useShared&&i.cachedFrame!=time&&frame_cache::shared().contains(cleanKey)){
    const uint64_t print=sourcePrint();auto t0=std::chrono::steady_clock::now();
    if(auto hit=frame_cache::shared().find(cleanKey,print)){i.cached=hit;i.cachedFrame=time;if(i.key.empty())i.key=key.str();traceWhat="cached";sharedHit=true;}
@@ -1278,7 +1285,7 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
    }
    i.cached=std::make_shared<const std::vector<float>>(std::move(i.scratch));i.cachedFrame=time;i.sourcePrints[time]=sourcePrint();
    if(useShared){const uint64_t print=sourcePrint();auto t0=std::chrono::steady_clock::now();frame_cache::shared().put(cleanKey,print,i.cached);tShared+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count();}
-   if(paintOn){
+   if(paintOn&&paintingNode){
     // Keep nearby frames within 512 MiB; very large frames use only cached above.
     const size_t bytes=i.cached->size()*sizeof(float),keep=paint::cacheFrames(bytes);
     if(keep)i.recent[time]=i.cached;

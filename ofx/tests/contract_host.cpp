@@ -497,6 +497,7 @@ int main(int argc,char**argv){
  renderFrame(count-1);
  for(int f=0;f<count;++f){renderFrame(f);auto before=instance(handle).sequence;verify(plugin->mainEntry(kOfxImageEffectActionEndSequenceRender,handle,ip,nullptr)==0,"end bracket");verify(instance(handle).sequence==before,"end bracket preserves bounded history");}
  verify(messageCalls==messagesBeforeRendering,"normal rendering does not call host logging or UI callbacks");
+ verify(frame_cache::shared().stats().frames==0,"ordinary rendering without paint or a mask keeps no shared cleaned frames (issue #9)");
  verify(plugin->mainEntry(kOfxActionPurgeCaches,handle,nullptr,nullptr)==kOfxStatOK,"purge caches");verify(!instance(handle).sequence,"purge releases live sequence");renderFrame(count/2);
  // Paint: a hard rectangle on one frame. Recovery: the source inside, the exact repair outside.
  // Spanish dirt removal: the repair inside only; with nothing painted, the source everywhere.

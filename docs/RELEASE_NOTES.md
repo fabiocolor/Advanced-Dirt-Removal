@@ -6,6 +6,10 @@
 - Fixed memory not being freed after CPU processing on Windows.
 - Auto recovery no longer keeps growing memory over a shot, which could fill
   swap on long clips ([#9](https://github.com/fabiocolor/Advanced-Dirt-Removal/issues/9)).
+- The cleaned-frame cache that speeds up painting is used only on nodes with
+  strokes, in Spanish dirt removal or with a connected mask. Ordinary playback
+  and renders no longer keep extra frames in memory
+  ([#9](https://github.com/fabiocolor/Advanced-Dirt-Removal/issues/9)).
 - GPU memory is freed when a shot or its settings change, instead of being kept
   for later.
 - Cleaning math is unchanged.
