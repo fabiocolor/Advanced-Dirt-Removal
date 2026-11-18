@@ -162,7 +162,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
     }
     return 0;
    case WM_TIMER:
-    if (panel->stop.load()) DestroyWindow(window);
+    if (panel->stop.load() || panel->state->phase.load() == State::Complete) DestroyWindow(window);
     else refresh(*panel);
     return 0;
    case WM_DESTROY:
