@@ -95,7 +95,9 @@ learning framework is needed at build or run time.
 `tools/convert_recovery_model.py` (needs PyTorch) writes this file from a
 training checkpoint and documents the format.
 
-Bundled model provenance is recorded in `recovery-model.json` beside the weights.
+The model weights are licensed under CC BY-NC 4.0. The plug-in bundle includes
+the [weights licence](../WEIGHTS_LICENSE) and records model provenance in
+`recovery-model.json` alongside the weights.
 The current development model is **Ringo · 9 Nov 2026 · run 22 epoch 1 · Ghost Story only**
 (`ringo-recovery-20261109-r22e1-63f18ae7`). It is a subject-only model;
 `ringo-recovery-20261101-r15e4-fdc8c4eb` remains the promoted general model.

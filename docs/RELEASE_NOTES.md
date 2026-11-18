@@ -41,7 +41,7 @@
   status write.
 - Includes the Ringo run 22, epoch 1 checkpoint used in the review build. It
   was fine-tuned for one film and has not been qualified for general
-  restoration quality.
+  restoration quality. The model weights use CC BY-NC 4.0.
 
 ## 2.0.0
 

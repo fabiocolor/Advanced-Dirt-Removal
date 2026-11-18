@@ -63,6 +63,8 @@ def stage(manifest: Path, inputs: Path, output: Path) -> dict:
         text = re.sub(r'\]\((USER_GUIDE\.md|TESTED\.md)([^)]*)\)',
                       rf'](https://github.com/fabiocolor/Advanced-Dirt-Removal/blob/v{version}/docs/\1\2)', text)
         (output / name).write_text(text)
+    shutil.copyfile(ROOT / 'LICENSE', output / 'LICENSE')
+    shutil.copyfile(ROOT / 'WEIGHTS_LICENSE', output / 'WEIGHTS_LICENSE.txt')
     report = {'version': version, 'publication': 'held_for_owner_approval', 'inputs': spec['assets'],
               'downloads': {p.name: {'sha256': digest(p), 'bytes': p.stat().st_size}
                             for p in sorted(output.iterdir())}}

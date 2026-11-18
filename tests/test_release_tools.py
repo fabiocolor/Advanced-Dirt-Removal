@@ -74,6 +74,8 @@ class ReleaseTools(unittest.TestCase):
             (root / 'docs').mkdir()
             (root / 'docs/INSTALL.md').write_text('[Guide](USER_GUIDE.md#recovery)')
             (root / 'docs/RELEASE_NOTES.md').write_text('2.0.0 [Tests](TESTED.md)')
+            (root / 'LICENSE').write_text('Code licence')
+            (root / 'WEIGHTS_LICENSE').write_text('Weights licence')
             inputs = root / 'inputs'
             inputs.mkdir()
             assets = []
@@ -92,6 +94,8 @@ class ReleaseTools(unittest.TestCase):
                     self.assertEqual(archive.read('installer.exe'), b'windows installer')
                 self.assertIn('/blob/v2.0.0/docs/USER_GUIDE.md#recovery', (output / 'INSTALL.md').read_text())
                 self.assertIn('/blob/v2.0.0/docs/TESTED.md', (output / 'RELEASE_NOTES.md').read_text())
+                self.assertEqual((output / 'LICENSE').read_text(), 'Code licence')
+                self.assertEqual((output / 'WEIGHTS_LICENSE.txt').read_text(), 'Weights licence')
                 for line in (output / 'SHA256SUMS').read_text().splitlines():
                     digest, name = line.split('  ')
                     self.assertEqual(stage.digest(output / name), digest)

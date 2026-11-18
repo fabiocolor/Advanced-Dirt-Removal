@@ -1,7 +1,8 @@
 # Advanced Dirt Removal
 
 [![Version](https://img.shields.io/badge/version-2.0.0-blue?style=flat-square)](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases)
-[![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
+[![Code licence](https://img.shields.io/badge/code-MIT-green?style=flat-square)](LICENSE)
+[![Weights licence](https://img.shields.io/badge/model%20weights-CC%20BY--NC%204.0-orange?style=flat-square)](WEIGHTS_LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat-square)](#install)
 [![Download](https://img.shields.io/badge/Download-Latest%20Release-brightgreen?style=for-the-badge&logo=download)](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases/latest)
 
@@ -116,9 +117,9 @@ checked locally.
 
 ## License
 
-MIT; see [LICENSE](LICENSE), including the auto-recovery model weights in
-`ofx/resources`. The OpenFX headers in `ofx/vendor/openfx` are under
-their own BSD 3-Clause licence ([ofx/vendor/openfx/LICENSE.md](ofx/vendor/openfx/LICENSE.md)).
+The plug-in source is under the [MIT licence](LICENSE). The Auto Recovery model
+weights are under [CC BY-NC 4.0](WEIGHTS_LICENSE). The OpenFX headers use the
+[BSD 3-Clause licence](ofx/vendor/openfx/LICENSE.md).
 
 <div align="center">
   <sub>Making film restoration accessible to archives, educators and preservation enthusiasts</sub>

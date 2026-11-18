@@ -102,6 +102,7 @@ configure_file(../LICENSE "${OFX_CONTENTS}/Resources/LICENSE.txt" COPYONLY)
 configure_file(resources/paint-navigation.lua "${OFX_CONTENTS}/Resources/paint-navigation.lua" COPYONLY)
 set_property(TARGET AdvancedDirtRemoval APPEND PROPERTY LINK_DEPENDS "${OFX_CONTENTS}/Resources/paint-navigation.lua")
 # Auto-recovery classifier weights (see tools/convert_recovery_model.py).
+configure_file(../WEIGHTS_LICENSE "${OFX_CONTENTS}/Resources/WEIGHTS_LICENSE.txt" COPYONLY)
 configure_file(resources/recovery-model.bin "${OFX_CONTENTS}/Resources/recovery-model.bin" COPYONLY)
 configure_file(resources/recovery-model.json "${OFX_CONTENTS}/Resources/recovery-model.json" COPYONLY)
 if(APPLE)
@@ -109,7 +110,8 @@ if(APPLE)
   # refuse unsigned code. Pass a Developer ID identity for distribution.
   set(ADR_CODESIGN_IDENTITY "-" CACHE STRING "codesign identity for the OFX bundle")
   set_property(TARGET AdvancedDirtRemoval APPEND PROPERTY LINK_DEPENDS
-    "${OFX_CONTENTS}/Info.plist" "${OFX_CONTENTS}/Resources/LICENSE.txt" "${OFX_CONTENTS}/Resources/recovery-model.bin" "${OFX_CONTENTS}/Resources/recovery-model.json")
+    "${OFX_CONTENTS}/Info.plist" "${OFX_CONTENTS}/Resources/LICENSE.txt" "${OFX_CONTENTS}/Resources/WEIGHTS_LICENSE.txt"
+    "${OFX_CONTENTS}/Resources/recovery-model.bin" "${OFX_CONTENTS}/Resources/recovery-model.json")
   add_custom_command(TARGET AdvancedDirtRemoval POST_BUILD
     COMMAND codesign --force --timestamp=none --sign "${ADR_CODESIGN_IDENTITY}" "${CMAKE_BINARY_DIR}/${ADR_BUNDLE}"
     COMMENT "Signing ${ADR_BUNDLE}" VERBATIM)
