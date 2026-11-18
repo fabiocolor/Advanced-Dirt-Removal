@@ -5,7 +5,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
-#include <commctrl.h>
+#include <dwmapi.h>
 
 #include <algorithm>
 #include <chrono>
@@ -20,6 +20,11 @@ namespace {
 constexpr wchar_t panelClass[] = L"FabioColor.ADR.RecoveryProgress";
 constexpr UINT_PTR refreshTimer = 1;
 constexpr int actionButton = 100;
+constexpr int progressControl = 101;
+constexpr COLORREF background = RGB(33, 35, 39);
+constexpr COLORREF secondary = RGB(174, 180, 190);
+constexpr COLORREF foreground = RGB(237, 239, 243);
+constexpr COLORREF accent = RGB(104, 166, 213);
 
 struct Panel {
  std::shared_ptr<State> state;
@@ -30,6 +35,8 @@ struct Panel {
  std::atomic<bool> stop{false}, exited{false};
  std::thread thread;
  bool marquee = false;
+ int progressPercent = 0, animationOffset = 0;
+ HBRUSH backdrop = nullptr;
 };
 
 std::mutex panelsMutex;
@@ -71,18 +78,19 @@ void refresh(Panel& panel) {
  wchar_t details[128]{};
  std::swprintf(details, 128, L"Elapsed: %.1f seconds%ls", elapsed, cancelling ? L" (stopping at a safe boundary)" : L"");
 
- const bool marquee = phase == State::Queued;
- if (marquee != panel.marquee) {
-  panel.marquee = marquee;
-  const auto style = GetWindowLongPtrW(panel.progress, GWL_STYLE);
-  SetWindowLongPtrW(panel.progress, GWL_STYLE, marquee ? style | PBS_MARQUEE : style & ~PBS_MARQUEE);
-  SendMessageW(panel.progress, PBM_SETMARQUEE, marquee, 30);
- }
- if (!marquee) SendMessageW(panel.progress, PBM_SETPOS, percent, 0);
+ panel.marquee = phase == State::Queued;
+ panel.progressPercent = percent;
+ panel.animationOffset = static_cast<int>(elapsed * 8) % 12;
+ InvalidateRect(panel.progress, nullptr, FALSE);
  SetWindowTextW(panel.status, status);
  SetWindowTextW(panel.details, details);
  SetWindowTextW(panel.button, busy ? L"Cancel" : L"Close");
  EnableWindow(panel.button, !cancelling);
+}
+
+void fill(HDC dc, const RECT& rect, COLORREF color) {
+ SetDCBrushColor(dc, color);
+ FillRect(dc, &rect, static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
 }
 
 LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -93,6 +101,55 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
  auto* panel = reinterpret_cast<Panel*>(GetWindowLongPtrW(window, GWLP_USERDATA));
  if (panel) {
   switch (message) {
+   case WM_ERASEBKGND: {
+    RECT rect{};
+    GetClientRect(window, &rect);
+    fill(reinterpret_cast<HDC>(wParam), rect, background);
+    return 1;
+   }
+   case WM_CTLCOLORSTATIC: {
+    const auto dc = reinterpret_cast<HDC>(wParam);
+    SetTextColor(dc, reinterpret_cast<HWND>(lParam) == panel->details ? secondary : foreground);
+    SetBkColor(dc, background);
+    return reinterpret_cast<LRESULT>(panel->backdrop);
+   }
+   case WM_DRAWITEM: {
+    const auto& item = *reinterpret_cast<const DRAWITEMSTRUCT*>(lParam);
+    if (item.CtlID == progressControl) {
+     fill(item.hDC, item.rcItem, RGB(57, 62, 71));
+     RECT bar = item.rcItem;
+     const LONG width = bar.right - bar.left;
+     if (panel->marquee) {
+      const LONG segment = width / 4;
+      const int step = panel->animationOffset;
+      bar.left += (width - segment) * (step <= 6 ? step : 12 - step) / 6;
+      bar.right = bar.left + segment;
+     } else {
+      bar.right = bar.left + width * panel->progressPercent / 100;
+     }
+     fill(item.hDC, bar, accent);
+     return TRUE;
+    }
+    if (item.CtlID == actionButton) {
+     const bool disabled = (item.itemState & ODS_DISABLED) != 0;
+     const bool pressed = (item.itemState & ODS_SELECTED) != 0;
+     fill(item.hDC, item.rcItem, pressed ? RGB(65, 79, 94) : RGB(48, 52, 59));
+     RECT label = item.rcItem;
+     wchar_t text[16]{};
+     GetWindowTextW(item.hwndItem, text, 16);
+     const auto previousFont = SelectObject(item.hDC, panel->font);
+     SetBkMode(item.hDC, TRANSPARENT);
+     SetTextColor(item.hDC, disabled ? secondary : foreground);
+     DrawTextW(item.hDC, text, -1, &label, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+     if (previousFont) SelectObject(item.hDC, previousFont);
+     if (item.itemState & ODS_FOCUS) {
+      InflateRect(&label, -3, -3);
+      DrawFocusRect(item.hDC, &label);
+     }
+     return TRUE;
+    }
+    break;
+   }
    case WM_COMMAND:
     if (LOWORD(wParam) != actionButton || HIWORD(wParam) != BN_CLICKED) break;
     [[fallthrough]];
@@ -127,13 +184,11 @@ HINSTANCE module() {
 // neither freeze the progress bar nor prevent a cancel request.
 void runPanel(Panel& panel) {
  const HINSTANCE instance = module();
- INITCOMMONCONTROLSEX controls{sizeof(controls), ICC_PROGRESS_CLASS};
- if (!instance || !InitCommonControlsEx(&controls)) return;
+ if (!instance) return;
  WNDCLASSW windowClass{};
  windowClass.lpfnWndProc = windowProc;
  windowClass.hInstance = instance;
  windowClass.hCursor = LoadCursorW(nullptr, MAKEINTRESOURCEW(32512)); // IDC_ARROW
- windowClass.hbrBackground = GetSysColorBrush(COLOR_WINDOW);
  windowClass.lpszClassName = panelClass;
  if (!RegisterClassW(&windowClass) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) return;
 
@@ -154,15 +209,18 @@ void runPanel(Panel& panel) {
   anchor.top + (anchor.bottom - anchor.top - height) / 2,
   width, height, owner, nullptr, instance, &panel);
  if (!panel.window) return;
+ panel.backdrop = CreateSolidBrush(background);
+ const BOOL darkCaption = TRUE;
+ DwmSetWindowAttribute(panel.window, DWMWA_USE_IMMERSIVE_DARK_MODE, &darkCaption, sizeof(darkCaption));
 
  const auto child = [&](const wchar_t* cls, DWORD flags, int x, int y, int w, int h, int id = 0) {
   return CreateWindowExW(0, cls, L"", WS_CHILD | WS_VISIBLE | flags,
    px(x), px(y), px(w), px(h), panel.window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), instance, nullptr);
  };
  panel.status = child(L"STATIC", SS_NOPREFIX, 16, 16, 438, 22);
- panel.progress = child(PROGRESS_CLASSW, 0, 16, 43, 438, 15);
+ panel.progress = child(L"STATIC", SS_OWNERDRAW, 16, 46, 438, 8, progressControl);
  panel.details = child(L"STATIC", SS_NOPREFIX, 16, 69, 438, 22);
- panel.button = child(L"BUTTON", BS_PUSHBUTTON, 354, 100, 100, 28, actionButton);
+ panel.button = child(L"BUTTON", BS_OWNERDRAW, 354, 100, 100, 28, actionButton);
  if (panel.status && panel.details && panel.progress && panel.button &&
      SetTimer(panel.window, refreshTimer, 100, nullptr)) {
   panel.font = CreateFontW(-px(15), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
@@ -170,7 +228,6 @@ void runPanel(Panel& panel) {
    DEFAULT_PITCH, L"Segoe UI");
   for (HWND label : {panel.status, panel.details, panel.button})
    SendMessageW(label, WM_SETFONT, reinterpret_cast<WPARAM>(panel.font), FALSE);
-  SendMessageW(panel.progress, PBM_SETRANGE32, 0, 100);
   refresh(panel);
   ShowWindow(panel.window, SW_SHOWNOACTIVATE);
   panel.state->presented = IsWindowVisible(panel.window) != FALSE;
@@ -183,6 +240,7 @@ void runPanel(Panel& panel) {
  }
  if (IsWindow(panel.window)) DestroyWindow(panel.window);
  if (panel.font) DeleteObject(panel.font);
+ if (panel.backdrop) DeleteObject(panel.backdrop);
  panel.state->presented = false;
 }
 }
