@@ -8,11 +8,47 @@ Anything not listed has not been tried. Please report results from other hosts,
 systems and GPUs in [GitHub Issues](https://github.com/fabiocolor/Advanced-Dirt-Removal/issues),
 with the diagnostic log.
 
+## Version 2.1.0
+
+November 2026. The cleaning engine is unchanged: the 58 engine cases give the
+same hashes as in 2.0.0 on every backend tested below.
+
+| System | Checks | Result |
+| --- | --- | --- |
+| macOS 27, Apple M5 Pro | Engine and OFX contract on Metal, OpenCL and CPU; Resolve Studio 21.1.1 (Fusion page); Nuke 17.1 | Passed. Resolve 9/9 and Nuke 12/12 feature checks; output and auto-recovery maps identical to the reference |
+| Windows 11, NVIDIA RTX A5000 | Engine and OFX contract on CUDA, OpenCL and CPU | Passed |
+| Windows 11, NVIDIA RTX 3090 | Resolve Studio 21.0.4 (Fusion page) | 9/9; output and auto-recovery maps identical to macOS. Nuke not run this time |
+| Windows 10, AMD Radeon RX 580 | Installer: clean install, upgrade from 2.0.0 and 1.1.3, uninstall | Passed |
+| Windows 10, NVIDIA Quadro P5000 | Automatic backend choice | Falls back to OpenCL and matches the reference |
+| Ubuntu 24.04, NVIDIA RTX 3090 | Engine on CUDA, OpenCL and CPU; Resolve Studio 21.0.4 (Fusion page); Nuke 17.1 | Passed. Resolve 9/9, Nuke 12/12; output and auto-recovery maps identical to macOS |
+| AlmaLinux 8 container (glibc 2.28) | Release build, engine on CPU, install and uninstall | Passed |
+| macOS `.pkg` | Clean install and upgrade from 2.0.0 | Installed files match the package |
+
+The feature checks are the 2.0.0 ones below: defaults, Red difference, auto
+recovery and its matte, Spanish dirt removal, Cineon log, each compared with
+the macOS reference on 12 frames of the film scan.
+
+**Viewer painting**, on development builds of 2.1.0, in Resolve Studio 21.1.1 on macOS (Fusion, Color and Edit
+pages) and Resolve Studio 21.0.4 on Windows (Color and Edit pages): round,
+square and rectangle brushes, Erase, Select, move and resize, Delete, Undo
+paint and Redo paint, Previous/Next stroke, Recovery and Spanish dirt removal,
+Red and True difference, and reopening the project. Rendered frames were
+compared with an independent computation of what the strokes must produce.
+Strokes were driven by script. A real pen tablet and viewer painting on Linux
+haven't been tested yet.
+
+**Memory** ([#9](https://github.com/fabiocolor/Advanced-Dirt-Removal/issues/9)):
+a 330-frame 2048×1556 ProRes shot with auto recovery in Resolve 21.1.1 on a
+24 GB Mac peaked at 16 GB with 3.6 GB of swap in the first 2.1.0 build, and at
+9.4 GB with no swap after the fix. The rendered frames are identical.
+
+## Version 2.0.0
+
 Version 2.0.0, November 2026. Real-footage tests use a 2368×1712 film scan
 (float EXR): 56 frames on macOS, a 12-frame excerpt on Windows and Linux,
 compared frame by frame with the macOS result.
 
-## macOS: every feature, in DaVinci Resolve and Nuke
+### macOS: every feature, in DaVinci Resolve and Nuke
 
 Apple M5 Pro, macOS 27, Metal. DaVinci Resolve Studio 21.1 (Fusion page) and
 Nuke 17.1, both driven by script with the plugin from this repository.
@@ -48,7 +84,7 @@ engine cases only).
 Times on this Mac: cleaning about 0.1 s per frame; auto recovery about 1.5 to 3 s
 per frame (a 56-frame shot in 90 to 155 s).
 
-## Engine and plugin by system and GPU
+### Engine and plugin by system and GPU
 
 | System | GPU / backend | Status |
 | --- | --- | --- |
@@ -60,7 +96,7 @@ per frame (a 56-frame shot in 90 to 155 s).
 | Linux x86-64, Ubuntu 24.04, NVIDIA RTX 3090 | CUDA, OpenCL, CPU fallback | Tested with the release build: 58 engine cases and the OFX contract test on each; real-footage output and auto-recovery maps identical to macOS |
 | Linux x86-64, AlmaLinux 8 (glibc 2.28) | CPU fallback | Release build made and tested in a container: 58 engine cases and the OFX contract test; the plugin needs glibc 2.27 or newer |
 
-## Hosts
+### Hosts
 
 | Host | System | Status |
 | --- | --- | --- |
@@ -80,7 +116,7 @@ release tarball was rebuilt with this fix and passed every check above. Host
 results are scripted render checks with output compared by machine; they are
 not a review of picture quality on many films.
 
-## Installers
+### Installers
 
 | Installer | Status |
 | --- | --- |
@@ -88,7 +124,7 @@ not a review of picture quality on many films.
 | Windows installer (Inno Setup) | Built from this source; silent install puts files identical to the build in the OFX folder; upgrade from 1.1.3 removes the 1.x installation and its macros; uninstall restores the OFX folder exactly (Windows 11 and Windows 10). `installers/win/build_installer.ps1` (Visual Studio 2022 generator) also builds a working installer |
 | Linux tarball | Built in a manylinux_2_28 container (`installers/linux/build_portable.sh`); needs glibc 2.27 or newer. Installed in the system OFX folder on Ubuntu 24.04 and used by Resolve and Nuke there; user install and uninstall also tested |
 
-## How the checks are run
+### How the checks are run
 
 `python3 tools/check_release.py build` builds the plugin and checks the engine on
 each available backend against `tests/engine_hashes.json`: 29 control settings

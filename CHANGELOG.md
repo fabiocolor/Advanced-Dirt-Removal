@@ -2,7 +2,29 @@
 
 Longer notes for each release are in [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md).
 
-## 2.0.0 (not published yet)
+## 2.1.0
+
+Added
+- Painting directly in the viewer in DaVinci Resolve (Fusion, Color and Edit
+  pages): Paint, Erase and Select, round, square and rectangle brushes, held
+  strokes, Previous/Next stroke, and Undo paint/Redo paint.
+- **Additional source** input, to paint a clip cleaned elsewhere back to its
+  original.
+- Separate cleaning settings for Recovery and Spanish dirt removal, and
+  **Cleaning defaults** to save and load your own.
+- Progress, cancel and reuse of saved mattes for **Calculate recovery**.
+- A new auto-recovery model.
+
+Fixed
+- Memory filling up on long shots (#9).
+- Lower GPU memory use in Resolve; memory freed after CPU processing on
+  Windows.
+- Faster Spanish dirt removal while painting.
+
+Changed
+- **Mask** is called **Method** in Resolve and **Mode** in other hosts.
+
+## 2.0.0
 
 A new plugin. 1.x was a Fusion macro around DaVinci Resolve's built-in dirt
 removal. 2.0 is a stand-alone OFX plugin with its own temporal repair engine,

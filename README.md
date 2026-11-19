@@ -1,6 +1,6 @@
 # Advanced Dirt Removal
 
-[![Version](https://img.shields.io/badge/version-2.0.0-blue?style=flat-square)](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases)
+[![Version](https://img.shields.io/badge/version-2.1.0-blue?style=flat-square)](https://github.com/fabiocolor/Advanced-Dirt-Removal/releases)
 [![Code licence](https://img.shields.io/badge/code-MIT-green?style=flat-square)](LICENSE)
 [![Weights licence](https://img.shields.io/badge/model%20weights-CC%20BY--NC%204.0-orange?style=flat-square)](WEIGHTS_LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat-square)](#install)
@@ -26,12 +26,16 @@ One effect does everything:
 
 - **Input encoding:** Video, or Cineon log for film scans. Cineon is cleaned in
   linear, and pixels it doesn't touch keep their exact log values.
-- **Recovery mask:** paint where you want the original back.
+- **Paint in the viewer (Resolve):** paint where you want the original back,
+  or where you want dust removed, directly in the effect's viewer. Other hosts
+  use the Mask input.
 - **Auto recovery:** a small built-in model looks at every repaired spot and
   gives back the ones that look like real picture detail. You can paint on top
   of its matte to add or remove areas.
-- **Spanish dirt removal:** manual frame-by-frame dust cleaning. Put a small
-  mask over a speck and only that spot is repaired.
+- **Spanish dirt removal:** manual frame-by-frame dust cleaning. Paint over a
+  speck and only that spot is repaired.
+- **Additional source:** paint a clip that was cleaned elsewhere back to its
+  original.
 - **Views:** Restored, Red difference (every repair in red on a grey picture),
   True difference and the auto-recovery matte.
 
@@ -67,10 +71,11 @@ repaired.
 
 Sources: [SOURCES.md](assets/documentation/SOURCES.md).
 
-> **New in 2.0.** Version 1.x was a Fusion macro around DaVinci Resolve's
-> built-in dirt removal. 2.0 is a stand-alone plugin with its own engine, for
-> Resolve, Nuke and other OFX hosts on macOS, Windows and Linux. What changed:
-> [CHANGELOG.md](CHANGELOG.md). What has been tested: [docs/TESTED.md](docs/TESTED.md).
+> **New in 2.1.** Paint directly in the viewer in DaVinci Resolve, on the
+> Fusion, Color and Edit pages, and much lower memory use on long shots
+> ([#9](https://github.com/fabiocolor/Advanced-Dirt-Removal/issues/9)). What
+> changed: [CHANGELOG.md](CHANGELOG.md). What has been tested:
+> [docs/TESTED.md](docs/TESTED.md).
 
 ## Install
 
@@ -115,14 +120,16 @@ Restart your host afterwards. The plugin goes in the standard OFX folder:
 
 1. Add **Advanced Dirt Removal** (group **FabioColor**) to the complete,
    unedited shot:
-   - **DaVinci Resolve:** Fusion page → Add Tool → OpenFX → FabioColor.
+   - **DaVinci Resolve:** Fusion page → Add Tool → OpenFX → FabioColor, or
+     drag it from the OpenFX library on the Color or Edit page.
    - **Nuke:** Tab → "Advanced Dirt Removal".
 2. Set **Input encoding** to *Cineon log* for Cineon scans. Leave *Video*
    otherwise.
 3. Check what it did with **View: Red difference**.
 4. Where it repaired real detail, press **Calculate recovery** for auto
-   recovery, and/or connect a paint or mask tool to the **Mask** input and paint
-   the original back.
+   recovery, and/or paint the original back. In Resolve, turn on the viewer's
+   Open FX Overlay and paint in the viewer; in other hosts, connect a paint or
+   mask tool to the **Mask** input.
 
 The [user guide](docs/USER_GUIDE.md) goes through every control, the recovery
 workflow and the views.
@@ -142,7 +149,9 @@ same on Windows and Linux.
 | Detection | Analyse, Remove dark spots, Remove light spots, Sensitivity, Extra sensitivity, Analysis detail, Limit spot size, Largest spot, Extended-range input |
 | Processing | Repair amount, Blend repairs, Blend amount |
 | Safeguards | Motion guard, Shot changes, Shot-change guard, Flash guard |
-| Recovery | Mask (Recovery / Spanish dirt removal), Calculate recovery, Auto recovery, Confidence, Matte folder |
+| Paint (Resolve) | Method (Recovery / Spanish dirt removal), Paint in viewer, Show strokes, Tool, Brush, Size, Softness, Undo paint, Redo paint, Strokes, Brush options, Source setup |
+| Recovery | Method (Mode in other hosts), Calculate recovery, Auto recovery, Confidence, Matte folder |
+| Cleaning defaults (Resolve) | Save as my default, Load my default, Use factory settings |
 | View options | Difference threshold, Red difference intensity, Red highlight opacity, Grayscale background, Difference gain |
 
 ## Limits
@@ -152,8 +161,9 @@ same on Windows and Linux.
 - Damage that stays for more than a frame or two isn't touched.
 - Interlaced material isn't supported. Deinterlace first.
 - Tested hosts are DaVinci Resolve Studio 21 (Fusion page) and Nuke 17 on
-  macOS, Windows and Linux. The Resolve Color and Edit pages, other OFX hosts
-  and Intel Macs haven't been tested yet. Premiere Pro and After Effects don't
+  macOS, Windows and Linux. Viewer painting on the Resolve Color and Edit pages
+  is tested on macOS and Windows, not yet on Linux. Other OFX hosts and Intel
+  Macs haven't been tested yet. Premiere Pro and After Effects don't
   load OFX plugins, so they aren't supported yet.
 
 The plugin keeps a diagnostic log (backend, device, timing, errors). Its

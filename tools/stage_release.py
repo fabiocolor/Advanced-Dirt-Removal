@@ -39,6 +39,10 @@ def stage(manifest: Path, inputs: Path, output: Path) -> dict:
         verified.append((asset, source))
     if {a['platform'] for a, _ in verified} != {'macos', 'windows', 'linux'} or len(verified) != 3:
         raise ValueError('expected one verified installer for each platform')
+    weights = ROOT / 'ofx' / 'resources' / 'recovery-model.bin'
+    weights_hash = digest(weights)
+    if spec.get('weights_sha256', weights_hash) != weights_hash:
+        raise ValueError('weights hash differs from the release manifest')
     output.mkdir(parents=True)
     for asset, source in verified:
         platform = asset['platform']
@@ -46,7 +50,6 @@ def stage(manifest: Path, inputs: Path, output: Path) -> dict:
             shutil.copyfile(source, output / source.name)
         else:
             if platform == 'windows':
-                # As in 1.x: the raw setup program is attached too, for winget.
                 shutil.copyfile(source, output / source.name)
             name = (f'AdvancedDirtRemoval-{version}-macos.zip' if platform == 'macos'
                     else f'AdvancedDirtRemoval-Setup-{version}-win64.zip')
@@ -60,10 +63,6 @@ def stage(manifest: Path, inputs: Path, output: Path) -> dict:
                     raise ValueError(f'archive verification failed: {name}')
                 if hashlib.sha256(archive.read(source.name)).hexdigest() != asset['sha256']:
                     raise ValueError(f'archive payload changed: {name}')
-    # The auto-recovery weights also ship as their own versioned file, under their own licence.
-    shutil.copyfile(ROOT / 'ofx' / 'resources' / 'recovery-model.bin', output / f'recovery-model-{version}.bin')
-    shutil.copyfile(ROOT / 'WEIGHTS_LICENSE', output / 'WEIGHTS_LICENSE.txt')
-    shutil.copyfile(ROOT / 'LICENSE', output / 'LICENSE')
     # Standalone release attachments need links that work outside the repository.
     for name in ('INSTALL.md', 'RELEASE_NOTES.md'):
         text = (ROOT / 'docs' / name).read_text()
@@ -72,7 +71,11 @@ def stage(manifest: Path, inputs: Path, output: Path) -> dict:
                       rf']({base}/docs/\1\2)', text)
         text = re.sub(r'\]\(\.\./([^)]+)\)', rf']({base}/\1)', text)
         (output / name).write_text(text)
+    shutil.copyfile(ROOT / 'LICENSE', output / 'LICENSE')
+    shutil.copyfile(ROOT / 'WEIGHTS_LICENSE', output / 'WEIGHTS_LICENSE.txt')
+    shutil.copyfile(weights, output / f'recovery-model-{version}.bin')
     report = {'version': version, 'publication': 'held_for_owner_approval', 'inputs': spec['assets'],
+              'weights_sha256': weights_hash,
               'downloads': {p.name: {'sha256': digest(p), 'bytes': p.stat().st_size}
                             for p in sorted(output.iterdir())}}
     (output / 'release-manifest.json').write_text(json.dumps(report, indent=2) + '\n')

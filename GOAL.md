@@ -1,4 +1,4 @@
-# Advanced Dirt Removal 2.0: goal and roadmap
+# Advanced Dirt Removal: goal and roadmap
 
 ## Goal
 
@@ -8,7 +8,7 @@ A free, open-source temporal dirt-repair plugin that anyone can build and use:
   and the CPU, with byte-identical output on all of them.
 - One OFX plugin with everything built in: input encoding (video or Cineon
   log), recovery mask, auto recovery, Spanish dirt removal and checking views.
-- Hosts: DaVinci Resolve (Fusion page now, Color page next), Nuke and other OFX
+- Hosts: DaVinci Resolve (Fusion, Color and Edit pages), Nuke and other OFX
   hosts. An Adobe Premiere Pro / After Effects adapter comes later.
 - Systems: macOS, Windows and Linux. GPUs: Apple, AMD and NVIDIA (Intel through
   OpenCL).
@@ -19,7 +19,7 @@ A free, open-source temporal dirt-repair plugin that anyone can build and use:
 ## Where things stand
 
 See [docs/TESTED.md](docs/TESTED.md) for exactly what has been tested and
-[docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md) for the 2.0.0 notes.
+[docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md) for the release notes.
 The final candidate and remaining publication actions are recorded in
 [docs/RELEASE_READINESS.md](docs/RELEASE_READINESS.md).
 
@@ -31,9 +31,10 @@ The final candidate and remaining publication actions are recorded in
 | Windows: CUDA and OpenCL (NVIDIA and AMD), Resolve and Nuke | done |
 | Linux: CUDA and OpenCL, Resolve and Nuke | done |
 | Installers for macOS, Windows and Linux | built and tested; macOS empty-target install and installed Resolve renders now pass |
-| Resolve Color page | planned |
+| Viewer painting in Resolve (Fusion, Color and Edit pages) | done on macOS and Windows; Linux and a real pen tablet not tested yet |
 | Premiere Pro / After Effects adapter | planned (the Adobe SDK is a separate download and cannot be redistributed) |
-| First public 2.0 release | waiting for the owner's review |
+| 2.0.0 release | published |
+| 2.1.0 release | built and tested; waiting for the owner's approval |
 
 ## Release checklist (2.0.0)
 

@@ -42,6 +42,10 @@
     {
       "path": "include/ofxTimeLine.h",
       "sha256": "c36cded0c96c26797092e1574808806af4428b3560b589e6edc54eae2562182a"
+    },
+    {
+      "path": "include/ofxProgress.h",
+      "sha256": "2d57ce3a4201add43d8dbbd9a926d95bd0fa3839e5357927e1b01831c81f4c22"
     }
   ]
 }

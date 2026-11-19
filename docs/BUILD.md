@@ -5,6 +5,32 @@ compiler. No GPU SDK is needed except for CUDA: Metal and OpenCL kernels are
 compiled at run time from the embedded kernel source, and the OpenCL loader is
 opened at run time.
 
+## Repository layout
+
+- `engine/include/adr/adr.h`: public engine API and cleaning controls.
+- `engine/src/`: CPU, Metal, CUDA and OpenCL implementations.
+- `ofx/src/adr_ofx.cpp`: the OFX plug-in. Identifier
+  `com.fabiocolor.advanceddirtremoval`, grouping `FabioColor`, label
+  `Advanced Dirt Removal`.
+- `ofx/resources/recovery-model.bin`: bundled auto-recovery weights.
+- `installers/{mac,win,linux}`: platform packages.
+- `tests/engine_hashes.json`: deterministic synthetic fixtures and hashes.
+- `tools/check_release.py`: engine and contract checks, local sanitization.
+- `tools/stage_release.py`: hash-verified local download assembly.
+
+The 1.x Fusion macros (`*.setting`) are historical material, not the current
+implementation.
+
+A full local release check, including the OpenCL backend:
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DADR_WITH_OPENCL=ON
+cmake --build build --config Release --parallel
+python3 tools/check_release.py build
+python3 -m unittest discover -s tests -p 'test_release_tools.py' -v
+python3 tools/check_release.py scan --history-since 56dfe42
+```
+
 ## Quick start
 
 ```sh
@@ -69,6 +95,12 @@ backend, so no machine learning framework is needed to build or run it.
 The weights are not under the MIT licence. They are under CC BY-NC 4.0
 ([WEIGHTS_LICENSE](../WEIGHTS_LICENSE)), versioned per release, and only for
 non-commercial use. A build includes them in the plugin bundle.
+
+The bundle also has `recovery-model.json` next to the weights. The release
+version and the weights SHA-256 identify the model.
+Auto Recovery matte folders include the weights SHA-256, so a checkpoint
+change keeps the earlier model's saved mattes in their original folders.
+Close the host before changing model files, then restart it.
 
 ## Determinism
 

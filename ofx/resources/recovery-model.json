@@ -1,0 +1,6 @@
+{
+  "schema": "ADR_RECOVERY_MODEL_1",
+  "release_version": "2.1.0",
+  "weights_sha256": "1ba9c7080cc7dd37ac5fb5406a282f0ee0838df801b9d9e35ecfada4432f7163",
+  "format": "ADRRM001"
+}

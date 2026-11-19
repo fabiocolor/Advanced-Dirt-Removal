@@ -12,6 +12,7 @@ This covers every version of the weights file, including:
 
   Version   File                              SHA-256
   2.0.0     ofx/resources/recovery-model.bin  cce1862ab5bd04f85d7c572c15c4fff538fadd54ba713d29e48be908882da158
+  2.1.0     ofx/resources/recovery-model.bin  1ba9c7080cc7dd37ac5fb5406a282f0ee0838df801b9d9e35ecfada4432f7163
 
 The weights are versioned per release. Each release names the weights version
 it uses and its SHA-256. The same file copied into a plugin bundle or installer
@@ -432,4 +433,3 @@ the avoidance of doubt, this paragraph does not form part of the
 public licenses.
 
 Creative Commons may be contacted at creativecommons.org.
-

@@ -1,4 +1,4 @@
-# Advanced Dirt Removal 2.0: user guide
+# Advanced Dirt Removal 2.1: user guide
 
 Advanced Dirt Removal is one OFX effect. It looks for dirt, dust and sparkle
 that appear in a single frame and fills them from the neighbouring frames. So it
@@ -18,12 +18,16 @@ mask and auto recovery), and views to check what changed.
 
 ## Adding the effect
 
-The effect is **Advanced Dirt Removal** in the **FabioColor** group. It has two
-inputs: **Source** (the clip) and an optional **Mask**.
+The effect is **Advanced Dirt Removal** in the **FabioColor** group. It has
+three inputs: **Source** (the clip), an optional **Mask** and an optional
+**Additional source** ([below](#a-processed-export-and-its-original)).
 
-- **DaVinci Resolve, Fusion page:** Add Tool → OpenFX → FabioColor → Advanced
-  Dirt Removal, then connect `MediaIn → Advanced Dirt Removal → MediaOut`.
-  Connect a Mask Paint, Magic Mask or any mask tool to the effect's mask input.
+- **DaVinci Resolve:** on the Fusion page, Add Tool → OpenFX → FabioColor →
+  Advanced Dirt Removal, then connect `MediaIn → Advanced Dirt Removal →
+  MediaOut`. On the Color and Edit pages, drag it from the OpenFX library onto
+  a node or clip. You can paint directly in the effect's viewer
+  ([Painting in Resolve](#painting-in-resolve)), or connect a Mask Paint,
+  Magic Mask or any mask tool to the mask input.
 - **Nuke:** Tab → "Advanced Dirt Removal". Input 1 is the source; connect a
   roto, paint or shape node to the Mask input.
 - **Other OFX hosts:** look for the FabioColor group.
@@ -49,8 +53,8 @@ The first control. Pick what the values entering the effect are:
 
 ## Cleaning controls
 
-On the **Cleaning** page (in hosts that show pages), in three groups. Start with
-the defaults. If real detail is being removed, lower **Sensitivity** or raise
+In three groups: on the **Cleaning** page in hosts that show pages, and under
+**Automatic cleaning** in Resolve. Start with the defaults. If real detail is being removed, lower **Sensitivity** or raise
 **Motion guard**. If dirt remains, raise **Sensitivity** or try **Analyse: RGB**.
 
 | Control | Default | What it does |
@@ -82,19 +86,66 @@ shot again, and auto recovery calculates a new matte for the new settings.
 
 Automatic repair sometimes removes things that belong to the picture: a
 fast-moving hand, a spark, a highlight. Recovery puts the original back there.
-The **Recovery** group holds:
+In Resolve, **Method** is in the **Paint** group and the other controls are in
+**Automatic cleaning → Auto recovery**. Other hosts keep them all in
+**Recovery**:
 
 | Control | Default | What it does |
 | --- | --- | --- |
-| Mask | Recovery | How the Mask input is used: **Recovery** or **Spanish dirt removal** (below). |
+| Method (Mode in other hosts) | Recovery | How painting and the Mask input are used: **Recovery** or **Spanish dirt removal** (below). |
 | Calculate recovery | button | Calculates the auto-recovery matte for the whole shot now and turns Auto recovery on. |
 | Auto recovery | Off | On: give back repaired spots the model judges to be real picture detail. |
 | Confidence | 0.80 | Give back only spots the model is at least this sure about (0.50 to 0.99). Higher gives back less. |
 | Matte folder | empty | Where calculated mattes are stored. Empty: the user's application data folder (below). |
 
-### The recovery mask (Mask: Recovery)
+### Painting in Resolve
 
-Paint on the Mask input where the original should be kept. Painted areas show
+In DaVinci Resolve you paint directly in the effect's viewer, on the Fusion,
+Color and Edit pages. No Mask Paint node is needed. Turn on the viewer's
+**Open FX Overlay**, pick the **Method** and paint. In **Recovery** the strokes
+give the original back; in **Spanish dirt removal** only the painted spots are
+repaired.
+
+- **Tool:** Paint, Erase (take paint away) or Select (click a stroke to move or
+  resize it). **Brush:** Round, Square or Rectangle (drag from corner to
+  corner).
+- **Shift-drag** in the viewer changes the size, **Option/Alt-drag** the
+  softness. The plugin uses no keyboard shortcuts; the keyboard stays with
+  Resolve.
+- **Show strokes** outlines the strokes on the current frame and switches to
+  Select. **Strokes** holds **Previous stroke** and **Next stroke**, **Delete
+  stroke**, **Hold (frames)** and the rectangle size. A held stroke stays in
+  place; it doesn't follow motion. On Color and Edit, Previous/Next stroke
+  needs Preferences → System → General → External scripting using: **Local**.
+- **Undo paint** and **Redo paint** undo stroke edits without touching Resolve's
+  own undo. The history lasts until the project is closed.
+- **Brush options:** Opacity, Smoothing and Tablet pressure.
+- **Paint in viewer** pauses editing. While the brush is used, it replaces the
+  Mask input.
+
+Recovery and Spanish dirt removal each keep their own cleaning settings in the
+project. Spanish starts with stronger settings (Sensitivity 1.0, Extra
+sensitivity on, Analysis detail 1.0, Repair amount 1.5, Motion guard 0) and
+you can change them. Switching **Method** brings back that method's settings.
+
+**Cleaning defaults** (under Automatic cleaning) saves your own settings for
+the selected method. **Load my default** loads them in another node or project;
+**Use factory settings** goes back to the defaults above. Nothing is loaded
+automatically.
+
+### A processed export and its original
+
+To paint a clip that was already cleaned elsewhere back to the original, put
+the processed export and the original in line, at the same size and frame rate.
+Connect the original to the effect's **Additional source** input, choose
+**Source setup → Paint source: Additional source** and leave Input encoding on
+Video. Painting in Recovery gives the original back. Nothing is cleaned and
+auto recovery is paused; only the current frame is read.
+
+### The recovery mask (Mask input)
+
+In hosts without viewer painting, and in Resolve projects that don't use the
+built-in brush, paint on the Mask input where the original should be kept. Painted areas show
 the source; everything else shows the repair. Soft edges and partial opacity
 blend between the two. The mask is the input's alpha (or its first channel if it
 has no alpha), so a Mask Paint, Magic Mask, roto shape or plain alpha all work.
@@ -112,6 +163,9 @@ The model's weights are under CC BY-NC 4.0, not the MIT licence of the code
   map per frame. The button returns immediately; the calculation runs with the
   next render (on an Apple M5 Pro, about 1.5 to 3 seconds per 2.4K frame). Without
   the button, any frame that has no map yet is calculated when it renders.
+- While it runs, **Calculation** shows the progress and the button becomes
+  **Cancel calculation**. Maps that are already saved are reused. On Windows a
+  small panel also shows the progress.
 - Maps are stored per shot, keyed by the shot's first frame, its frame range and
   size, the input encoding and every cleaning control. Change any of these and the
   matte is calculated again automatically; changing back reuses the earlier maps.
@@ -125,23 +179,26 @@ The model's weights are under CC BY-NC 4.0, not the MIT licence of the code
   Each shot is a `shot-<id>` folder of small run-length-encoded files. Delete the
   folders to free space; they are recalculated when needed.
 
-**Editing the matte with the mask.** With Auto recovery on and Mask set to
-Recovery, the Mask input edits the matte: unpainted areas follow the matte,
+**Editing the matte.** In Resolve, Paint gives the original back and Erase
+keeps the repair where the model gave back too much. With the Mask input, set
+to Recovery, the mask edits the matte: unpainted areas follow the matte,
 **white** strokes give the original back, **black** strokes keep the repair (take
 back something the model gave back). Use **View: Auto recovery matte** to see the
 matte.
 
-### Spanish dirt removal (Mask: Spanish dirt removal)
+### Spanish dirt removal
 
-Manual frame-by-frame dust cleaning, applied only where you mask. Go through
+Manual frame-by-frame dust cleaning, applied only where you paint or mask. Go through
 the shot frame by frame; where you see a speck you
 want gone, paint a small mask over it on that frame. Only the painted spot is
 repaired, from the neighbouring frames; everything else, and every frame you
-don't paint, keeps the original. Spanish
-dirt removal does not use auto recovery: with Auto recovery on, the render stops
-with the error *"Auto recovery cannot be used with Spanish dirt removal"*. Turn
-one of them off and it renders again. With nothing connected to the Mask input,
-Spanish dirt removal leaves the whole picture unrepaired.
+don't paint, keeps the original. With the built-in brush, frames
+without strokes aren't cleaned at all, so painting is fast. Spanish dirt removal does not use auto recovery. In
+Resolve, auto recovery pauses while Spanish is selected and comes back with
+Recovery. In other hosts, with Auto recovery on, the render stops with the
+error *"Auto recovery cannot be used with Spanish dirt removal"*; turn one of
+them off and it renders again. With nothing painted, Spanish dirt removal
+leaves the whole picture unrepaired.
 
 ## Views
 
@@ -202,6 +259,10 @@ Mask input) the output is exactly the cleaned frame.
   issue reports. `ADR_LOG=off` turns it off.
 - **Review moving shots.** Very fast motion can look like dirt. Raise Motion
   guard, use auto recovery, and paint back what is left.
+- **Memory.** To keep painting fast, the effect keeps cleaned frames in memory
+  on nodes with strokes, in Spanish dirt removal or with a mask connected: up to
+  20% of RAM (between 512 MB and 8 GB). Other nodes keep none. Set
+  `ADR_FRAME_CACHE_MB` to change the limit, or 0 to turn it off.
 - **Interlaced material** is not supported; deinterlace first.
 
 ## Host notes
@@ -210,8 +271,9 @@ Mask input) the output is exactly the cleaned frame.
   Windows and Linux. Fusion shows all controls on one page; it does not use
   the effect's pages. A mask made at another resolution covers the same
   picture (Fusion is resolution-independent).
-- **DaVinci Resolve, Color page:** not tested yet. The plan is for the effect to
-  work there too.
+- **DaVinci Resolve, Color and Edit pages:** viewer painting tested with
+  Resolve Studio 21 on macOS and Windows. Resolve 21.1 turns off the Enhanced
+  Viewer on the Edit page; paint in its standard viewer.
 - **Nuke:** tested with Nuke 17 on macOS, Windows and Linux. The mask is read at the same pixel position as the source
   (Nuke's usual behaviour); a mask with a smaller data window is zero outside it.
 - **Other OFX hosts:** not tested; please report results.

@@ -1,3 +1,10 @@
+# 2.1.0 release readiness — 19 November 2026
+
+The 2.1.0 installers are built from the source in this branch and tested on
+macOS, Windows and Linux ([TESTED.md](TESTED.md)). Their hashes are in
+[`release/2.1.0.json`](../release/2.1.0.json). Publication waits for Fabio's
+approval. Nuke on the Windows RTX 3090 was not run for 2.1.0.
+
 # 2.0.0 release readiness — 2 November 2026
 
 The local candidate is assembled. Public publication remains held for Fabio's
@@ -84,6 +91,6 @@ notarization are an optional additional distribution path and would require
 their own candidate checks. The unsigned route is documented; interactive
 Gatekeeper approval and macOS uninstall were not exercised in this pass.
 
-Fresh-OS and Intel-Mac installation, Resolve Color/Edit, additional OFX hosts
-and the future Adobe adapter retain their explicitly untested/planned status.
-They are not represented as completed 2.0 qualifications.
+Fresh-OS and Intel-Mac installation, packaged Resolve Color/Edit support,
+additional OFX hosts and the future Adobe adapter retain their explicitly
+untested/planned status.

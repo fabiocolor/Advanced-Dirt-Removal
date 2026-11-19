@@ -1,0 +1,6 @@
+string(TIMESTAMP STAMP "%Y%m%d%H%M%S")
+string(RANDOM LENGTH 12 SUFFIX)
+execute_process(COMMAND "${TEST}" "${ROOT}-${STAMP}-${SUFFIX}" RESULT_VARIABLE result)
+if(NOT result EQUAL 0)
+ message(FATAL_ERROR "Prepared source test failed: ${result}")
+endif()

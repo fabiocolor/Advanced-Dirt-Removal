@@ -59,6 +59,7 @@ Uninstall: Settings → Apps → Advanced Dirt Removal → Uninstall.
 
 ```powershell
 winget install FabioColor.AdvancedDirtRemoval
+winget upgrade FabioColor.AdvancedDirtRemoval   # later updates
 ```
 
 ## Linux
@@ -80,7 +81,7 @@ install).
 
 ## Coming from 1.x
 
-Version 1.x was a Fusion macro. On Windows the 2.0 installer uninstalls 1.x
+Version 1.x was a Fusion macro. On Windows the installer uninstalls 1.x
 first, including its macros. On macOS and Linux the 1.x macro stays where it
 is, so compositions that use it keep working. Delete the
 `Advanced Dirt Removal*.setting` files from the Fusion Macros folder if you

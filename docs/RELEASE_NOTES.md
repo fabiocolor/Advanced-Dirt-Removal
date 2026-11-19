@@ -1,5 +1,56 @@
 # Release notes
 
+## 2.1.0
+
+Paint directly in the viewer in DaVinci Resolve, and much lower memory use on
+long shots.
+
+### New
+
+- **Paint in the viewer (DaVinci Resolve).** Paint recovery or Spanish dirt
+  removal directly in the effect's viewer, on the Fusion, Color and Edit
+  pages. No Mask Paint node is needed. Paint, Erase and Select, with round,
+  square and rectangle brushes. Strokes can be held over several frames,
+  moved, resized and deleted, and **Previous stroke** and **Next stroke** jump
+  to them. **Undo paint** and **Redo paint** keep their own history, so
+  Resolve's undo stays with the timeline.
+- **Additional source.** Paint a processed export back to the original:
+  connect the aligned original to the effect's second input and choose
+  **Additional source**. Nothing is cleaned; only the current frame is read.
+- **Separate settings for Recovery and Spanish dirt removal.** Each method
+  keeps its own cleaning settings in the project. Spanish starts with stronger
+  settings for manual dust cleaning.
+- **Cleaning defaults.** Save your own settings for each method and load them
+  in other nodes and projects.
+- **Calculate recovery** shows progress and elapsed time, can be cancelled,
+  and reuses mattes it has already saved. On Windows a small panel shows the
+  progress.
+- **New auto-recovery model.** It was fine-tuned on one film; results on other
+  material may differ. The weights are still under CC BY-NC 4.0.
+
+### Fixed
+
+- Memory no longer fills up on long shots. Ordinary playback and renders no
+  longer keep extra frames in memory, and auto recovery no longer keeps
+  growing memory over a shot
+  ([#9](https://github.com/fabiocolor/Advanced-Dirt-Removal/issues/9)).
+  In my test, a 330-frame 2K shot peaked at 9.4 GB instead of 16 GB, with no
+  swap.
+- Lower memory use during GPU rendering in Resolve, and GPU memory is freed
+  when a shot or its settings change.
+- Memory is freed after CPU processing on Windows.
+- Spanish dirt removal is much faster while painting: frames without strokes
+  are not cleaned, and a painted frame is cleaned from the frames around it
+  instead of from the start of the shot.
+- A crash in some hosts after Calculate recovery.
+
+### Changed
+
+- **Mask** is now called **Method** in Resolve and **Mode** in other hosts.
+  Projects that use the Mask input keep working as long as the built-in brush
+  isn't used.
+- Cleaning results are the same as in 2.0.
+
 ## 2.0.0
 
 Advanced Dirt Removal 2.0 is a stand-alone OFX plugin with its own temporal
