@@ -160,9 +160,8 @@ on the left and the plugin controls on the right
 - Damage that stays for more than a frame or two isn't touched.
 - Interlaced material isn't supported. Deinterlace first.
 - Tested on DaVinci Resolve Studio 21 and Nuke 17 across macOS, Windows, and
-  Linux (Color and Edit viewer painting is untested on Linux). Other OFX hosts
-  and Intel Macs are untested; Premiere Pro and After Effects aren't supported
-  since they don't load OFX plugins.
+  Linux. Other OFX hosts and Intel Macs are untested; Premiere Pro and After
+  Effects aren't supported since they don't load OFX plugins.
 
 The plugin keeps a diagnostic log (backend, device, timing, errors). Its
 location is in the [user guide](docs/USER_GUIDE.md#diagnostics-speed-and-limits).

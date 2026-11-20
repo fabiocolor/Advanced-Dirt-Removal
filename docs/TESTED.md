@@ -32,14 +32,17 @@ The feature checks are the 2.0.0 ones below: defaults, Red difference, auto
 recovery and its matte, Spanish dirt removal, Cineon log, each compared with
 the macOS reference on 12 frames of the film scan.
 
-**Viewer painting**, on development builds of 2.1.0, in Resolve Studio 21.1.1 on macOS (Fusion, Color and Edit
-pages) and Resolve Studio 21.0.4 on Windows (Color and Edit pages): round,
-square and rectangle brushes, Erase, Select, move and resize, Delete, Undo
-paint and Redo paint, Previous/Next stroke, Recovery and Spanish dirt removal,
-Red and True difference, and reopening the project. Rendered frames were
-compared with an independent computation of what the strokes must produce.
-Strokes were driven by script. A real pen tablet and viewer painting on Linux
-haven't been tested yet.
+**Viewer painting**, in Resolve Studio 21.1.1 on macOS (Fusion, Color and Edit
+pages), Resolve Studio 21.0.4 on Windows (Color and Edit pages), and Resolve
+Studio 21.0.4 on Ubuntu 24.04 Linux with the final 2.1.0 release tarball (Color
+page Recovery, Spanish dirt removal, Undo paint and Paint-in-viewer toggle; Edit
+page Recovery and Spanish dirt removal): round, square and rectangle brushes,
+Erase, Select, move and resize, Delete, Undo paint and Redo paint, Previous/Next
+stroke, Recovery and Spanish dirt removal, Red and True difference, and
+reopening the project (full matrix on macOS/Windows development builds; core
+Color/Edit painting checks on the Linux release build). Rendered/captured frames
+were verified against the expected stroke output. Strokes were driven
+programmatically; a real pen tablet hasn't been tested yet.
 
 **Memory** ([#9](https://github.com/fabiocolor/Advanced-Dirt-Removal/issues/9)):
 a 330-frame 2048×1556 ProRes shot with auto recovery in Resolve 21.1.1 on a

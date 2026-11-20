@@ -1,10 +1,10 @@
 # 2.1.0 release readiness — 20 November 2026
 
 The 2.1.0 installers are built from the source in this branch and tested on
-macOS, Windows and Linux ([TESTED.md](TESTED.md)). Their hashes are in
+macOS, Windows and Linux ([TESTED.md](TESTED.md)), including Resolve Color and
+Edit viewer painting on all three platforms. Their hashes are in
 [`release/2.1.0.json`](../release/2.1.0.json). Publication waits for Fabio's
-approval. Not tested for 2.1.0: Nuke on Windows, viewer painting on Linux and
-with a real pen tablet.
+approval. Not tested for 2.1.0: Nuke on Windows and a real pen tablet.
 
 # 2.0.0 release readiness — 2 November 2026
 

@@ -256,8 +256,8 @@ repair is the same.
   the effect's pages. A mask made at another resolution covers the same
   picture (Fusion is resolution-independent).
 - **DaVinci Resolve, Color and Edit pages:** viewer painting tested with
-  Resolve Studio 21 on macOS and Windows. Resolve 21.1 turns off the Enhanced
-  Viewer on the Edit page; paint in its standard viewer.
+  Resolve Studio 21 on macOS, Windows and Linux. Resolve 21.1 turns off the
+  Enhanced Viewer on the Edit page; paint in its standard viewer.
 - **Nuke:** tested with Nuke 17 on macOS, Windows and Linux. The mask is read at the same pixel position as the source
   (Nuke's usual behaviour); a mask with a smaller data window is zero outside it.
 - **Other OFX hosts:** not tested; please report results.
