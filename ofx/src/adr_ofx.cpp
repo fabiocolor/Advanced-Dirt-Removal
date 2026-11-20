@@ -382,7 +382,7 @@ struct Instance {
  void recentClear();
  // A Spanish clean that frames-needed promised to reuse ([t,t] declared),
  // held so a shared-cache eviction cannot leave the render without its frames.
- // Released by that frame's render, a purge or a closed sequence; at most 4.
+ // Released by that frame's render or a purge; at most 4 (then frames-needed declares the full window).
  struct Pin {uint64_t print=0;frame_cache::Cache::Frame frame;uint64_t order=0;};
  std::mutex pinLock;std::map<std::string,Pin> pins;uint64_t pinOrder=0;
  void clearPins(){std::lock_guard<std::mutex> g(pinLock);pins.clear();}
@@ -423,7 +423,7 @@ struct Instance {
   }
   rendered=servedCached=0;renderMs=0;sourceSeen=flatWarned=rangeWarned=false;
  }
- void close(){sourcePrints.clear();originalSource.clear();preparedFrames.clear();summary("closed");prefetchTime=std::numeric_limits<int>::min();const bool live=sequence!=nullptr;if(sequence)adr_sequence_destroy(sequence);sequence=nullptr;if(history)adr_history_destroy(history);history=nullptr;key.clear();cachedFrame=std::numeric_limits<int>::min();cached.reset();recentClear();recoveryIdFor.clear();clearPins();
+ void close(){sourcePrints.clear();originalSource.clear();preparedFrames.clear();summary("closed");prefetchTime=std::numeric_limits<int>::min();const bool live=sequence!=nullptr;if(sequence)adr_sequence_destroy(sequence);sequence=nullptr;if(history)adr_history_destroy(history);history=nullptr;key.clear();cachedFrame=std::numeric_limits<int>::min();cached.reset();recentClear();recoveryIdFor.clear();
   // A closed sequence (new settings or clip, error, instance gone) leaves its
   // buffers in the engine's reuse pool. Release them: the next sequence may use
   // other sizes, and on unified-memory Macs pooled buffers are system RAM.
@@ -831,9 +831,11 @@ bool spanishCleanCached(OfxImageEffectHandle e,int time){
  const std::string key=cleanKeyFor(i,identity,sourceRange(i),i.frameW,i.frameH,readSettings(i,time).encoding,true,time);
  auto entry=frame_cache::shared().peek(key);if(!entry.first)return false;
  // Keep this exact clean until the render that relies on the [t,t] promise.
- std::lock_guard<std::mutex> g(i.pinLock);i.pins[key]=Instance::Pin{entry.second,entry.first,++i.pinOrder};
- while(i.pins.size()>4){auto oldest=i.pins.begin();for(auto it=i.pins.begin();it!=i.pins.end();++it)if(it->second.order<oldest->second.order)oldest=it;i.pins.erase(oldest);}
- return true;
+ // Promise [t,t] only with a hold in place; with four held already, declare
+ // the full window instead of dropping a hold another render relies on.
+ std::lock_guard<std::mutex> g(i.pinLock);
+ if(i.pins.size()>=4&&!i.pins.count(key))return false;
+ i.pins[key]=Instance::Pin{entry.second,entry.first,++i.pinOrder};return true;
 }
 bool untouchedSpanish(OfxImageEffectHandle e,int time){
  auto&i=instance(e);
@@ -1174,10 +1176,10 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
   // use the clean it held even if the shared cache has since evicted it.
   if(useShared&&windowed&&i.cachedFrame!=time&&!sharedHit){
    frame_cache::Cache::Frame pinned;uint64_t pinnedPrint=0;
-   {std::lock_guard<std::mutex> g(i.pinLock);auto it=i.pins.find(cleanKey);if(it!=i.pins.end()){pinned=it->second.frame;pinnedPrint=it->second.print;}}
+   {std::lock_guard<std::mutex> g(i.pinLock);auto it=i.pins.find(cleanKey);if(it!=i.pins.end()){pinned=std::move(it->second.frame);pinnedPrint=it->second.print;i.pins.erase(it);}}
    if(pinned&&pinnedPrint==sourcePrint()){i.cached=pinned;i.cachedFrame=time;if(i.key.empty())i.key=key.str();traceWhat="cached";sharedHit=true;}
   }
-  if(windowed){std::lock_guard<std::mutex> g(i.pinLock);i.pins.erase(cleanKey);}  // this render has used its pin
+  if(windowed&&sharedHit){std::lock_guard<std::mutex> g(i.pinLock);i.pins.erase(cleanKey);}  // served: the hold is no longer needed
   std::vector<float> working;std::shared_ptr<const std::vector<float>> original,preparedClean;
   if(sourceKind==2){
    require(paint_ui::preparationAvailable(),"Experimental prepared shot is disabled; select Clean this clip");
