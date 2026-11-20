@@ -370,14 +370,19 @@ struct Instance {
  adr_history* history=nullptr; // motion-history checkpoints for key
  std::string key;            // controls, range and geometry of the live sequence
  int first=0;
- uint64_t generation=0;
+ std::atomic<uint64_t> generation{0};
  std::map<int,uint64_t> sourcePrints; // validate local hits too, including after an upstream edit
  int cachedFrame=std::numeric_limits<int>::min();
- int frameW=0,frameH=0; // last rendered size, so frames-needed can find a cached Spanish clean
+ std::atomic<int> frameW{0},frameH{0}; // last rendered size, so frames-needed can find a cached Spanish clean
  frame_cache::Cache::Frame cached;  // immutable shared output, top-down packed RGB
  // While Paint in viewer is on: the last few cleaned frames, so stepping back
  // and forth to paint does not clean them again. Same key as the sequence.
  std::map<int,frame_cache::Cache::Frame> recent;
+ size_t recentBytes=0;  // this instance's share of the process-wide window budget
+ void recentClear();
+ // A Spanish clean that frames-needed promised to reuse ([t,t] declared),
+ // held so a shared-cache eviction cannot leave the render without its frames.
+ std::mutex pinLock;std::string pinnedKey;uint64_t pinnedPrint=0;frame_cache::Cache::Frame pinnedFrame;
  paint::LayerCache paintLayers;
  paint_source::FrameCache originalSource;
  paint_source::PairCache preparedFrames;
@@ -415,16 +420,21 @@ struct Instance {
   }
   rendered=servedCached=0;renderMs=0;sourceSeen=flatWarned=rangeWarned=false;
  }
- void close(){sourcePrints.clear();originalSource.clear();preparedFrames.clear();summary("closed");prefetchTime=std::numeric_limits<int>::min();const bool live=sequence!=nullptr;if(sequence)adr_sequence_destroy(sequence);sequence=nullptr;if(history)adr_history_destroy(history);history=nullptr;key.clear();cachedFrame=std::numeric_limits<int>::min();cached.reset();recent.clear();
+ void close(){sourcePrints.clear();originalSource.clear();preparedFrames.clear();summary("closed");prefetchTime=std::numeric_limits<int>::min();const bool live=sequence!=nullptr;if(sequence)adr_sequence_destroy(sequence);sequence=nullptr;if(history)adr_history_destroy(history);history=nullptr;key.clear();cachedFrame=std::numeric_limits<int>::min();cached.reset();recentClear();recoveryIdFor.clear();
   // A closed sequence (new settings or clip, error, instance gone) leaves its
   // buffers in the engine's reuse pool. Release them: the next sequence may use
   // other sizes, and on unified-memory Macs pooled buffers are system RAM.
   if(live&&engineContext)adr_context_trim(engineContext);}
  // Host memory purges drop frames and GPU buffers but keep the few-KB
  // motion-history checkpoints, which stay valid for the same key.
- void purge(){originalSource.clear();preparedFrames.clear();summary("host purged caches");prefetchTime=std::numeric_limits<int>::min();prefetch.clear();prefetch.shrink_to_fit();if(sequence)adr_sequence_destroy(sequence);sequence=nullptr;if(engineContext)adr_context_trim(engineContext);cachedFrame=std::numeric_limits<int>::min();cached.reset();paintLayers.clear();recent.clear();scratch.clear();scratch.shrink_to_fit();}
- ~Instance(){auto preparation=std::atomic_load(&prepareFeedback);if(preparation){preparation->cancel=true;if(preparation->phase<recovery_feedback::State::Complete)preparation->phase=recovery_feedback::State::Cancelled;}auto feedback=std::atomic_load(&recoveryFeedback);if(feedback){int busy=recovery_feedback::State::Queued;if(!feedback->phase.compare_exchange_strong(busy,recovery_feedback::State::Cancelled)){busy=recovery_feedback::State::Running;feedback->phase.compare_exchange_strong(busy,recovery_feedback::State::Cancelled);}feedback->cancel=true;}close();}
+ void purge(){originalSource.clear();preparedFrames.clear();summary("host purged caches");prefetchTime=std::numeric_limits<int>::min();prefetch.clear();prefetch.shrink_to_fit();if(sequence)adr_sequence_destroy(sequence);sequence=nullptr;if(engineContext)adr_context_trim(engineContext);cachedFrame=std::numeric_limits<int>::min();cached.reset();paintLayers.clear();recentClear();scratch.clear();scratch.shrink_to_fit();}
+ ~Instance(){recentClear();auto preparation=std::atomic_load(&prepareFeedback);if(preparation){preparation->cancel=true;if(preparation->phase<recovery_feedback::State::Complete)preparation->phase=recovery_feedback::State::Cancelled;}auto feedback=std::atomic_load(&recoveryFeedback);if(feedback){int busy=recovery_feedback::State::Queued;if(!feedback->phase.compare_exchange_strong(busy,recovery_feedback::State::Cancelled)){busy=recovery_feedback::State::Running;feedback->phase.compare_exchange_strong(busy,recovery_feedback::State::Cancelled);}feedback->cancel=true;}close();}
 };
+// All nodes' frame windows share one budget, so many nodes cannot add up to
+// the memory growth of issue #9.
+std::atomic<size_t> recentTotalBytes{0};
+size_t recentBudget(){const size_t shared=frame_cache::shared().capacity();return std::min<size_t>(size_t(2)<<30,std::max<size_t>(size_t(512)<<20,shared));}
+void Instance::recentClear(){recentTotalBytes-=recentBytes;recentBytes=0;recent.clear();}
 Instance& instance(OfxImageEffectHandle e){void*p=nullptr;check(prop->propGetPointer(properties(e),kOfxPropInstanceData,0,&p),"instance data");require(p,"missing instance",kOfxStatErrBadHandle);return *static_cast<Instance*>(p);}
 void updateRecoveryEnabled(Instance&);
 void refreshRecoveryUI(OfxImageEffectHandle);
@@ -454,11 +464,9 @@ adr_controls readControls(Instance&i,double time,std::string&identity){
  }
  identity=out.str();return c;
 }
-// Reads one temporal source frame as packed top-down float RGB.
-void readSource(Instance&i,OfxImageEffectHandle e,int time,int w,int h,const std::array<int,4>&bounds,std::vector<float>&rgb){
- auto th=std::chrono::steady_clock::now();
- Image image(i.source,time,e,"temporal source");require(image.b==bounds&&image.width()==w&&image.height()==h,"source geometry changed");
- const double hostMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-th).count();
+// Packs a fetched source frame as top-down float RGB and validates it.
+void packSource(Instance&i,OfxImageEffectHandle e,Image&image,int time,int w,int h,std::vector<float>&rgb,double hostMs){
+ require(image.width()==w&&image.height()==h,"source geometry changed");
  auto tc=std::chrono::steady_clock::now();
  rgb.resize(size_t(w)*h*3);
  require(!fx->abort(e),"render aborted",kOfxStatFailed);
@@ -494,6 +502,12 @@ void readSource(Instance&i,OfxImageEffectHandle e,int time,int w,int h,const std
  if(lo==hi&&!i.flatWarned){i.flatWarned=true;adrlog::warn(i.label()+" source frame "+std::to_string(time)+" is flat (every value "+std::to_string(lo)+"): the host may have delivered no picture");}
  if((lo<0.f||hi>1.f)&&!i.rangeWarned){i.rangeWarned=true;adrlog::info(i.label()+" source frame "+std::to_string(time)+" has values outside 0..1 ("+std::to_string(lo)+".."+std::to_string(hi)+"); processed as delivered");}
  trace(&i,time,-1,image.depth==PixelDepth::Float?(image.channels==4?"fetch-float-rgba":"fetch-float-rgb"):"fetch-other",hostMs,std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-tc).count(),0);
+}
+// Reads one temporal source frame from the host as packed top-down float RGB.
+void readSource(Instance&i,OfxImageEffectHandle e,int time,int w,int h,const std::array<int,4>&bounds,std::vector<float>&rgb){
+ auto th=std::chrono::steady_clock::now();
+ Image image(i.source,time,e,"temporal source");require(image.b==bounds,"source geometry changed");
+ packSource(i,e,image,time,w,h,rgb,std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-th).count());
 }
 // The Additional source input (the aligned original of a processed picture), packed RGB like readSource.
 bool clipConnected(OfxImageClipHandle clip){
@@ -811,7 +825,10 @@ std::string cleanKeyFor(Instance&i,const std::string&identity,const std::array<i
 bool spanishCleanCached(OfxImageEffectHandle e,int time){
  auto&i=instance(e);if(!i.frameW||frame_cache::shared().capacity()==0)return false;
  std::string identity;readControls(i,time,identity);
- return frame_cache::shared().contains(cleanKeyFor(i,identity,sourceRange(i),i.frameW,i.frameH,readSettings(i,time).encoding,true,time));
+ const std::string key=cleanKeyFor(i,identity,sourceRange(i),i.frameW,i.frameH,readSettings(i,time).encoding,true,time);
+ auto entry=frame_cache::shared().peek(key);if(!entry.first)return false;
+ // Keep this exact clean until the render that relies on the [t,t] promise.
+ std::lock_guard<std::mutex> g(i.pinLock);i.pinnedKey=key;i.pinnedPrint=entry.second;i.pinnedFrame=entry.first;return true;
 }
 bool untouchedSpanish(OfxImageEffectHandle e,int time){
  auto&i=instance(e);
@@ -1090,13 +1107,12 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
   if(i.prepareRequested)prepareShot(e,i);
   // Windowed Spanish output is kept apart from full-shot output in the shared cache.
   const bool windowed=spanishWindow(e,time);i.frameW=w;i.frameH=h;
-  std::ostringstream key;key<<identity<<'|'<<range[0]<<'|'<<range[1]<<'|'<<w<<'x'<<h<<'|'<<i.generation<<"|enc"<<st.encoding;
+  std::ostringstream key;key<<identity<<'|'<<range[0]<<'|'<<range[1]<<'|'<<w<<'x'<<h<<'|'<<i.generation<<"|enc"<<st.encoding<<(windowed?"|spanish-window":"");
   const int sourceKind=paint_ui::getInt(e,"paint_source_kind");
   const bool prepared=sourceKind!=0;
   if(!prepared&&st.mode&&st.maskMode!=2&&i.calculateRequested.exchange(false)){
    try{calculateShot(e,i);}catch(const Error&ex){i.recoveryState=std::strstr(ex.what(),"render aborted")?Instance::Cancelled:Instance::Failed;syncRecoveryFeedback(i);throw;}catch(...){i.recoveryState=Instance::Failed;syncRecoveryFeedback(i);throw;}
   }
-  if(!prepared&&key.str()!=i.key){if(std::getenv("ADR_DEBUG")&&!i.key.empty())std::fprintf(stderr,"adr key change instance=%p\n",(void*)&i);i.close();}
   const int index=time-range[0],count=range[1]-range[0]+1;
   const auto traceStart=std::chrono::steady_clock::now();double tFetch=0,tEngine=0;
   const int traceLive=i.sequence?adr_sequence_next_output(i.sequence):-1;
@@ -1107,8 +1123,11 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
   const bool painted=paint::anyOn(strokes,time);
   const bool builtInBrush=paintHost()&&(paintOn||!strokes.strokes.empty());
   const bool skipCleaning=!prepared&&st.maskMode==2&&builtInBrush&&!painted;
+  // A changed key (controls, encoding, source, cleaning route) restarts the
+  // engine, except on untouched Spanish frames, which never use it.
+  if(!prepared&&!skipCleaning&&key.str()!=i.key){if(std::getenv("ADR_DEBUG")&&!i.key.empty())std::fprintf(stderr,"adr key change instance=%p\n",(void*)&i);i.close();traceWhat="render";}
   if(painted)require(strokes.width==w&&strokes.height==h,"The picture size changed since these strokes were painted ("+std::to_string(strokes.width)+"x"+std::to_string(strokes.height)+", now "+std::to_string(w)+"x"+std::to_string(h)+")");
-  if(!paintOn)i.recent.clear();
+  if(!paintOn)i.recentClear();
   // Shared cleaned-frame cache. The engine's picture never depends on strokes,
   // so a stroke edit (which makes Resolve re-render every frame)
   // or a backward seek reuses the exact cleaned frame instead of
@@ -1116,7 +1135,7 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
   // bit-identical to the one that was cleaned.
   std::vector<float> currentSource;bool haveCurrentSource=false;uint64_t currentPrint=0;double tShared=0;bool sharedHit=false;
   auto sourcePrint=[&]{
-   if(!haveCurrentSource){auto t0=std::chrono::steady_clock::now();readSource(i,e,time,w,h,source.b,currentSource);currentPrint=frame_cache::fingerprint(currentSource,h,[](int n,auto f){parallelRows(n,f);});haveCurrentSource=true;tShared+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count();}
+   if(!haveCurrentSource){auto t0=std::chrono::steady_clock::now();packSource(i,e,source,time,w,h,currentSource,0);currentPrint=frame_cache::fingerprint(currentSource,h,[](int n,auto f){parallelRows(n,f);});haveCurrentSource=true;tShared+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count();}
    return currentPrint;};
   if(!prepared&&!skipCleaning){
    const auto print=sourcePrint();auto prior=i.sourcePrints.find(time);
@@ -1124,7 +1143,7 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
     // Hosts may omit a Source-change notification. A changed current source
     // invalidates motion history and every local/shared frame for this instance.
     i.close();++i.generation;key.str("");key.clear();
-    key<<identity<<'|'<<range[0]<<'|'<<range[1]<<'|'<<w<<'x'<<h<<'|'<<i.generation<<"|enc"<<st.encoding;
+    key<<identity<<'|'<<range[0]<<'|'<<range[1]<<'|'<<w<<'x'<<h<<'|'<<i.generation<<"|enc"<<st.encoding<<(windowed?"|spanish-window":"");
     traceWhat="render";adrlog::info(i.label()+" source changed; discarded cached cleaning and motion history");
    }
    i.sourcePrints[time]=print;
@@ -1143,6 +1162,13 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
    if(auto hit=frame_cache::shared().find(cleanKey,print)){i.cached=hit;i.cachedFrame=time;if(i.key.empty())i.key=key.str();traceWhat="cached";sharedHit=true;}
    tShared+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count();
   }
+  // Frames-needed promised Resolve that this Spanish frame needs only itself:
+  // use the clean it held even if the shared cache has since evicted it.
+  if(useShared&&windowed&&i.cachedFrame!=time&&!sharedHit){
+   frame_cache::Cache::Frame pinned;uint64_t pinnedPrint=0;
+   {std::lock_guard<std::mutex> g(i.pinLock);if(i.pinnedKey==cleanKey){pinned=i.pinnedFrame;pinnedPrint=i.pinnedPrint;}}
+   if(pinned&&pinnedPrint==sourcePrint()){i.cached=pinned;i.cachedFrame=time;if(i.key.empty())i.key=key.str();traceWhat="cached";sharedHit=true;}
+  }
   std::vector<float> working;std::shared_ptr<const std::vector<float>> original,preparedClean;
   if(sourceKind==2){
    require(paint_ui::preparationAvailable(),"Experimental prepared shot is disabled; select Clean this clip");
@@ -1155,7 +1181,7 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
    require(bool(manifest)&&encoding==st.encoding,"Prepared shot input encoding changed; prepare again");
    if(i.sequence||i.history||!i.key.empty())i.close();
    auto pair=i.preparedFrames.get(folder,time,w,h);original=pair.original;
-   readSource(i,e,time,w,h,source.b,currentSource);haveCurrentSource=true;
+   packSource(i,e,source,time,w,h,currentSource,0);haveCurrentSource=true;
    require(currentSource.size()==original->size()&&std::memcmp(currentSource.data(),original->data(),currentSource.size()*sizeof(float))==0,"Prepared shot source changed; switch to Clean this clip and prepare again");
    preparedClean=pair.cleaned;
   }else if(prepared){
@@ -1167,7 +1193,7 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
     if(!i.originalLogged){i.originalLogged=true;adrlog::info(i.label()+" additional source from the "+(clipConnected(i.original)?"Additional source":"mask")+" input: painting blends the processed picture and the additional source, cleaning engine bypassed");}
    }else if(paint_ui::getText(e,"paint_source_folder").empty()){
     // Nothing connected yet: keep the viewer usable with the processed picture.
-    readSource(i,e,time,w,h,source.b,currentSource);haveCurrentSource=true;original=std::make_shared<const std::vector<float>>(currentSource);
+    packSource(i,e,source,time,w,h,currentSource,0);haveCurrentSource=true;original=std::make_shared<const std::vector<float>>(currentSource);
     if(persistentMessages)persistentMessages->setPersistentMessage(e,kOfxMessageWarning,"adr","%s","Connect the aligned original to the effect's second input (Additional source). Showing the processed picture.");
     if(!i.originalWarned){i.originalWarned=true;adrlog::warn(i.label()+" additional source not connected (Additional source input "+(i.original?"present":"missing")+", mask input "+(i.mask?"present":"missing")+"; neither reported connected): showing the processed picture");}
    }else{
@@ -1180,7 +1206,7 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
     paint_source::requireSourceFrame(folder,frame);original=i.originalSource.getPreview(folder,int(frame),w,h).original;
    }
    if(i.sequence||i.history||!i.key.empty())i.close();
-   readSource(i,e,time,w,h,source.b,working);
+   packSource(i,e,source,time,w,h,working,0);
    if(originalConnected(i)&&time!=i.comparedFrame&&original->size()==working.size()){
     // Logged when it changes: whether the additional source really carries another picture.
     i.comparedFrame=time;size_t differ=0;double largest=0;for(size_t k=0;k<working.size();++k){const double d=std::fabs(double((*original)[k])-working[k]);if(d>0){++differ;largest=std::max(largest,d);}}
@@ -1193,7 +1219,7 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
    // Empty Spanish frames have no repair contribution. Do not start, advance,
    // replace or pollute the cleaned-frame cache; a later stroke still needs
    // the genuine cleaned picture. Diagnostic views use this same original.
-   readSource(i,e,time,w,h,source.b,working);traceWhat="untouched";
+   packSource(i,e,source,time,w,h,working,0);traceWhat="untouched";
    adrlog::info(i.label()+" Spanish frame "+std::to_string(time)+": no active strokes; current source only, cleaning engine bypassed");
   }else if(i.cachedFrame!=time){
    char error[2048]={};
@@ -1291,8 +1317,8 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
    if(paintOn){
     // Keep nearby frames within 1 GiB; very large frames use only cached above.
     const size_t bytes=i.cached->size()*sizeof(float),keep=paint::cacheFrames(bytes);
-    if(keep)i.recent[time]=i.cached;
-    while(i.recent.size()>keep){auto farthest=i.recent.begin();for(auto it=i.recent.begin();it!=i.recent.end();++it)if(std::abs(it->first-time)>std::abs(farthest->first-time))farthest=it;i.recent.erase(farthest);}
+    if(keep&&!i.recent.count(time)){i.recent[time]=i.cached;i.recentBytes+=bytes;recentTotalBytes+=bytes;}
+    while(!i.recent.empty()&&(i.recent.size()>keep||recentTotalBytes.load()>recentBudget())){auto farthest=i.recent.begin();for(auto it=i.recent.begin();it!=i.recent.end();++it)if(std::abs(it->first-time)>std::abs(farthest->first-time))farthest=it;i.recentBytes-=bytes;recentTotalBytes-=bytes;i.recent.erase(farthest);}
    }
   }
   trace(&i,time-range[0],traceLive,traceWhat,std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-traceStart).count(),tFetch,tEngine);
@@ -1313,7 +1339,7 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
    const bool active=prepared||st.encoding||st.mode||haveMask||painted||st.maskMode==2||st.rect||st.frames||st.amount<1||st.view!=0;
    if(active){
     std::vector<float> fetchedSource;const std::vector<float>* sourcePixels=prepared?original.get():skipCleaning?&working:haveCurrentSource?&currentSource:nullptr;
-    if(!sourcePixels){readSource(i,e,time,w,h,source.b,fetchedSource);sourcePixels=&fetchedSource;}const auto&src=*sourcePixels;
+    if(!sourcePixels){packSource(i,e,source,time,w,h,fetchedSource,0);sourcePixels=&fetchedSource;}const auto&src=*sourcePixels;
     std::vector<float> enc;const float*rep=pixels;if(st.encoding&&!skipCleaning&&!prepared){cineonDelta(src,*i.cached,enc);rep=enc.data();}
     std::vector<uint8_t> matte;
     if(st.mode&&st.maskMode==2)throw Error(kOfxStatFailed,spanishRecoveryError);  // shown by the host as a render error
@@ -1465,7 +1491,7 @@ ss(p,kOfxPropLabel,ADR_PLUGIN_LABEL);ss(p,kOfxImageEffectPluginPropGrouping,"Fab
  if(!std::strcmp(action,kOfxImageEffectActionDescribeInContext)){require(str(in,kOfxImageEffectPropContext)==kOfxImageEffectContextFilter,"Filter context required");for(auto name:{"Source","Output"}){OfxPropertySetHandle p;check(fx->clipDefine(e,name,&p),"define clip");ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGB,0);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGBA,1);si(p,kOfxImageEffectPropSupportsTiles,0);if(!std::strcmp(name,"Source"))si(p,kOfxImageEffectPropTemporalClipAccess,1);}{OfxPropertySetHandle p;check(fx->clipDefine(e,"Mask",&p),"define mask clip");ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentAlpha,0);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGBA,1);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGB,2);si(p,kOfxImageClipPropOptional,1);si(p,kOfxImageClipPropIsMask,1);si(p,kOfxImageEffectPropSupportsTiles,0);}{OfxPropertySetHandle p;check(fx->clipDefine(e,"Original",&p),"define additional source clip");/* identifier kept: Resolve keeps connections by clip name */ss(p,kOfxPropLabel,"Additional source");ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGB,0);ss(p,kOfxImageEffectPropSupportedComponents,kOfxImageComponentRGBA,1);si(p,kOfxImageClipPropOptional,1);si(p,kOfxImageEffectPropSupportsTiles,0);}OfxParamSetHandle ps;check(fx->getParamSet(e,&ps),"parameters");defineControlPresentation(ps);
  return kOfxStatOK;}
  if(!std::strcmp(action,kOfxActionCreateInstance)){auto i=std::make_unique<Instance>();check(fx->clipGetHandle(e,"Source",&i->source,nullptr),"source clip");check(fx->clipGetHandle(e,"Output",&i->output,nullptr),"output clip");OfxParamSetHandle ps;check(fx->getParamSet(e,&ps),"parameters");for(auto&c:controls)check(params->paramGetHandle(ps,c.name,&i->parameters[c.name],nullptr),"control handle");check(params->paramGetHandle(ps,"encoding",&i->parameters["encoding"],nullptr),"encoding handle");for(auto&x:extras)check(params->paramGetHandle(ps,x.name,&i->parameters[x.name],nullptr),"extra handle");for(auto n:{"paint","paint_data","paint_source_kind","paint_source_folder","paint_source_offset","prepare_folder","prepare_request"})check(params->paramGetHandle(ps,n,&i->parameters[n],nullptr),"paint handle");if(fx->clipGetHandle(e,"Mask",&i->mask,nullptr)!=kOfxStatOK)i->mask=nullptr;if(fx->clipGetHandle(e,"Original",&i->original,nullptr)!=kOfxStatOK)i->original=nullptr;check(prop->propSetPointer(properties(e),kOfxPropInstanceData,0,i.get()),"instance data");static int created=0;i->id=++created;trackInstance(e);adrlog::info(i->label()+" created");i.release();lock.unlock();/* Host parameter writes can synchronously reenter the adapter. */try{cleaning_ui::initialize(e);}catch(...){}try{updateRecoveryEnabled(instance(e));}catch(...){}try{paint_ui::initializePainting(e);paint_ui::refresh(e);}catch(...){}return kOfxStatOK;}
- if(!std::strcmp(action,kOfxActionDestroyInstance)){auto&i=instance(e);i.close();adrlog::info(i.label()+" destroyed");untrackInstance(e);paint_ui::changeBatches.erase(e);paint_ui::histories.erase(e);paint_ui::cursorTimes.erase(e);delete &i;check(prop->propSetPointer(properties(e),kOfxPropInstanceData,0,nullptr),"clear instance");return kOfxStatOK;}
+ if(!std::strcmp(action,kOfxActionDestroyInstance)){auto&i=instance(e);i.close();frame_cache::shared().erasePrefix(std::to_string(i.id)+"|");{std::lock_guard<std::mutex> g(i.pinLock);i.pinnedFrame.reset();}adrlog::info(i.label()+" destroyed");untrackInstance(e);paint_ui::changeBatches.erase(e);paint_ui::histories.erase(e);paint_ui::cursorTimes.erase(e);delete &i;check(prop->propSetPointer(properties(e),kOfxPropInstanceData,0,nullptr),"clear instance");return kOfxStatOK;}
  if(!std::strcmp(action,kOfxActionInstanceChanged)){auto&i=instance(e);if(invalidatesHistory(in)){++i.generation;frame_cache::shared().erasePrefix(std::to_string(i.id)+'|');  // this effect's cleaned frames only; other nodes are unaffected
  if(i.sequence){char*type=nullptr;char*name=nullptr;char*why=nullptr;if(in){prop->propGetString(in,kOfxPropType,0,&type);prop->propGetString(in,kOfxPropName,0,&name);prop->propGetString(in,kOfxPropChangeReason,0,&why);}adrlog::info(i.label()+" history reset: host reported a change ("+(type?type:"?")+" "+(name?name:"?")+", "+(why?why:"?")+")");}i.close();}return kOfxStatReplyDefault;}
  if(!std::strcmp(action,kOfxActionPurgeCaches)){auto&i=instance(e);adrlog::info(i.label()+" host asked to purge caches");i.purge();frame_cache::shared().clear();return kOfxStatOK;}

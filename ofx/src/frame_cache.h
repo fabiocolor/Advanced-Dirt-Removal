@@ -87,6 +87,8 @@ public:
   order.splice(order.begin(),order,it->second);++hits;return it->second->frame;
  }
  bool contains(const std::string&key){std::lock_guard<std::mutex> g(m);return index.count(key)!=0;}
+ // The stored frame and its source fingerprint, without changing the order.
+ std::pair<Frame,uint64_t> peek(const std::string&key){std::lock_guard<std::mutex> g(m);auto it=index.find(key);if(it==index.end())return {nullptr,0};return {it->second->frame,it->second->print};}
  void put(const std::string&key,uint64_t sourcePrint,Frame frame){
   const size_t need=frame->size()*sizeof(float);if(!budget||need>budget)return;
   std::lock_guard<std::mutex> g(m);

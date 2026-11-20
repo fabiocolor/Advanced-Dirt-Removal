@@ -462,7 +462,7 @@ int main(int argc,char**argv){
  // regression fails instead of hanging if one accidentally takes render.lock.
  duringImage=[&]{
   const auto sequenceBefore=instance(handle).sequence;
-  const auto generationBefore=instance(handle).generation;
+  const uint64_t generationBefore=instance(handle).generation.load();
   Properties query;setDouble(H(query),kOfxPropTime,0,100);setDoubleN(H(query),kOfxImageEffectPropRenderScale,2,scale);
   auto callback=[&](const char*action,OfxPropertySetHandle args,Properties&reply,OfxStatus expected){
    auto job=std::async(std::launch::async,[&]{return plugin->mainEntry(action,handle,args,H(reply));});
@@ -504,8 +504,10 @@ int main(int argc,char**argv){
  {auto& paintDefault=P(H(e.parameters.at("paint").props)).ints[kOfxParamPropDefault];const auto savedPaint=paintDefault;paintDefault={1};
   renderFrame(count-2);renderFrame(count-1);const auto renderedBefore=instance(handle).rendered;renderFrame(count-2);renderFrame(count-1);
   verify(instance(handle).rendered==renderedBefore,"a revisited nearby frame is served from the node's window");
+  verify(instance(handle).key.find("spanish-window")==std::string::npos,"Recovery cleaning is keyed apart from Spanish cleaning");
+  verify(instance(handle).recentBytes>0&&instance(handle).recentBytes<=(size_t(1)<<30)&&recentTotalBytes.load()>=instance(handle).recentBytes,"the window is counted against the process-wide budget");
   verify(frame_cache::shared().stats().frames==0,"the window does not use the shared cache");paintDefault=savedPaint;}
- verify(plugin->mainEntry(kOfxActionPurgeCaches,handle,nullptr,nullptr)==kOfxStatOK,"purge caches");verify(!instance(handle).sequence,"purge releases live sequence");renderFrame(count/2);
+ verify(plugin->mainEntry(kOfxActionPurgeCaches,handle,nullptr,nullptr)==kOfxStatOK,"purge caches");verify(instance(handle).recentBytes==0,"purge returns the window to the budget");verify(!instance(handle).sequence,"purge releases live sequence");renderFrame(count/2);
  // Paint: a hard rectangle on one frame. Recovery: the source inside, the exact repair outside.
  // Spanish dirt removal: the repair inside only; with nothing painted, the source everywhere.
  {
@@ -537,7 +539,7 @@ int main(int argc,char**argv){
    verify(inst.rendered==1&&inst.servedCached==0,"a changed source frame is never served from the shared cache");
    e.source.images[f+100]=frameImage(sourcePixels,f,w,h,f%2,false);inst.close();
    paintRender(f,1,"restored source renders exactly again");verify(inst.rendered==1,"restored source is recomputed, not served stale");
-   const auto beforeGeneration=inst.generation;
+   const uint64_t beforeGeneration=inst.generation.load();
    e.source.images[f+100]=frameImage(changed,f,w,h,f%2,false);
    verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)==0,"local cache checks source without a host notification");
    verify(inst.generation==beforeGeneration+1&&inst.rendered==1&&inst.servedCached==0,"source mutation discards local cleaning and motion history");
@@ -607,6 +609,9 @@ int main(int argc,char**argv){
    std::cout<<"Spanish window: frames "<<g-8<<".."<<g+3<<" only, exact against full-shot cleaning\n";
    // Once that frame is cleaned, a stroke edit or playback pass needs only the frame itself.
    Properties again;verify(plugin->mainEntry(kOfxImageEffectActionGetFramesNeeded,handle,ip,H(again))==kOfxStatOK&&again.doubles["OfxImageClipPropFrameRange_Source"]==std::vector<double>{100.+g,100.+g},"cached Spanish clean declares only its own frame");
+   verify(instance(handle).key.find("spanish-window")!=std::string::npos,"Spanish cleaning is keyed apart from Recovery cleaning");
+   // The promise of [t,t] must hold even if both caches lose the clean before the render.
+   frame_cache::shared().clear();{auto&inst=instance(handle);inst.cachedFrame=std::numeric_limits<int>::min();inst.cached.reset();inst.recentClear();}
    const int cleanedBefore=instance(handle).rendered;declaredFrameRange[0]=declaredFrameRange[1]=100+g;enforceFrameRange=true;fetched.clear();
    late.strokes[0].opacity=.5;data={paint::encode(late)};
    verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)==kOfxStatOK,"cached Spanish stroke edit renders from its own frame");enforceFrameRange=savedEnforce;
@@ -684,7 +689,7 @@ int main(int argc,char**argv){
    verify(needed.doubles["OfxImageClipPropFrameRange_Source"]==std::vector<double>{100,100},"prepared input needs only the current frame");declaredFrameRange[0]=declaredFrameRange[1]=100;fetched.clear();
    {auto status=plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr);if(status)std::cerr<<lastHostMessage<<"\n";verify(status==0,"prepared render");}
    verify(!instance(handle).sequence&&!instance(handle).history,"prepared painting never creates the cleaning engine sequence");
-   verify(fetched==std::vector<int>{100,100},"prepared painting fetches only the processed frame");
+   verify(fetched==std::vector<int>{100},"prepared painting fetches only the processed frame, once");
    Image result(reinterpret_cast<OfxImageClipHandle>(&e.output),100);const bool useOriginal=spanish?!painted:painted;
    for(int y=0;y<h;++y)for(int x=0;x<w;++x)for(int c=0;c<3;++c)verify(result.read(x,y,c)==(useOriginal?.375f:sourcePixels[(size_t(y)*w+x)*3+c]),"prepared original/processed endpoints exact");
   }
