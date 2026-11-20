@@ -31,11 +31,11 @@ long shots.
 ### Fixed
 
 - Memory no longer fills up on long shots. Nodes that aren't painting keep
-  only a few cleaned frames around the playhead, and auto recovery no longer keeps
-  growing memory over a shot
-  ([#9](https://github.com/fabiocolor/Advanced-Dirt-Removal/issues/9)).
-  In my test, a 330-frame 2K shot peaked at about 10 GB instead of 16 GB, with no
-  swap.
+  only a few cleaned frames around the playhead, and auto recovery no longer
+  keeps growing memory over a shot
+  ([#9](https://github.com/fabiocolor/Advanced-Dirt-Removal/issues/9)). In my
+  test (one node, a 330-frame 2K shot with auto recovery), Resolve peaked at
+  about 10 GB instead of 16 GB, with no swap.
 - Lower memory use during GPU rendering in Resolve, and GPU memory is freed
   when a shot or its settings change.
 - Memory is freed after CPU processing on Windows.
@@ -50,7 +50,8 @@ long shots.
 - **Mask** is now called **Method** in Resolve and **Mode** in other hosts.
   Projects that use the Mask input keep working as long as the built-in brush
   isn't used.
-- Cleaning results are the same as in 2.0.
+- Automatic cleaning gives the same results as in 2.0. Auto recovery uses the
+  new model, so its mattes can differ.
 
 ## 2.0.0
 

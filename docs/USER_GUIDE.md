@@ -121,7 +121,8 @@ repaired.
   own undo. The history lasts until the project is closed.
 - **Brush options:** Opacity, Smoothing and Tablet pressure.
 - **Paint in viewer** pauses editing. While the brush is used, it replaces the
-  Mask input.
+  Mask input. To use a mask connected to the Mask input instead, turn off
+  **Paint in viewer** and delete the strokes.
 
 Recovery and Spanish dirt removal each keep their own cleaning settings in the
 project. Spanish starts with stronger settings (Sensitivity 1.0, Extra
@@ -262,9 +263,13 @@ Mask input) the output is exactly the cleaned frame.
 - **Memory.** To keep painting fast, the effect keeps cleaned frames in memory
   on nodes with strokes, in Spanish dirt removal or with a mask connected: up to
   20% of RAM (between 512 MB and 8 GB). Set `ADR_FRAME_CACHE_MB` to change the
-  limit, or 0 to turn it off. Every node also keeps up to 16 cleaned frames
-  around the playhead (at most 1 GB), so scrubbing and a painting node after it
-  don't clean the same frames again.
+  limit, or 0 to turn it off. In Resolve every node also keeps up to 16 cleaned
+  frames around the playhead (at most 1 GB per node and 2 GB for all nodes), so
+  scrubbing and a painting node after it don't clean the same frames again.
+- **Spanish reuses its clean.** A painted Spanish frame is cleaned once and
+  reused while its own picture is unchanged. If you change a node before it on
+  the neighbouring frames only, change the stroke or the cleaning settings to
+  clean it again.
 - **Interlaced material** is not supported; deinterlace first.
 
 ## Host notes
