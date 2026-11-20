@@ -11,7 +11,6 @@ mask and auto recovery), and views to check what changed.
 - [Cleaning controls](#cleaning-controls)
 - [Recovery](#recovery)
 - [Views](#views)
-- [How the result is built](#how-the-result-is-built)
 - [Diagnostics, speed and limits](#diagnostics-speed-and-limits)
 - [Host notes](#host-notes)
 - [Upgrading from 1.x](#upgrading-from-1x)
@@ -167,18 +166,17 @@ The model's weights are under CC BY-NC 4.0, not the MIT licence of the code
 - While it runs, **Calculation** shows the progress and the button becomes
   **Cancel calculation**. Maps that are already saved are reused. On Windows a
   small panel also shows the progress.
-- Maps are stored per shot, keyed by the shot's first frame, its frame range and
-  size, the input encoding and every cleaning control. Change any of these and the
-  matte is calculated again automatically; changing back reuses the earlier maps.
-  Changing **Confidence** never recalculates: it only moves the threshold.
+- Saved mattes are reused automatically while the shot and cleaning settings
+  stay the same. Changing **Confidence** updates the result immediately without
+  recalculating.
 - Default matte folders:
   - macOS: `~/Library/Application Support/FabioColor/AdvancedDirtRemoval/Recovery`
   - Windows: `%LOCALAPPDATA%\FabioColor\AdvancedDirtRemoval\Recovery`
   - Linux: `$XDG_DATA_HOME/fabiocolor/advanced-dirt-removal/recovery` (or
     `~/.local/share/...`)
 
-  Each shot is a `shot-<id>` folder of small run-length-encoded files. Delete the
-  folders to free space; they are recalculated when needed.
+  Each shot is saved in its own folder. Delete old folders anytime to free
+  space; they are recalculated when needed.
 
 **Editing the matte.** In Resolve, Paint gives the original back and Erase
 keeps the repair where the model gave back too much. With the Mask input, set
@@ -193,13 +191,11 @@ Manual frame-by-frame dust cleaning, applied only where you paint or mask. Go th
 the shot frame by frame; where you see a speck you
 want gone, paint a small mask over it on that frame. Only the painted spot is
 repaired, from the neighbouring frames; everything else, and every frame you
-don't paint, keeps the original. With the built-in brush, frames
-without strokes aren't cleaned at all, so painting is fast. Spanish dirt removal does not use auto recovery. In
-Resolve, auto recovery pauses while Spanish is selected and comes back with
-Recovery. In other hosts, with Auto recovery on, the render stops with the
-error *"Auto recovery cannot be used with Spanish dirt removal"*; turn one of
-them off and it renders again. With nothing painted, Spanish dirt removal
-leaves the whole picture unrepaired.
+don't paint, keeps the original. With the built-in brush, frames without strokes aren't cleaned at all, so
+painting is fast. Spanish dirt removal does not use auto recovery. In Resolve,
+auto recovery pauses while Spanish is selected and returns when you switch back
+to Recovery; in other hosts, turn Auto recovery off first. With nothing painted,
+Spanish dirt removal leaves the picture untouched.
 
 ## Views
 
@@ -217,29 +213,11 @@ repair is the same.
 
 | Control | Default | What it does |
 | --- | --- | --- |
-| Difference threshold (%) | 0.1 | Changes smaller than this are not shown in red. The effect moves pixels it does not repair by less than one 10-bit code value, so 0.1% shows only real repairs; 0 shows every change. |
-| Red difference intensity | 8 | Brightness of the red highlights: largest channel change × intensity. |
+| Difference threshold (%) | 0.1 | Changes smaller than this are ignored. 0.1% shows only real repairs; 0 shows every tiny rounding difference. |
+| Red difference intensity | 8 | Brightness of the red highlights. |
 | Red highlight opacity | 0.85 | Opacity of the red highlights. |
 | Grayscale background | 1 | Brightness of the grey picture behind the highlights (0 = black). |
 | Difference gain | 4 | Gain of the True difference view. |
-
-Red difference, per pixel: `d` = largest change of R, G or B; red =
-`min(d × intensity, 1)` where `d` is above the threshold, else 0; opacity = red ×
-highlight opacity; grey = Rec. 709 luma of the source × background; output =
-grey × (1 − opacity) plus opacity in the red channel.
-
-## How the result is built
-
-```
-repair  = cleaned frame (Video) or source + log(clean(linear)) − log(linear) (Cineon log)
-gate    = Recovery, auto off:      1 − mask
-          Recovery, auto on:       1 − (matte × (1 − mask) + stroke colour × mask)
-          Spanish dirt removal:    mask
-result  = source where gate = 0, repair where gate = 1, source + (repair − source) × gate between
-```
-
-With the default settings (Video, Restored, Auto recovery off, nothing on the
-Mask input) the output is exactly the cleaned frame.
 
 ## Diagnostics, speed and limits
 
@@ -260,19 +238,15 @@ Mask input) the output is exactly the cleaned frame.
   issue reports. `ADR_LOG=off` turns it off.
 - **Review moving shots.** Very fast motion can look like dirt. Raise Motion
   guard, use auto recovery, and paint back what is left.
-- **Memory.** To keep painting fast, the effect keeps cleaned frames in memory
-  on nodes with strokes, in Spanish dirt removal or with a mask connected: up to
-  20% of RAM (between 512 MB and 8 GB). Set `ADR_FRAME_CACHE_MB` to change the
-  limit, or 0 to turn it off. In Resolve every node also keeps up to 16 cleaned
-  frames around the playhead (at most 1 GB per node and 2 GB for all nodes), so
-  scrubbing and a painting node after it don't clean the same frames again.
+- **Memory.** To keep painting and scrubbing responsive, the plugin caches
+  cleaned frames in RAM (automatically capped at up to 20% of system memory).
+  Set `ADR_FRAME_CACHE_MB` to override the cap, or `0` to turn caching off.
 - **Spanish works frame by frame.** Each painted frame is cleaned once and
   keeps its repair while its own picture is unchanged, so changes on other
   frames don't affect it.
-- **Auto recovery mattes** are reused while the shot's first frame, frame
-  range and cleaning settings are unchanged. If you change later frames in a
-  node before it, point **Matte folder** to a new, empty folder before
-  **Calculate recovery**.
+- **Auto recovery mattes** are reused while the shot and cleaning settings stay
+  the same. If you change an upstream grade or effect before ADR, point **Matte
+  folder** to a fresh folder before clicking **Calculate recovery**.
 - **Interlaced material** is not supported; deinterlace first.
 
 ## Host notes

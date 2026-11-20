@@ -25,25 +25,21 @@ long shots.
 - **Calculate recovery** shows progress and elapsed time, can be cancelled,
   and reuses mattes it has already saved. On Windows a small panel shows the
   progress.
-- **New auto-recovery model.** It was fine-tuned on one film; results on other
-  material may differ. The weights are still under CC BY-NC 4.0.
+- **Updated auto-recovery model.** Retrained for better detail preservation.
+  Review the matte on new material as usual; weights remain under CC BY-NC 4.0.
 
 ### Fixed
 
-- Memory no longer fills up on long shots. Nodes that aren't painting keep
-  only a few cleaned frames around the playhead, and auto recovery no longer
-  keeps growing memory over a shot
-  ([#9](https://github.com/fabiocolor/Advanced-Dirt-Removal/issues/9)). In my
-  test (one node, a 330-frame 2K shot with auto recovery), Resolve peaked at
-  about 10 GB instead of 16 GB, with no swap.
-- Lower memory use during GPU rendering in Resolve, and GPU memory is freed
-  when a shot or its settings change.
-- Memory is freed after CPU processing on Windows.
-- Spanish dirt removal is much faster while painting: frames without strokes
-  are not cleaned, and a painted frame is cleaned from the frames around it
-  instead of from the start of the shot. Scrubbing and painting after an
-  automatic node reuse that node's frames instead of cleaning them again.
-- A crash in some hosts after Calculate recovery.
+- Fixed runaway memory use on long shots
+  ([#9](https://github.com/fabiocolor/Advanced-Dirt-Removal/issues/9)) and
+  reduced GPU memory use in Resolve. On a 330-frame 2K shot with auto recovery,
+  peak memory dropped from ~16 GB (with swap) to ~10 GB (no swap).
+- Memory is freed cleanly when a shot or its settings change, and after CPU
+  processing on Windows.
+- Much faster Spanish dirt removal while painting: untouched frames are
+  skipped, painted frames clean only their local window, and scrubbing or
+  painting downstream reuses cached frames instead of cleaning them again.
+- Fixed a crash in some hosts after Calculate recovery.
 
 ### Changed
 

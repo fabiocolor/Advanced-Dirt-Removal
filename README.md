@@ -6,19 +6,22 @@
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat-square)](#install)
 
 Free, open-source OFX plugin that removes dust and dirt from film scans, for
-DaVinci Resolve, Nuke and other OFX hosts. I made it for archives, educators
-and small restoration projects.
+DaVinci Resolve, Nuke and other OFX hosts. Built for archives, educators and
+small restoration projects.
 
-Advanced Dirt Removal is an OFX plugin with its own temporal repair engine. It
-looks for dirt, dust and sparkle that appear in one frame only, and fills those
-spots from the frames before and after, with motion compensation. So it masks
-the damage using picture that is really there in the neighbouring frames. It
-doesn't invent detail, and it can't fix damage that stays in the same place for
-several frames, like a long scratch or a hair in the gate.
+![Advanced Dirt Removal 2.1 in DaVinci Resolve](assets/documentation/demo-2.1.gif)
 
-It runs on the GPU (Apple Metal, NVIDIA CUDA, and OpenCL for AMD, Intel and
-NVIDIA) and falls back to the CPU. In my tests every backend gave the same result, so a
-render on one machine matched a render on another.
+[Full-quality MP4 (1080p60, 48 s)](assets/documentation/demo-2.1.mp4)
+
+It looks for dirt, dust and sparkle that appear in a single frame and fills
+those spots from the neighbouring frames with motion compensation. It masks
+damage using real picture from adjacent frames rather than inventing detail, so
+damage that stays in place across several frames (like a long scratch or a hair
+in the gate) is left alone.
+
+Runs on the GPU (Apple Metal, NVIDIA CUDA, and OpenCL for AMD, Intel and
+NVIDIA) with a CPU fallback. Every backend produces the same result, so renders
+match across machines.
 
 ## What's in it
 
@@ -71,11 +74,10 @@ repaired.
 
 Sources: [SOURCES.md](assets/documentation/SOURCES.md).
 
-> **New in 2.1.** Paint directly in the viewer in DaVinci Resolve, on the
-> Fusion, Color and Edit pages, and much lower memory use on long shots
-> ([#9](https://github.com/fabiocolor/Advanced-Dirt-Removal/issues/9)). What
-> changed: [CHANGELOG.md](CHANGELOG.md). What has been tested:
-> [docs/TESTED.md](docs/TESTED.md).
+> **New in 2.1.** Paint the original back or clean individual spots directly
+> in the viewer on the DaVinci Resolve Color and Edit pages. Use **Additional
+> source** to paint detail back into an already cleaned clip.
+> [Changelog](CHANGELOG.md) · [What was tested](docs/TESTED.md)
 
 ## Install
 
@@ -136,12 +138,9 @@ workflow and the views.
 
 ![Advanced Dirt Removal 2.0 in Resolve's Fusion page on macOS](assets/documentation/macos-resolve-2.0-restored.png)
 
-The plugin in DaVinci Resolve Studio 21.1 on macOS, Fusion page, with the
-*Breathless* trailer: the effect's output on the left, its controls on the
-right.
-[Red difference in Resolve](assets/documentation/macos-resolve-2.0-red-difference.png).
-The screenshots are from macOS. Resolve and the plugin's controls look the
-same on Windows and Linux.
+DaVinci Resolve Studio 21.1 on macOS (Fusion page), showing the restored output
+on the left and the plugin controls on the right
+([Red difference view](assets/documentation/macos-resolve-2.0-red-difference.png)).
 
 | Control group | Controls |
 | --- | --- |

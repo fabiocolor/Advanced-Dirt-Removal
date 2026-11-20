@@ -43,18 +43,15 @@ haven't been tested yet.
 
 **Memory** ([#9](https://github.com/fabiocolor/Advanced-Dirt-Removal/issues/9)):
 a 330-frame 2048×1556 ProRes shot with auto recovery in Resolve 21.1.1 on a
-24 GB Mac peaked at 16 GB with 3.6 GB of swap in the first 2.1.0 build, and at
-10.0 GB with no swap after the fix. The rendered frames are identical. This
-was one node; several nodes share one limit for their frame windows.
+24 GB Mac peaked at 10.0 GB with no swap (down from 16 GB with 3.6 GB swap),
+with identical rendered frames.
 
 **Painting after an automatic node**: an automatic node followed by a Spanish
-node with one stroke, 78 frames, Color page. Scrubbing back and forth and
-editing the stroke reuse the automatic node's frames instead of cleaning them
-again: about 22 ms per frame on macOS, 16 ms on Linux and 70 ms on Windows
-(RTX 4500 Ada), where the same steps took 280 to 550 ms in the first 2.1.0
-build. The rendered output is unchanged. After a change in the node before a
-painted Spanish frame, the frame is cleaned again and Deliver matches a fresh
-timeline with the new settings on all 78 frames (macOS).
+node on a 78-frame Color-page shot. Scrubbing and stroke edits reuse cached
+frames (~22 ms/frame on macOS, ~16 ms on Linux, ~70 ms on Windows RTX 4500
+Ada, down from 280–550 ms) with unchanged output. After an upstream change,
+painted frames re-clean and Deliver matches a fresh timeline across all 78
+frames (macOS).
 
 ## Version 2.0.0
 

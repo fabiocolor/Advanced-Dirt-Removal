@@ -2,6 +2,7 @@
 
 | File | Footage | Scan | Excerpt and shots |
 | --- | --- | --- | --- |
+| `demo-2.1.mp4`, `demo-2.1.gif` | Trailer for *Breathless* (1983) | 35mm, 2048 × 1556, ProRes 4444 | DaVinci Resolve Color-page walkthrough: Recovery, Auto Recovery, Spanish dirt removal, and Additional source |
 | `cleanup.mp4`, `cleanup.gif` | Trailer for *The Evictors* (1979) | 35mm, 2048 × 1556, 10-bit ProRes 422 | 10.6–12.5 s: a man in a hat, a woman screaming, a man screaming, the man at a window; 14.2–15.5 s: a girl at a window, a couple running. Cropped to 960 × 780 and played at two-thirds speed |
 | `difference.mp4`, `difference.gif` | Trailer for *The Evictors* (1979), shown with *Island of Death* | 35mm, 2048 × 1556, 10-bit ProRes 422 | 1.75–24.8 s: a man at night, a man's face, a blond man and a woman at a door, girls on a balcony, women on the phone, a man with a moustache, women's faces, children |
 | `spanish-dirt-removal.mp4`, `spanish-dirt-removal.gif` | Trailer for *The Evictors* (1979) | Same scan | Four shots, one speck each: a blond man (speck at 6.0 s), a woman at a door (7.2 s), a man in a hat at a window (8.3 s), the same man on the stairs (9.6 s). |
