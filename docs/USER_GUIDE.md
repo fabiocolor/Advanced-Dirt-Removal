@@ -266,13 +266,15 @@ Mask input) the output is exactly the cleaned frame.
   limit, or 0 to turn it off. In Resolve every node also keeps up to 16 cleaned
   frames around the playhead (at most 1 GB per node and 2 GB for all nodes), so
   scrubbing and a painting node after it don't clean the same frames again.
-- **Spanish reuses its clean.** A painted Spanish frame is cleaned once and
-  reused while its own picture and the cleaning settings are unchanged. If a
-  node before it changes only the frames next to a painted frame, that frame
-  keeps its earlier repair. Changing any frame's own picture cleans it again.
+- **Spanish reuses its clean.** In Resolve, a painted Spanish frame is
+  cleaned once and reused while its own picture and the cleaning settings are
+  unchanged. If a node before it changes only the frames next to a painted
+  frame, that frame can keep its earlier repair. Changing the painted frame's
+  own picture cleans it again.
 - **Auto recovery mattes** are reused while the shot's first frame, frame
-  range and settings are unchanged. If you change later frames in a node
-  before it, choose a new **Matte folder** before **Calculate recovery**.
+  range and cleaning settings are unchanged. If you change later frames in a
+  node before it, point **Matte folder** to a new, empty folder before
+  **Calculate recovery**.
 - **Interlaced material** is not supported; deinterlace first.
 
 ## Host notes
