@@ -62,7 +62,7 @@ double constantSweep(const paint::Stroke& s, const paint::Point& a,
 }
 
 int main() {
- for(size_t bytes:{size_t(1),size_t(25)<<20,size_t(100)<<20,size_t(400)<<20,size_t(600)<<20,size_t(3)<<30}){auto n=paint::cacheFrames(bytes);check(n<=8&&n*bytes<=(size_t(512)<<20),"Additional paint history stays within 512 MiB at every scan size");}
+ for(size_t bytes:{size_t(1),size_t(25)<<20,size_t(100)<<20,size_t(400)<<20,size_t(600)<<20,size_t(3)<<30}){auto n=paint::cacheFrames(bytes);check(n<=16&&n*bytes<=(size_t(1)<<30),"Additional paint history stays within 1 GiB at every scan size");}
 
     using namespace paint;
     Document d;

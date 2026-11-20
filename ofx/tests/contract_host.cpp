@@ -498,6 +498,13 @@ int main(int argc,char**argv){
  for(int f=0;f<count;++f){renderFrame(f);auto before=instance(handle).sequence;verify(plugin->mainEntry(kOfxImageEffectActionEndSequenceRender,handle,ip,nullptr)==0,"end bracket");verify(instance(handle).sequence==before,"end bracket preserves bounded history");}
  verify(messageCalls==messagesBeforeRendering,"normal rendering does not call host logging or UI callbacks");
  verify(frame_cache::shared().stats().frames==0,"ordinary rendering without paint or a mask keeps no shared cleaned frames (issue #9)");
+ // A node after this one, a seek or a scrub asks again for nearby frames: they come
+ // from this node's bounded window without cleaning again, still exact. Resolve
+ // turns painting on by default; this minimal host does not.
+ {auto& paintDefault=P(H(e.parameters.at("paint").props)).ints[kOfxParamPropDefault];const auto savedPaint=paintDefault;paintDefault={1};
+  renderFrame(count-2);renderFrame(count-1);const auto renderedBefore=instance(handle).rendered;renderFrame(count-2);renderFrame(count-1);
+  verify(instance(handle).rendered==renderedBefore,"a revisited nearby frame is served from the node's window");
+  verify(frame_cache::shared().stats().frames==0,"the window does not use the shared cache");paintDefault=savedPaint;}
  verify(plugin->mainEntry(kOfxActionPurgeCaches,handle,nullptr,nullptr)==kOfxStatOK,"purge caches");verify(!instance(handle).sequence,"purge releases live sequence");renderFrame(count/2);
  // Paint: a hard rectangle on one frame. Recovery: the source inside, the exact repair outside.
  // Spanish dirt removal: the repair inside only; with nothing painted, the source everywhere.
