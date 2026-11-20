@@ -13,16 +13,20 @@ with the diagnostic log.
 November 2026. The cleaning engine is unchanged: the 58 engine cases give the
 same hashes as in 2.0.0 on every backend tested below.
 
+The released installers were tested as built, on these systems:
+
 | System | Checks | Result |
 | --- | --- | --- |
-| macOS 27, Apple M5 Pro | Engine and OFX contract on Metal, OpenCL and CPU; Resolve Studio 21.1.1 (Fusion page); Nuke 17.1 | Passed. Resolve 9/9 and Nuke 12/12 feature checks; output and auto-recovery maps identical to the reference |
-| Windows 11, NVIDIA RTX A5000 | Engine and OFX contract on CUDA, OpenCL and CPU | Passed |
-| Windows 11, NVIDIA RTX 3090 | Resolve Studio 21.0.4 (Fusion page) | 9/9; output and auto-recovery maps identical to macOS. Nuke not run this time |
-| Windows 10, AMD Radeon RX 580 | Installer: clean install, upgrade from 2.0.0 and 1.1.3, uninstall | Passed |
-| Windows 10, NVIDIA Quadro P5000 | Automatic backend choice | Falls back to OpenCL and matches the reference |
-| Ubuntu 24.04, NVIDIA RTX 3090 | Engine on CUDA, OpenCL and CPU; Resolve Studio 21.0.4 (Fusion page); Nuke 17.1 | Passed. Resolve 9/9, Nuke 12/12; output and auto-recovery maps identical to macOS |
+| macOS 27, Apple M5 Pro | Engine and OFX contract on Metal, OpenCL and CPU; `.pkg` upgrade on the system disk; Resolve Studio 21.1.1 (Fusion page); Nuke 17.1 | Passed. Resolve 9/9, Nuke 12/12; output and auto-recovery maps identical to the reference |
+| Windows 11, NVIDIA RTX 4500 Ada | Engine and OFX contract on CUDA, OpenCL and CPU; installer; Resolve Studio 21.1.2 (Fusion page) | Passed. Resolve 9/9; output and auto-recovery maps identical to macOS. Nuke not run (no licence on this system) |
+| Ubuntu 24.04, NVIDIA RTX 3090 | Engine and OFX contract on CUDA, OpenCL and CPU; Resolve Studio 21.0.4 (Fusion page); Nuke 17.1 | Passed. Resolve 9/9, Nuke 12/12; output and auto-recovery maps identical to macOS |
 | AlmaLinux 8 container (glibc 2.28) | Release build, engine on CPU, install and uninstall | Passed |
-| macOS `.pkg` | Clean install and upgrade from 2.0.0 | Installed files match the package |
+
+Earlier 2.1.0 builds with the same cleaning engine were also tested on Windows
+11 with an NVIDIA RTX A5000 and RTX 3090 (Resolve 21.0.4, 9/9), Windows 10
+with an AMD Radeon RX 580 (installer: clean install, upgrade from 2.0.0 and
+1.1.3, uninstall) and an NVIDIA Quadro P5000 (falls back to OpenCL and matches
+the reference), and the macOS package on a clean disk.
 
 The feature checks are the 2.0.0 ones below: defaults, Red difference, auto
 recovery and its matte, Spanish dirt removal, Cineon log, each compared with
@@ -40,12 +44,15 @@ haven't been tested yet.
 **Memory** ([#9](https://github.com/fabiocolor/Advanced-Dirt-Removal/issues/9)):
 a 330-frame 2048×1556 ProRes shot with auto recovery in Resolve 21.1.1 on a
 24 GB Mac peaked at 16 GB with 3.6 GB of swap in the first 2.1.0 build, and at
-10.0 GB with no swap in the released build. The rendered frames are identical.
+10.0 GB with no swap after the fix. The rendered frames are identical. This
+was one node; several nodes share one limit for their frame windows.
 
-**Painting after an automatic node**: Resolve 21.1.1 on macOS, an automatic
-node followed by a Spanish node with one stroke, 78 frames. Scrubbing back and
-forth and editing the stroke reuse the automatic node's frames (about 17 ms)
-instead of cleaning them again (70 to 156 ms per frame before this change).
+**Painting after an automatic node**: an automatic node followed by a Spanish
+node with one stroke, 78 frames, Color page. Scrubbing back and forth and
+editing the stroke reuse the automatic node's frames instead of cleaning them
+again: about 20 ms per frame on macOS and 16 ms on Linux, and about 65 ms on
+Windows (RTX 4500 Ada), where the same steps took 280 to 550 ms in the first
+2.1.0 build. The rendered output is unchanged.
 
 ## Version 2.0.0
 

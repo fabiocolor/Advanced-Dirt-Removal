@@ -4,23 +4,23 @@
     {
       "platform": "macos",
       "filename": "AdvancedDirtRemoval-2.1.0.pkg",
-      "source_revision": "c9b9840befa93b3d44adaa098019d0518cfb3354",
-      "sha256": "a776b0e5f4ee69c347ac8b16da1ee30c0d0349f445b7b9792e167f8c03a453c3",
-      "binary_source_revision": "c9b9840befa93b3d44adaa098019d0518cfb3354"
+      "source_revision": "fec5baf9af2792657520973c77ca3011df07c4fa",
+      "sha256": "19194c9db74c92f8e7690532be1842f88da6ddeedca296bcab8de747f32c98b1",
+      "binary_source_revision": "fec5baf9af2792657520973c77ca3011df07c4fa"
     },
     {
       "platform": "windows",
       "filename": "AdvancedDirtRemoval-Setup-2.1.0.exe",
-      "source_revision": "c9b9840befa93b3d44adaa098019d0518cfb3354",
-      "sha256": "626a346288488438709530d0912540a4649632209b97117ba62538b98f7fd6a7",
-      "binary_source_revision": "c9b9840befa93b3d44adaa098019d0518cfb3354"
+      "source_revision": "fec5baf9af2792657520973c77ca3011df07c4fa",
+      "sha256": "96a440e8a8d8098d4741f1bcb9689bfdef6e94b0a3a8e59e1607b9dca63499e8",
+      "binary_source_revision": "fec5baf9af2792657520973c77ca3011df07c4fa"
     },
     {
       "platform": "linux",
       "filename": "AdvancedDirtRemoval-2.1.0-linux-x86_64.tar.gz",
-      "source_revision": "c9b9840befa93b3d44adaa098019d0518cfb3354",
-      "sha256": "28fc3ec73e3f796bdbe71dd426b662503c8e00e318a06f12f1954f53b69f573d",
-      "binary_source_revision": "c9b9840befa93b3d44adaa098019d0518cfb3354"
+      "source_revision": "fec5baf9af2792657520973c77ca3011df07c4fa",
+      "sha256": "bb8fef258d5c8e8aca29d31c7915fe8622e6e967d72483c6e0ac5b6f39f7b7c6",
+      "binary_source_revision": "fec5baf9af2792657520973c77ca3011df07c4fa"
     }
   ],
   "weights_sha256": "1ba9c7080cc7dd37ac5fb5406a282f0ee0838df801b9d9e35ecfada4432f7163"
