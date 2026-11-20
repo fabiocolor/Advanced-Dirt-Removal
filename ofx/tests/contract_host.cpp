@@ -507,7 +507,7 @@ int main(int argc,char**argv){
   verify(instance(handle).key.find("spanish-window")==std::string::npos,"Recovery cleaning is keyed apart from Spanish cleaning");
   verify(instance(handle).recentBytes>0&&instance(handle).recentBytes<=(size_t(1)<<30)&&recentTotalBytes.load()>=instance(handle).recentBytes,"the window is counted against the process-wide budget");
   verify(frame_cache::shared().stats().frames==0,"the window does not use the shared cache");paintDefault=savedPaint;}
- verify(plugin->mainEntry(kOfxActionPurgeCaches,handle,nullptr,nullptr)==kOfxStatOK,"purge caches");verify(instance(handle).recentBytes==0,"purge returns the window to the budget");verify(!instance(handle).sequence,"purge releases live sequence");renderFrame(count/2);
+ verify(plugin->mainEntry(kOfxActionPurgeCaches,handle,nullptr,nullptr)==kOfxStatOK,"purge caches");verify(instance(handle).recentBytes==0,"purge returns the window to the budget");verify(instance(handle).pins.empty(),"purge releases held Spanish cleans");verify(!instance(handle).sequence,"purge releases live sequence");renderFrame(count/2);
  // Paint: a hard rectangle on one frame. Recovery: the source inside, the exact repair outside.
  // Spanish dirt removal: the repair inside only; with nothing painted, the source everywhere.
  {
@@ -611,7 +611,10 @@ int main(int argc,char**argv){
    Properties again;verify(plugin->mainEntry(kOfxImageEffectActionGetFramesNeeded,handle,ip,H(again))==kOfxStatOK&&again.doubles["OfxImageClipPropFrameRange_Source"]==std::vector<double>{100.+g,100.+g},"cached Spanish clean declares only its own frame");
    verify(instance(handle).key.find("spanish-window")!=std::string::npos,"Spanish cleaning is keyed apart from Recovery cleaning");
    // The promise of [t,t] must hold even if both caches lose the clean before the render.
+   // Other painted frames queried before this render keep their own holds.
+   {auto&inst=instance(handle);std::lock_guard<std::mutex> g2(inst.pinLock);for(int k=0;k<3;++k)inst.pins["other-frame-"+std::to_string(k)]=Instance::Pin{1,std::make_shared<const std::vector<float>>(3,0.f),++inst.pinOrder};}
    frame_cache::shared().clear();{auto&inst=instance(handle);inst.cachedFrame=std::numeric_limits<int>::min();inst.cached.reset();inst.recentClear();}
+   verify(instance(handle).pins.size()==4,"each queried Spanish frame keeps its own hold");
    const int cleanedBefore=instance(handle).rendered;declaredFrameRange[0]=declaredFrameRange[1]=100+g;enforceFrameRange=true;fetched.clear();
    late.strokes[0].opacity=.5;data={paint::encode(late)};
    verify(plugin->mainEntry(kOfxImageEffectActionRender,handle,ip,nullptr)==kOfxStatOK,"cached Spanish stroke edit renders from its own frame");enforceFrameRange=savedEnforce;
