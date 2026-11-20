@@ -159,11 +159,10 @@ on the left and the plugin controls on the right
   recovery and paint back what is left. Always review moving shots.
 - Damage that stays for more than a frame or two isn't touched.
 - Interlaced material isn't supported. Deinterlace first.
-- Tested hosts are DaVinci Resolve Studio 21 (Fusion page) and Nuke 17 on
-  macOS, Windows and Linux. Viewer painting on the Resolve Color and Edit pages
-  is tested on macOS and Windows, not yet on Linux. Other OFX hosts and Intel
-  Macs haven't been tested yet. Premiere Pro and After Effects don't
-  load OFX plugins, so they aren't supported yet.
+- Tested on DaVinci Resolve Studio 21 and Nuke 17 across macOS, Windows, and
+  Linux (Color and Edit viewer painting is untested on Linux). Other OFX hosts
+  and Intel Macs are untested; Premiere Pro and After Effects aren't supported
+  since they don't load OFX plugins.
 
 The plugin keeps a diagnostic log (backend, device, timing, errors). Its
 location is in the [user guide](docs/USER_GUIDE.md#diagnostics-speed-and-limits).
