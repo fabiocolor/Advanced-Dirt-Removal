@@ -11,8 +11,9 @@
 #include <vector>
 
 namespace paint {
-// Extra frame history is optional: never exceed 512 MiB, even on large scans.
-inline size_t cacheFrames(size_t rgbBytes){return rgbBytes?std::min<size_t>(8,(size_t(512)<<20)/rgbBytes):0;}
+// Cleaned frames kept around the playhead per node: enough for a Spanish
+// node's window (8 before, 3 after) and short scrubs. Never more than 1 GiB.
+inline size_t cacheFrames(size_t rgbBytes){return rgbBytes?std::min<size_t>(16,(size_t(1)<<30)/rgbBytes):0;}
 
 enum class Shape {Round=0,Square=1,Rectangle=2};
 struct Point { double x=0,y=0,pressure=1; };

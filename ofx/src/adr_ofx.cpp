@@ -1285,8 +1285,11 @@ OfxStatus render(OfxImageEffectHandle e,OfxPropertySetHandle in){
    }
    i.cached=std::make_shared<const std::vector<float>>(std::move(i.scratch));i.cachedFrame=time;i.sourcePrints[time]=sourcePrint();
    if(useShared){const uint64_t print=sourcePrint();auto t0=std::chrono::steady_clock::now();frame_cache::shared().put(cleanKey,print,i.cached);tShared+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count();}
-   if(paintOn&&paintingNode){
-    // Keep nearby frames within 512 MiB; very large frames use only cached above.
+   // Every node keeps a small window of cleaned frames around the playhead, so
+   // a painting node after it, a seek or a scrub does not clean them again. It
+   // is bounded, so long renders do not grow memory (issue #9).
+   if(paintOn){
+    // Keep nearby frames within 1 GiB; very large frames use only cached above.
     const size_t bytes=i.cached->size()*sizeof(float),keep=paint::cacheFrames(bytes);
     if(keep)i.recent[time]=i.cached;
     while(i.recent.size()>keep){auto farthest=i.recent.begin();for(auto it=i.recent.begin();it!=i.recent.end();++it)if(std::abs(it->first-time)>std::abs(farthest->first-time))farthest=it;i.recent.erase(farthest);}
