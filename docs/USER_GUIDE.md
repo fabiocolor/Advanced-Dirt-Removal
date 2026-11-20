@@ -267,9 +267,12 @@ Mask input) the output is exactly the cleaned frame.
   frames around the playhead (at most 1 GB per node and 2 GB for all nodes), so
   scrubbing and a painting node after it don't clean the same frames again.
 - **Spanish reuses its clean.** A painted Spanish frame is cleaned once and
-  reused while its own picture is unchanged. If you change a node before it on
-  the neighbouring frames only, change the stroke or the cleaning settings to
-  clean it again.
+  reused while its own picture and the cleaning settings are unchanged. If a
+  node before it changes only the frames next to a painted frame, that frame
+  keeps its earlier repair. Changing any frame's own picture cleans it again.
+- **Auto recovery mattes** are reused while the shot's first frame, frame
+  range and settings are unchanged. If you change later frames in a node
+  before it, choose a new **Matte folder** before **Calculate recovery**.
 - **Interlaced material** is not supported; deinterlace first.
 
 ## Host notes
