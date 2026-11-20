@@ -50,9 +50,11 @@ was one node; several nodes share one limit for their frame windows.
 **Painting after an automatic node**: an automatic node followed by a Spanish
 node with one stroke, 78 frames, Color page. Scrubbing back and forth and
 editing the stroke reuse the automatic node's frames instead of cleaning them
-again: about 20 ms per frame on macOS and 16 ms on Linux, and about 65 ms on
-Windows (RTX 4500 Ada), where the same steps took 280 to 550 ms in the first
-2.1.0 build. The rendered output is unchanged.
+again: about 22 ms per frame on macOS, 16 ms on Linux and 70 ms on Windows
+(RTX 4500 Ada), where the same steps took 280 to 550 ms in the first 2.1.0
+build. The rendered output is unchanged. After a change in the node before a
+painted Spanish frame, the frame is cleaned again and Deliver matches a fresh
+timeline with the new settings on all 78 frames (macOS).
 
 ## Version 2.0.0
 
