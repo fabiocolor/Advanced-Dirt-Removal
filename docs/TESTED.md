@@ -40,7 +40,12 @@ haven't been tested yet.
 **Memory** ([#9](https://github.com/fabiocolor/Advanced-Dirt-Removal/issues/9)):
 a 330-frame 2048×1556 ProRes shot with auto recovery in Resolve 21.1.1 on a
 24 GB Mac peaked at 16 GB with 3.6 GB of swap in the first 2.1.0 build, and at
-9.4 GB with no swap after the fix. The rendered frames are identical.
+10.0 GB with no swap in the released build. The rendered frames are identical.
+
+**Painting after an automatic node**: Resolve 21.1.1 on macOS, an automatic
+node followed by a Spanish node with one stroke, 78 frames. Scrubbing back and
+forth and editing the stroke reuse the automatic node's frames (about 17 ms)
+instead of cleaning them again (70 to 156 ms per frame before this change).
 
 ## Version 2.0.0
 

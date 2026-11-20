@@ -261,8 +261,10 @@ Mask input) the output is exactly the cleaned frame.
   guard, use auto recovery, and paint back what is left.
 - **Memory.** To keep painting fast, the effect keeps cleaned frames in memory
   on nodes with strokes, in Spanish dirt removal or with a mask connected: up to
-  20% of RAM (between 512 MB and 8 GB). Other nodes keep none. Set
-  `ADR_FRAME_CACHE_MB` to change the limit, or 0 to turn it off.
+  20% of RAM (between 512 MB and 8 GB). Set `ADR_FRAME_CACHE_MB` to change the
+  limit, or 0 to turn it off. Every node also keeps up to 16 cleaned frames
+  around the playhead (at most 1 GB), so scrubbing and a painting node after it
+  don't clean the same frames again.
 - **Interlaced material** is not supported; deinterlace first.
 
 ## Host notes

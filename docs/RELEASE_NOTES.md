@@ -30,18 +30,19 @@ long shots.
 
 ### Fixed
 
-- Memory no longer fills up on long shots. Ordinary playback and renders no
-  longer keep extra frames in memory, and auto recovery no longer keeps
+- Memory no longer fills up on long shots. Nodes that aren't painting keep
+  only a few cleaned frames around the playhead, and auto recovery no longer keeps
   growing memory over a shot
   ([#9](https://github.com/fabiocolor/Advanced-Dirt-Removal/issues/9)).
-  In my test, a 330-frame 2K shot peaked at 9.4 GB instead of 16 GB, with no
+  In my test, a 330-frame 2K shot peaked at about 10 GB instead of 16 GB, with no
   swap.
 - Lower memory use during GPU rendering in Resolve, and GPU memory is freed
   when a shot or its settings change.
 - Memory is freed after CPU processing on Windows.
 - Spanish dirt removal is much faster while painting: frames without strokes
   are not cleaned, and a painted frame is cleaned from the frames around it
-  instead of from the start of the shot.
+  instead of from the start of the shot. Scrubbing and painting after an
+  automatic node reuse that node's frames instead of cleaning them again.
 - A crash in some hosts after Calculate recovery.
 
 ### Changed
